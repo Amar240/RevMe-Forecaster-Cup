@@ -1,0 +1,94 @@
+import { csrfFetch } from '@/lib/csrf'
+import type { ActualDetailsResponse, ActualsResponse, ActualsSummaryResponse } from '@/features/actuals/types'
+
+async function parseJson<T>(res: Response): Promise<T> {
+  const data = await res.json()
+  if (!res.ok) {
+    const message = (data && (data.message || data.error)) || 'Request failed'
+    const error = new Error(message)
+    ;(error as Error & { status?: number }).status = res.status
+    throw error
+  }
+  return data as T
+}
+
+export async function getActuals(params: { includeVoided: boolean; page: number; pageSize: number }) {
+  const query = new URLSearchParams({
+    includeVoided: String(params.includeVoided),
+    page: String(params.page),
+    pageSize: String(params.pageSize),
+  })
+  const res = await csrfFetch(`/api/admin/actuals?${query.toString()}`)
+  return parseJson<ActualsResponse>(res)
+}
+
+export async function getActualsSummary(params: { includeVoided: boolean }) {
+  const query = new URLSearchParams({
+    includeVoided: String(params.includeVoided),
+  })
+  const res = await csrfFetch(`/api/admin/actuals/summary?${query.toString()}`)
+  return parseJson<ActualsSummaryResponse>(res)
+}
+
+export async function getActualById(id: string) {
+  const res = await csrfFetch(`/api/admin/actuals/${id}`)
+  return parseJson<ActualDetailsResponse>(res)
+}
+
+export async function createActual(input: {
+  roundId: string
+  marketId: string
+  weekOffset: number
+  metric: 'OCCUPANCY' | 'ADR'
+  value: number
+  source?: 'MANUAL' | 'BULK'
+  reason?: string
+}) {
+  const res = await csrfFetch('/api/admin/actuals', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+  return parseJson<{ message: string }>(res)
+}
+
+export async function updateActual(id: string, input: { value: number; reason?: string }) {
+  const res = await csrfFetch(`/api/admin/actuals/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+  return parseJson<{ message: string }>(res)
+}
+
+export async function voidActual(id: string, input: { reason?: string }) {
+  const res = await csrfFetch(`/api/admin/actuals/${id}`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+  return parseJson<{ message: string }>(res)
+}
+
+export async function unvoidActual(id: string, input?: { reason?: string }) {
+  const res = await csrfFetch(`/api/admin/actuals/${id}/unvoid`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input ?? {}),
+  })
+  return parseJson<{ message: string }>(res)
+}
+
+export async function lockRoundActuals(roundId: string) {
+  const res = await csrfFetch(`/api/admin/rounds/${roundId}/lock`, { method: 'POST' })
+  return parseJson<{ message: string }>(res)
+}
+
+export async function unlockRoundActuals(roundId: string, reason: string) {
+  const res = await csrfFetch(`/api/admin/rounds/${roundId}/lock`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reason }),
+  })
+  return parseJson<{ message: string }>(res)
+}

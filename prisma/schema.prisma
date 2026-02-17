@@ -1,0 +1,686 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  STUDENT
+  SUPERVISOR
+  SUB_ADMIN
+  ADMIN
+}
+
+enum TeamStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  ACTIVE
+  REJECTED
+  DISQUALIFIED
+}
+
+enum JoinRequestStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  CANCELED
+}
+
+enum TicketStatus {
+  OPEN
+  WAITING_ON_SUPERVISOR
+  WAITING_ON_STUDENT
+  ESCALATED
+  RESOLVED
+}
+
+enum TicketCategory {
+  LOGIN
+  SUBMISSION
+  SCORING
+  TEAM
+  GENERAL
+  PLATFORM
+  ONBOARDING
+}
+
+enum TicketPriority {
+  LOW
+  NORMAL
+  HIGH
+}
+
+enum MessageVisibility {
+  STUDENT_VISIBLE
+  INTERNAL_ONLY
+}
+
+enum SeasonStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  COMPLETED
+}
+
+enum WarningType {
+  MISSED_SUBMISSION
+  LATE_SUBMISSION
+  ADMIN_WARNING
+}
+
+enum Metric {
+  OCCUPANCY
+  ADR
+}
+
+enum ScoringRunStatus {
+  RUNNING
+  SUCCESS
+  FAILED
+}
+
+enum ScopeType {
+  SEASON
+  ROUND
+  MARKET_ROUND
+}
+
+enum RoundStatus {
+  UPCOMING
+  OPEN
+  PAUSED
+  CLOSED
+}
+
+enum ActualSource {
+  MANUAL
+  BULK
+}
+
+enum ActualRevisionAction {
+  CREATE
+  EDIT
+  VOID
+  UNVOID
+}
+
+model User {
+  id                   String    @id @default(cuid())
+  email                String    @unique
+  passwordHash         String
+  firstName            String
+  lastName             String
+  role                 Role      @default(STUDENT)
+  emailVerified        Boolean   @default(false)
+  resetToken           String?
+  resetTokenExpiry     DateTime?
+  rulesAcknowledgedAt  DateTime?
+  hasFullAccess        Boolean   @default(false)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  universityId    String?
+  university      University?  @relation(fields: [universityId], references: [id])
+  supervisedTeams Team[]       @relation("Supervisor")
+  approvedTeams   Team[]       @relation("TeamApprover")
+  teamMemberships TeamMember[]
+  submissions     Submission[]
+  notifications   Notification[]
+  scoringRuns     ScoringRun[]
+  joinRequestsAsStudent    JoinRequest[]  @relation("StudentJoinRequest")
+  joinRequestsAsSupervisor JoinRequest[]  @relation("SupervisorJoinRequest")
+  supportTicketsCreated    SupportTicket[] @relation("TicketCreator")
+  supportTicketsAsSupervisor SupportTicket[] @relation("TicketSupervisor")
+  supportTicketsAssigned   SupportTicket[] @relation("TicketAssignee")
+  supportTicketsEscalated  SupportTicket[] @relation("TicketEscalator")
+  ticketReplies            SupportTicketReply[]
+  cannedResponses          CannedResponse[]
+  permissions              UserPermission[]
+  actualsCreated           Actual[]         @relation("ActualCreator")
+  actualsUpdated           Actual[]         @relation("ActualUpdater")
+  actualRevisions          ActualValueRevision[]
+  roundsLocked             Round[]          @relation("RoundLocker")
+  roundsScored             Round[]          @relation("RoundScorer")
+  marketInfosUpdated       MarketInfo[]     @relation("MarketInfoUpdatedBy")
+  marketRoundUpdates       MarketRoundUpdate[] @relation("MarketRoundUpdateCreator")
+
+  @@index([email])
+  @@index([role])
+}
+
+model University {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  country   String?
+  createdAt DateTime @default(now())
+
+  users User[]
+  teams Team[]
+}
+
+model Team {
+  id                 String     @id @default(cuid())
+  name               String
+  displayId          String     @unique
+  status             TeamStatus @default(PENDING_APPROVAL)
+  disqualifiedAt     DateTime?
+  disqualifiedReason String?
+  approvedAt         DateTime?
+  approvedById       String?
+  approvedBy         User?      @relation("TeamApprover", fields: [approvedById], references: [id])
+  rejectionReason    String?
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  supervisorId String
+  supervisor   User       @relation("Supervisor", fields: [supervisorId], references: [id])
+  universityId String
+  university   University @relation(fields: [universityId], references: [id])
+  seasonId     String?
+  season       Season?    @relation(fields: [seasonId], references: [id])
+  members      TeamMember[]
+  submissions  Submission[]
+  warnings     Warning[]
+  predictionErrors PredictionError[]
+  scoreAggregates  ScoreAggregate[]
+  supportTickets   SupportTicket[] @relation("TicketTeam")
+
+  @@index([supervisorId])
+  @@index([universityId])
+  @@index([status])
+  @@index([seasonId])
+}
+
+model TeamMember {
+  id          String   @id @default(cuid())
+  isSubmitter Boolean  @default(false)
+  joinedAt    DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  teamId String
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, teamId])
+  @@index([teamId])
+}
+
+model Season {
+  id               String       @id @default(cuid())
+  name             String
+  status           SeasonStatus @default(DRAFT)
+  registrationOpen Boolean      @default(false)
+  startDate        DateTime
+  endDate          DateTime
+  createdAt        DateTime     @default(now())
+
+  teams              Team[]
+  rounds             Round[]
+  markets            SeasonMarket[]
+  actuals            Actual[]
+  predictionErrors   PredictionError[]
+  scoreAggregates    ScoreAggregate[]
+  scoringRuns        ScoringRun[]
+  joinRequests       JoinRequest[]
+  marketInfos        MarketInfo[]
+  marketRoundUpdates MarketRoundUpdate[]
+}
+
+model Market {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+
+  seasonMarkets      SeasonMarket[]
+  actuals            Actual[]
+  submissionValues   SubmissionValue[]
+  predictionErrors   PredictionError[]
+  scoreAggregates    ScoreAggregate[]
+  marketInfos        MarketInfo[]
+  marketRoundUpdates MarketRoundUpdate[]
+}
+
+model SeasonMarket {
+  id       String  @id @default(cuid())
+  seasonId String
+  season   Season  @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  marketId String
+  market   Market  @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  isActive Boolean @default(true)
+
+  @@unique([seasonId, marketId])
+}
+
+model Round {
+  id       String      @id @default(cuid())
+  number   Int
+  seasonId String
+  season   Season      @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  opensAt  DateTime
+  closesAt DateTime
+  isFinal  Boolean     @default(false)
+  status   RoundStatus @default(UPCOMING)
+
+  isLockedActuals  Boolean   @default(false)
+  lockedAt         DateTime?
+  lockedById       String?
+  lockedBy         User?     @relation("RoundLocker", fields: [lockedById], references: [id])
+  scoresStale      Boolean   @default(false)
+  lastScoredAt     DateTime?
+  lastScoredById   String?
+  lastScoredBy     User?     @relation("RoundScorer", fields: [lastScoredById], references: [id])
+  actualsVersion   Int       @default(1)
+
+  submissions      Submission[]
+  actuals          Actual[]
+  warnings         Warning[]
+  predictionErrors PredictionError[]
+  scoreAggregates  ScoreAggregate[]
+
+  @@unique([seasonId, number])
+  @@index([closesAt])
+}
+
+model Submission {
+  id            String    @id @default(cuid())
+  teamId        String
+  team          Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  roundId       String
+  round         Round     @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  submittedAt   DateTime  @default(now())
+  submittedById String
+  submittedBy   User      @relation(fields: [submittedById], references: [id])
+  locked        Boolean   @default(true)
+  emailSentAt   DateTime?
+
+  values SubmissionValue[]
+
+  @@unique([teamId, roundId])
+  @@index([roundId])
+  @@index([teamId])
+}
+
+model SubmissionValue {
+  id           String     @id @default(cuid())
+  submissionId String
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  marketId     String
+  market       Market     @relation(fields: [marketId], references: [id])
+  metric       Metric
+  weekOffset   Int
+  value        Float
+
+  @@unique([submissionId, marketId, metric, weekOffset])
+  @@index([submissionId])
+}
+
+model Actual {
+  id         String       @id @default(cuid())
+  seasonId   String
+  season     Season       @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  roundId    String
+  round      Round        @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  marketId   String
+  market     Market       @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  metric     Metric
+  weekOffset Int
+  value      Float
+  source     ActualSource @default(MANUAL)
+  isVoided   Boolean      @default(false)
+
+  createdById String?
+  createdBy   User?   @relation("ActualCreator", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   User?   @relation("ActualUpdater", fields: [updatedById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  revisions ActualValueRevision[]
+
+  @@unique([seasonId, roundId, marketId, metric, weekOffset])
+  @@index([seasonId, marketId, metric])
+  @@index([roundId, isVoided])
+}
+
+model ActualValueRevision {
+  id        String               @id @default(cuid())
+  actualId  String
+  actual    Actual               @relation(fields: [actualId], references: [id], onDelete: Cascade)
+  actorId   String
+  actor     User                 @relation(fields: [actorId], references: [id])
+  action    ActualRevisionAction
+  oldValue  Float?
+  newValue  Float?
+  reason    String?
+  createdAt DateTime             @default(now())
+
+  @@index([actualId])
+  @@index([actorId])
+  @@index([createdAt])
+}
+
+model PredictionError {
+  id             String   @id @default(cuid())
+  seasonId       String
+  season         Season   @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  teamId         String
+  team           Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  roundId        String
+  round          Round    @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  marketId       String
+  market         Market   @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  metric         Metric
+  weekOffset     Int
+  predictedValue Float
+  actualValue    Float
+  absError       Float
+  apeError       Float?
+  computedAt     DateTime @default(now())
+  scoringRunId   String?
+
+  @@unique([seasonId, teamId, roundId, marketId, metric, weekOffset])
+  @@index([seasonId, teamId])
+  @@index([scoringRunId])
+}
+
+model ScoreAggregate {
+  id         String    @id @default(cuid())
+  seasonId   String
+  season     Season    @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  teamId     String
+  team       Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  metric     Metric
+  scopeType  ScopeType
+  roundId    String?
+  round      Round?    @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  marketId   String?
+  market     Market?   @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  mape       Float
+  nErrors    Int
+  computedAt DateTime  @default(now())
+  scoringRunId String?
+
+  @@unique([seasonId, teamId, metric, scopeType, roundId, marketId])
+  @@index([seasonId, metric, scopeType])
+  @@index([scoringRunId])
+}
+
+model ScoringRun {
+  id                    String           @id @default(cuid())
+  seasonId              String
+  season                Season           @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  scope                 String
+  roundId               String?
+  teamId                String?
+  triggeredByAdminId    String
+  triggeredByAdmin      User             @relation(fields: [triggeredByAdminId], references: [id])
+  startedAt             DateTime         @default(now())
+  finishedAt            DateTime?
+  status                ScoringRunStatus @default(RUNNING)
+  errorMessage          String?
+  submissionsProcessed  Int              @default(0)
+  errorsUpserted        Int              @default(0)
+  aggregatesUpserted    Int              @default(0)
+  actualsVersionAtRun   Int?
+  summaryJson           Json?
+
+  @@index([seasonId])
+  @@index([startedAt])
+}
+
+model Warning {
+  id        String      @id @default(cuid())
+  teamId    String
+  team      Team        @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  roundId   String
+  round     Round       @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  type      WarningType
+  message   String?
+  createdAt DateTime    @default(now())
+
+  @@unique([teamId, roundId, type])
+  @@index([teamId])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  title     String
+  message   String
+  link      String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, read])
+}
+
+model AuditLog {
+  id           String   @id @default(cuid())
+  userId       String?
+  userEmail    String?
+  userRole     String?
+  action       String
+  entityType   String
+  entityId     String?
+  details      Json?
+  beforeJson   Json?
+  afterJson    Json?
+  ipAddress    String?
+  userAgent    String?
+  requestId    String?
+  createdAt    DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@index([userId])
+  @@index([action])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([token])
+}
+
+model EmailDispatch {
+  id          String   @id @default(cuid())
+  type        String
+  recipientId String?
+  roundId     String?
+  teamId      String?
+  sentAt      DateTime @default(now())
+  success     Boolean  @default(true)
+
+  @@unique([type, recipientId, roundId])
+  @@index([type, roundId])
+}
+
+model JoinRequest {
+  id                     String            @id @default(cuid())
+  seasonId               String?
+  season                 Season?           @relation(fields: [seasonId], references: [id])
+  studentId              String
+  student                User              @relation("StudentJoinRequest", fields: [studentId], references: [id])
+  supervisorId           String?
+  supervisor             User?             @relation("SupervisorJoinRequest", fields: [supervisorId], references: [id])
+  supervisorEmailEntered String?
+  teamId                 String?
+  status                 JoinRequestStatus @default(PENDING)
+  message                String?
+  resolvedAt             DateTime?
+  createdAt              DateTime          @default(now())
+
+  @@index([studentId])
+  @@index([supervisorId])
+  @@index([status])
+}
+
+model SupportTicket {
+  id             String         @id @default(cuid())
+  seasonId       String?
+  createdById    String
+  createdBy      User           @relation("TicketCreator", fields: [createdById], references: [id])
+  teamId         String?
+  team           Team?          @relation("TicketTeam", fields: [teamId], references: [id])
+  supervisorId   String?
+  supervisor     User?          @relation("TicketSupervisor", fields: [supervisorId], references: [id])
+  assignedToId   String?
+  assignedTo     User?          @relation("TicketAssignee", fields: [assignedToId], references: [id])
+  category       TicketCategory @default(GENERAL)
+  priority       TicketPriority @default(NORMAL)
+  subject        String
+  message        String
+  attachments    Json?
+  status         TicketStatus   @default(OPEN)
+  
+  escalatedAt          DateTime?
+  escalatedById        String?
+  escalatedBy          User?    @relation("TicketEscalator", fields: [escalatedById], references: [id])
+  escalationReason     String?
+  autoEscalatedAt      DateTime?
+  supervisorLastResponseAt DateTime?
+  
+  feedbackRating       Boolean?
+  feedbackSubmittedAt  DateTime?
+  
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  replies SupportTicketReply[]
+
+  @@index([createdById])
+  @@index([supervisorId])
+  @@index([assignedToId])
+  @@index([status])
+}
+
+model SupportTicketReply {
+  id         String            @id @default(cuid())
+  ticketId   String
+  ticket     SupportTicket     @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  authorId   String
+  author     User              @relation(fields: [authorId], references: [id])
+  message    String
+  visibility MessageVisibility @default(STUDENT_VISIBLE)
+  createdAt  DateTime          @default(now())
+
+  @@index([ticketId])
+}
+
+model CannedResponse {
+  id          String         @id @default(cuid())
+  title       String
+  content     String
+  category    TicketCategory @default(GENERAL)
+  createdById String
+  createdBy   User           @relation(fields: [createdById], references: [id])
+  isGlobal    Boolean        @default(false)
+  usageCount  Int            @default(0)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@index([createdById])
+  @@index([category])
+}
+
+model MarketInfo {
+  id             String   @id @default(cuid())
+  seasonId       String
+  season         Season   @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  marketId       String
+  market         Market   @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  title          String?
+  summary        String?
+  description    String?
+  quickInsights  Json?
+  demandDrivers  String[]
+  supplyNotes    String[]
+  risks          String[]
+  strategyHints  String[]
+  createdById    String?
+  updatedById    String?
+  updatedBy      User?    @relation("MarketInfoUpdatedBy", fields: [updatedById], references: [id])
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  resourceLinks MarketResourceLink[]
+
+  @@unique([seasonId, marketId])
+  @@index([seasonId])
+}
+
+enum ResourceLinkType {
+  REPORT
+  NEWS
+  DATA
+  MAP
+  DASHBOARD
+  OTHER
+}
+
+model MarketResourceLink {
+  id           String           @id @default(cuid())
+  marketInfoId String
+  marketInfo   MarketInfo       @relation(fields: [marketInfoId], references: [id], onDelete: Cascade)
+  label        String
+  url          String
+  type         ResourceLinkType @default(OTHER)
+  note         String?
+  order        Int              @default(0)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@index([marketInfoId])
+}
+
+model MarketRoundUpdate {
+  id          String   @id @default(cuid())
+  seasonId    String
+  season      Season   @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  marketId    String
+  market      Market   @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  roundNumber Int
+  headline    String
+  whatChanged String
+  createdById String
+  createdBy   User     @relation("MarketRoundUpdateCreator", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([seasonId, marketId, roundNumber])
+  @@index([seasonId, marketId])
+}
+
+model Permission {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+
+  userPermissions UserPermission[]
+}
+
+model UserPermission {
+  id           String     @id @default(cuid())
+  userId       String
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permissionId String
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  grantedById  String?
+  grantedAt    DateTime   @default(now())
+
+  @@unique([userId, permissionId])
+  @@index([userId])
+}

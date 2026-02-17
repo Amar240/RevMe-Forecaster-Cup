@@ -1,0 +1,312 @@
+'use client'
+
+import { csrfFetch } from '@/lib/csrf'
+
+import { clientLogger } from '@/lib/client-logger'
+
+
+import { useEffect, useState, useCallback } from 'react'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { DataTable } from '@/components/ui/data-table'
+import { TableSkeleton } from '@/components/ui/skeleton'
+import { Download, FileText, Shield } from 'lucide-react'
+import { AccessDenied } from '@/components/ui/access-denied'
+import { usePermissions } from '@/hooks/usePermissions'
+
+interface AuditLog {
+  id: string
+  userId: string | null
+  userName: string | null
+  userEmail: string | null
+  action: string
+  entityType: string
+  entityId: string | null
+  details: Record<string, unknown> | null
+  ipAddress: string | null
+  createdAt: string
+}
+
+export default function AdminAuditLogsPage() {
+  const [loading, setLoading] = useState(true)
+  const [logs, setLogs] = useState<AuditLog[]>([])
+  const [exporting, setExporting] = useState(false)
+  const [totalLogs, setTotalLogs] = useState(0)
+  const [page, setPage] = useState(1)
+  const [pageSize] = useState(50)
+  const { loading: permLoading, canPerform } = usePermissions()
+
+  const fetchLogs = useCallback(async () => {
+    try {
+      const res = await csrfFetch(`/api/admin/audit-logs?page=${page}&pageSize=${pageSize}`)
+      if (res.ok) {
+        const data = await res.json()
+        setLogs(data.logs || [])
+        setTotalLogs(data.totalLogs || 0)
+      }
+    } catch (error) {
+      clientLogger.error('Failed to fetch audit logs:', error)
+    } finally {
+      setLoading(false)
+    }
+  }, [page, pageSize])
+
+  useEffect(() => {
+    if (!permLoading && canPerform('audit:view')) {
+      fetchLogs()
+    }
+  }, [fetchLogs, permLoading, canPerform])
+
+  const handleExport = async () => {
+    setExporting(true)
+    try {
+      const res = await csrfFetch('/api/admin/audit-logs/export')
+      if (res.ok) {
+        const blob = await res.blob()
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `audit_logs_${new Date().toISOString().split('T')[0]}.csv`
+        document.body.appendChild(a)
+        a.click()
+        window.URL.revokeObjectURL(url)
+        a.remove()
+      }
+    } catch (error) {
+      clientLogger.error('Export failed:', error)
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  const getActionColor = (action: string) => {
+    if (action.includes('CREATE') || action.includes('ADD')) return 'bg-green-100 text-green-700'
+    if (action.includes('DELETE') || action.includes('REMOVE')) return 'bg-red-100 text-red-700'
+    if (action.includes('UPDATE') || action.includes('EDIT')) return 'bg-blue-100 text-blue-700'
+    if (action.includes('DISQUALIFY')) return 'bg-orange-100 text-orange-700'
+    if (action.includes('REINSTATE')) return 'bg-emerald-100 text-emerald-700'
+    return 'bg-gray-100 text-gray-700'
+  }
+
+  const columns = [
+    {
+      key: 'createdAt',
+      header: 'Timestamp',
+      sortable: true,
+      render: (row: AuditLog) => (
+        <div>
+          <p className="text-sm font-medium">{new Date(row.createdAt).toLocaleDateString()}</p>
+          <p className="text-xs text-gray-500">{new Date(row.createdAt).toLocaleTimeString()}</p>
+        </div>
+      ),
+    },
+    {
+      key: 'action',
+      header: 'Action',
+      sortable: true,
+      render: (row: AuditLog) => (
+        <span className={`text-xs font-medium px-2 py-1 rounded-full ${getActionColor(row.action)}`}>
+          {row.action}
+        </span>
+      ),
+    },
+    {
+      key: 'entityType',
+      header: 'Entity Type',
+      sortable: true,
+      render: (row: AuditLog) => (
+        <span className="text-sm text-gray-600">{row.entityType}</span>
+      ),
+    },
+    {
+      key: 'entityId',
+      header: 'Entity ID',
+      render: (row: AuditLog) => (
+        <span className="font-mono text-xs text-gray-500">{row.entityId || '-'}</span>
+      ),
+    },
+    {
+      key: 'userName',
+      header: 'Performed By',
+      sortable: true,
+      render: (row: AuditLog) => (
+        <div>
+          <p className="text-sm font-medium">{row.userName || 'System'}</p>
+          <p className="text-xs text-gray-500">{row.userEmail || '-'}</p>
+        </div>
+      ),
+    },
+    {
+      key: 'details',
+      header: 'Details',
+      render: (row: AuditLog) => (
+        <span className="text-xs text-gray-500 max-w-xs truncate block">
+          {row.details ? JSON.stringify(row.details).substring(0, 50) + '...' : '-'}
+        </span>
+      ),
+    },
+    {
+      key: 'ipAddress',
+      header: 'IP Address',
+      render: (row: AuditLog) => (
+        <span className="font-mono text-xs text-gray-500">{row.ipAddress || '-'}</span>
+      ),
+    },
+  ]
+
+  if (permLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="space-y-2">
+            <div className="h-8 w-32 bg-gray-200 rounded animate-pulse" />
+            <div className="h-4 w-48 bg-gray-200 rounded animate-pulse" />
+          </div>
+        </div>
+        <Card>
+          <CardContent className="pt-6">
+            <TableSkeleton rows={10} columns={7} />
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  if (!canPerform('audit:view')) {
+    return (
+      <AccessDenied
+        title="Access Denied"
+        message="You do not have permission to view audit logs."
+      />
+    )
+  }
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="space-y-2">
+            <div className="h-8 w-32 bg-gray-200 rounded animate-pulse" />
+            <div className="h-4 w-48 bg-gray-200 rounded animate-pulse" />
+          </div>
+        </div>
+        <Card>
+          <CardContent className="pt-6">
+            <TableSkeleton rows={10} columns={7} />
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  const uniqueActions = [...new Set(logs.map(l => l.action))]
+  const uniqueEntityTypes = [...new Set(logs.map(l => l.entityType))]
+  const totalPages = Math.max(1, Math.ceil(totalLogs / pageSize))
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 flex items-center">
+            <Shield className="h-6 w-6 mr-2 text-purple-600" />
+            Audit Logs
+          </h1>
+          <p className="text-gray-600">{totalLogs} recorded actions</p>
+        </div>
+        <Button onClick={handleExport} disabled={exporting}>
+          <Download className="h-4 w-4 mr-2" />
+          {exporting ? 'Exporting...' : 'Export CSV'}
+        </Button>
+      </div>
+
+      <div className="grid md:grid-cols-3 gap-4">
+        <Card className="bg-gradient-to-br from-purple-50 to-white border-purple-100">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Total Logs</p>
+                <p className="text-3xl font-bold text-purple-600">{totalLogs}</p>
+              </div>
+              <FileText className="h-8 w-8 text-purple-200" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="bg-gradient-to-br from-blue-50 to-white border-blue-100">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Today</p>
+                <p className="text-3xl font-bold text-blue-600">
+                  {logs.filter(l => new Date(l.createdAt).toDateString() === new Date().toDateString()).length}
+                </p>
+              </div>
+              <FileText className="h-8 w-8 text-blue-200" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="bg-gradient-to-br from-green-50 to-white border-green-100">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Unique Actions</p>
+                <p className="text-3xl font-bold text-green-600">{uniqueActions.length}</p>
+              </div>
+              <FileText className="h-8 w-8 text-green-200" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Activity Log</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <DataTable
+            data={logs}
+            columns={columns}
+            searchKeys={['action', 'entityType', 'userName', 'userEmail']}
+            searchPlaceholder="Search logs..."
+            pageSize={20}
+            filters={[
+              {
+                key: 'action',
+                label: 'Action',
+                options: uniqueActions.map(a => ({ value: a, label: a })),
+              },
+              {
+                key: 'entityType',
+                label: 'Entity Type',
+                options: uniqueEntityTypes.map(e => ({ value: e, label: e })),
+              },
+            ]}
+          />
+          <div className="mt-4 flex items-center justify-between text-sm text-gray-600">
+            <span>
+              Page {page} of {totalPages}
+            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page === 1}
+              >
+                Prev
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages}
+              >
+                Next
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+

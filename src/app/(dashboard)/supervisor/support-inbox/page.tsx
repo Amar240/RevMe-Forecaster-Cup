@@ -1,0 +1,541 @@
+'use client'
+
+import { csrfFetch } from '@/lib/csrf'
+
+import { clientLogger } from '@/lib/client-logger'
+
+
+import { useState, useEffect, useCallback } from 'react'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { 
+  Loader2, 
+  Send, 
+  Clock, 
+  CheckCircle, 
+  AlertCircle, 
+  ArrowUp,
+  MessageSquare,
+  User,
+  Users,
+  ArrowLeft,
+  Eye,
+  EyeOff,
+  ChevronDown
+} from 'lucide-react'
+
+interface TicketReply {
+  id: string
+  message: string
+  visibility: 'STUDENT_VISIBLE' | 'INTERNAL_ONLY'
+  createdAt: string
+  author: { firstName: string; lastName: string; role: string }
+}
+
+interface Ticket {
+  id: string
+  category: string
+  subject: string
+  message: string
+  status: string
+  createdAt: string
+  createdBy: { firstName: string; lastName: string; email: string; role: string }
+  team?: { id: string; name: string } | null
+  assignedTo: { firstName: string; lastName: string } | null
+  escalationReason?: string | null
+  replies: TicketReply[]
+}
+
+interface CannedResponse {
+  id: string
+  title: string
+  content: string
+  category: string
+}
+
+export default function SupervisorSupportInboxPage() {
+  const [tickets, setTickets] = useState<Ticket[]>([])
+  const [cannedResponses, setCannedResponses] = useState<CannedResponse[]>([])
+  const [loading, setLoading] = useState(true)
+  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null)
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [categoryFilter, setCategoryFilter] = useState('all')
+  const [replyMessage, setReplyMessage] = useState('')
+  const [isInternalNote, setIsInternalNote] = useState(false)
+  const [showEscalateModal, setShowEscalateModal] = useState(false)
+  const [escalationReason, setEscalationReason] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [showCannedDropdown, setShowCannedDropdown] = useState(false)
+
+  const fetchTickets = useCallback(async () => {
+    try {
+      setLoading(true)
+      let url = '/api/support-tickets?view=inbox'
+      if (statusFilter !== 'all') {
+        url += `&status=${statusFilter}`
+      }
+      const res = await csrfFetch(url)
+      if (res.ok) {
+        const data = await res.json()
+        let filteredTickets = data.tickets || []
+        if (categoryFilter !== 'all') {
+          filteredTickets = filteredTickets.filter((t: Ticket) => t.category === categoryFilter)
+        }
+        setTickets(filteredTickets)
+      }
+    } catch (err) {
+      clientLogger.error('Failed to fetch tickets:', err)
+    } finally {
+      setLoading(false)
+    }
+  }, [statusFilter, categoryFilter])
+
+  const fetchCannedResponses = useCallback(async () => {
+    try {
+      const res = await csrfFetch('/api/canned-responses')
+      if (res.ok) {
+        const data = await res.json()
+        setCannedResponses(data.responses || [])
+      }
+    } catch (err) {
+      clientLogger.error('Failed to fetch canned responses:', err)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchTickets()
+    fetchCannedResponses()
+  }, [fetchTickets, fetchCannedResponses])
+
+  const refreshTicket = async () => {
+    if (!selectedTicket) return
+    try {
+      const res = await csrfFetch(`/api/support-tickets/${selectedTicket.id}`)
+      if (res.ok) {
+        const data = await res.json()
+        setSelectedTicket(data.ticket)
+        fetchTickets()
+      }
+    } catch (err) {
+      clientLogger.error('Failed to refresh ticket:', err)
+    }
+  }
+
+  const handleReply = async () => {
+    if (!selectedTicket || !replyMessage.trim()) return
+    setSubmitting(true)
+
+    try {
+      const res = await csrfFetch(`/api/support-tickets/${selectedTicket.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          action: 'reply', 
+          message: replyMessage,
+          isInternal: isInternalNote
+        }),
+      })
+
+      if (res.ok) {
+        setReplyMessage('')
+        setIsInternalNote(false)
+        await refreshTicket()
+      }
+    } catch (err) {
+      clientLogger.error('Failed to reply:', err)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleResolve = async () => {
+    if (!selectedTicket) return
+    setSubmitting(true)
+
+    try {
+      const res = await csrfFetch(`/api/support-tickets/${selectedTicket.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'resolve' }),
+      })
+
+      if (res.ok) {
+        await refreshTicket()
+      }
+    } catch (err) {
+      clientLogger.error('Failed to resolve:', err)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleEscalate = async () => {
+    if (!selectedTicket || !escalationReason.trim()) return
+    setSubmitting(true)
+
+    try {
+      const res = await csrfFetch(`/api/support-tickets/${selectedTicket.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'escalate', escalationReason }),
+      })
+
+      if (res.ok) {
+        setShowEscalateModal(false)
+        setEscalationReason('')
+        await refreshTicket()
+      }
+    } catch (err) {
+      clientLogger.error('Failed to escalate:', err)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const insertCannedResponse = (response: CannedResponse) => {
+    setReplyMessage(prev => prev + (prev ? '\n\n' : '') + response.content)
+    setShowCannedDropdown(false)
+  }
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'OPEN':
+        return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700"><Clock className="h-3 w-3" /> Open</span>
+      case 'WAITING_ON_SUPERVISOR':
+        return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-700"><AlertCircle className="h-3 w-3" /> Waiting on You</span>
+      case 'WAITING_ON_STUDENT':
+        return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700"><Clock className="h-3 w-3" /> Waiting on Student</span>
+      case 'ESCALATED':
+        return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700"><ArrowUp className="h-3 w-3" /> Escalated</span>
+      case 'RESOLVED':
+        return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700"><CheckCircle className="h-3 w-3" /> Resolved</span>
+      default:
+        return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700">{status}</span>
+    }
+  }
+
+  const getAge = (createdAt: string) => {
+    const now = new Date()
+    const created = new Date(createdAt)
+    const diffMs = now.getTime() - created.getTime()
+    const diffMins = Math.floor(diffMs / 60000)
+    const diffHours = Math.floor(diffMins / 60)
+    const diffDays = Math.floor(diffHours / 24)
+
+    if (diffDays > 0) return `${diffDays}d ago`
+    if (diffHours > 0) return `${diffHours}h ago`
+    if (diffMins > 0) return `${diffMins}m ago`
+    return 'Just now'
+  }
+
+  const categories = ['GENERAL', 'LOGIN', 'SUBMISSION', 'SCORING', 'TEAM']
+
+  if (loading && tickets.length === 0) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+      </div>
+    )
+  }
+
+  if (selectedTicket) {
+    return (
+      <div className="space-y-6 max-w-4xl mx-auto">
+        <Button variant="outline" onClick={() => setSelectedTicket(null)}>
+          <ArrowLeft className="h-4 w-4 mr-2" /> Back to Inbox
+        </Button>
+
+        <Card>
+          <CardHeader>
+            <div className="flex items-start justify-between">
+              <div>
+                <CardTitle>{selectedTicket.subject}</CardTitle>
+                <CardDescription className="mt-1">
+                  <span className="inline-flex items-center gap-1 mr-3">
+                    <User className="h-3 w-3" />
+                    {selectedTicket.createdBy.firstName} {selectedTicket.createdBy.lastName}
+                  </span>
+                  {selectedTicket.team && (
+                    <span className="inline-flex items-center gap-1 mr-3">
+                      <Users className="h-3 w-3" />
+                      {selectedTicket.team.name}
+                    </span>
+                  )}
+                  <span className="text-gray-400">{selectedTicket.category} • {getAge(selectedTicket.createdAt)}</span>
+                </CardDescription>
+              </div>
+              {getStatusBadge(selectedTicket.status)}
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="p-4 bg-gray-50 rounded-lg border-l-4 border-gray-300">
+              <p className="text-sm font-medium text-gray-700 mb-1">
+                {selectedTicket.createdBy.firstName} {selectedTicket.createdBy.lastName}
+                <span className="text-gray-400 font-normal ml-2">
+                  {new Date(selectedTicket.createdAt).toLocaleString()}
+                </span>
+              </p>
+              <p className="text-gray-600 whitespace-pre-wrap">{selectedTicket.message}</p>
+            </div>
+
+            {selectedTicket.replies.map((reply) => {
+              const isInternal = reply.visibility === 'INTERNAL_ONLY'
+              const isStaff = reply.author.role === 'SUPERVISOR' || reply.author.role === 'ADMIN' || reply.author.role === 'SUB_ADMIN'
+              
+              return (
+                <div 
+                  key={reply.id} 
+                  className={`p-4 rounded-lg border-l-4 ${
+                    isInternal 
+                      ? 'bg-yellow-50 border-yellow-400' 
+                      : isStaff 
+                        ? 'bg-blue-50 border-blue-400' 
+                        : 'bg-gray-50 border-gray-300'
+                  }`}
+                >
+                  <p className="text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
+                    {reply.author.firstName} {reply.author.lastName}
+                    {isInternal && (
+                      <span className="inline-flex items-center gap-1 text-xs text-yellow-700 bg-yellow-100 px-2 py-0.5 rounded">
+                        <EyeOff className="h-3 w-3" /> Internal Note
+                      </span>
+                    )}
+                    <span className="text-gray-400 font-normal">
+                      {new Date(reply.createdAt).toLocaleString()}
+                    </span>
+                  </p>
+                  <p className="text-gray-600 whitespace-pre-wrap">{reply.message}</p>
+                </div>
+              )
+            })}
+
+            {selectedTicket.status !== 'RESOLVED' && selectedTicket.status !== 'ESCALATED' && (
+              <>
+                <div className="border-t pt-4 space-y-3">
+                  <div className="flex items-center gap-4">
+                    <div className="relative">
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => setShowCannedDropdown(!showCannedDropdown)}
+                      >
+                        Canned Responses <ChevronDown className="h-4 w-4 ml-1" />
+                      </Button>
+                      {showCannedDropdown && cannedResponses.length > 0 && (
+                        <div className="absolute top-full left-0 mt-1 w-64 bg-white border rounded-lg shadow-lg z-10 max-h-60 overflow-y-auto">
+                          {cannedResponses.map((response) => (
+                            <button
+                              key={response.id}
+                              className="w-full text-left px-3 py-2 hover:bg-gray-50 text-sm border-b last:border-b-0"
+                              onClick={() => insertCannedResponse(response)}
+                            >
+                              <p className="font-medium text-gray-900">{response.title}</p>
+                              <p className="text-gray-500 text-xs truncate">{response.content}</p>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <label className="flex items-center gap-2 text-sm text-gray-600">
+                      <input
+                        type="checkbox"
+                        checked={isInternalNote}
+                        onChange={(e) => setIsInternalNote(e.target.checked)}
+                        className="rounded border-gray-300"
+                      />
+                      <EyeOff className="h-4 w-4" />
+                      Internal note (hidden from student)
+                    </label>
+                  </div>
+                  <div className="flex gap-2">
+                    <textarea
+                      className="flex-1 border rounded-lg px-3 py-2 min-h-[80px] text-sm"
+                      placeholder={isInternalNote ? "Add an internal note..." : "Type your reply..."}
+                      value={replyMessage}
+                      onChange={(e) => setReplyMessage(e.target.value)}
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button onClick={handleReply} disabled={!replyMessage.trim() || submitting}>
+                      {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}
+                      {isInternalNote ? 'Add Note' : 'Send Reply'}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="border-t pt-4 flex gap-2">
+                  <Button 
+                    variant="outline" 
+                    onClick={handleResolve}
+                    disabled={submitting}
+                    className="text-green-600 hover:bg-green-50"
+                  >
+                    <CheckCircle className="h-4 w-4 mr-2" /> Resolve
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setShowEscalateModal(true)}
+                    disabled={submitting}
+                    className="text-red-600 hover:bg-red-50"
+                  >
+                    <ArrowUp className="h-4 w-4 mr-2" /> Escalate to Admin
+                  </Button>
+                </div>
+              </>
+            )}
+
+            {selectedTicket.status === 'ESCALATED' && (
+              <div className="border-t pt-4">
+                <div className="p-4 bg-red-50 rounded-lg">
+                  <p className="text-sm font-medium text-red-700">This ticket has been escalated to admin.</p>
+                  {selectedTicket.escalationReason && (
+                    <p className="text-sm text-red-600 mt-1">Reason: {selectedTicket.escalationReason}</p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {selectedTicket.status === 'RESOLVED' && (
+              <div className="border-t pt-4">
+                <div className="p-4 bg-green-50 rounded-lg">
+                  <p className="text-sm font-medium text-green-700">This ticket has been resolved.</p>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {showEscalateModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <Card className="w-full max-w-md mx-4">
+              <CardHeader>
+                <CardTitle>Escalate to Admin</CardTitle>
+                <CardDescription>Please provide a reason for escalating this ticket.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <textarea
+                  className="w-full border rounded-lg px-3 py-2 min-h-[100px]"
+                  placeholder="Why are you escalating this ticket?"
+                  value={escalationReason}
+                  onChange={(e) => setEscalationReason(e.target.value)}
+                />
+                <div className="flex gap-2 justify-end">
+                  <Button variant="outline" onClick={() => {
+                    setShowEscalateModal(false)
+                    setEscalationReason('')
+                  }}>
+                    Cancel
+                  </Button>
+                  <Button 
+                    onClick={handleEscalate}
+                    disabled={!escalationReason.trim() || submitting}
+                    className="bg-red-600 hover:bg-red-700"
+                  >
+                    {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Escalate'}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900">Support Inbox</h1>
+        <p className="text-gray-600">Manage support tickets from your students</p>
+      </div>
+
+      <div className="flex flex-wrap gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+          <select
+            className="border rounded-lg px-3 py-2 text-sm"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+          >
+            <option value="all">All Statuses</option>
+            <option value="OPEN">Open</option>
+            <option value="WAITING_ON_SUPERVISOR">Waiting on You</option>
+            <option value="WAITING_ON_STUDENT">Waiting on Student</option>
+            <option value="ESCALATED">Escalated</option>
+            <option value="RESOLVED">Resolved</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+          <select
+            className="border rounded-lg px-3 py-2 text-sm"
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+          >
+            <option value="all">All Categories</option>
+            {categories.map((cat) => (
+              <option key={cat} value={cat}>{cat.charAt(0) + cat.slice(1).toLowerCase()}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {tickets.length === 0 ? (
+        <Card>
+          <CardContent className="py-12 text-center">
+            <MessageSquare className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No Tickets</h3>
+            <p className="text-gray-500">
+              {statusFilter !== 'all' || categoryFilter !== 'all' 
+                ? 'No tickets match your current filters' 
+                : 'No support tickets from your students yet'}
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-3">
+          {tickets.map((ticket) => (
+            <Card 
+              key={ticket.id} 
+              className="cursor-pointer hover:border-blue-300 transition-colors" 
+              onClick={() => setSelectedTicket(ticket)}
+            >
+              <CardContent className="py-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-gray-900 truncate">{ticket.subject}</p>
+                    <div className="flex flex-wrap items-center gap-2 text-sm text-gray-500 mt-1">
+                      <span className="inline-flex items-center gap-1">
+                        <User className="h-3 w-3" />
+                        {ticket.createdBy.firstName} {ticket.createdBy.lastName}
+                      </span>
+                      {ticket.team && (
+                        <span className="inline-flex items-center gap-1">
+                          <Users className="h-3 w-3" />
+                          {ticket.team.name}
+                        </span>
+                      )}
+                      <span className="px-2 py-0.5 bg-gray-100 rounded text-xs">{ticket.category}</span>
+                      <span className="text-gray-400">{getAge(ticket.createdAt)}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 ml-4">
+                    {ticket.replies.length > 0 && (
+                      <span className="text-sm text-gray-500">{ticket.replies.length} replies</span>
+                    )}
+                    {getStatusBadge(ticket.status)}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+
+
+
