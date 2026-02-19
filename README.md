@@ -8,7 +8,7 @@ Production-grade Next.js App Router app for the RevME forecasting competition.
 - Docker (for local Postgres)
 
 ## Environment
-Copy `.env.example` to `.env` and fill in values. Minimal local dev values:
+Copy `.env.example` to `.env.local` and fill in values. Minimal local dev values:
 - `DATABASE_URL`
 - `NEXT_PUBLIC_APP_URL`
 - `SMTP_*` (optional for emails)
@@ -23,6 +23,7 @@ App runs at `http://localhost:5000`.
 
 ## Local Dev (Docker Compose)
 ```bash
+cp .env.docker.example .env.docker
 docker compose -f docker-compose.dev.yml up --build
 ```
 The app runs at `http://localhost:5000` and Postgres is provisioned via compose.
