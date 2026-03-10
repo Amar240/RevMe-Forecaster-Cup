@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button'
 import { AccessDenied } from '@/components/ui/access-denied'
 import { usePermissions } from '@/hooks/usePermissions'
 import { Users, GraduationCap, UserCog, Shield, MoreVertical, RefreshCw, Key, LogOut, Trash2, Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
 import { DataTable } from '@/components/ui/data-table'
 import { CardSkeleton, TableSkeleton } from '@/components/ui/skeleton'
 import {
@@ -40,32 +41,33 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 
 export default function AdminUsersPage() {
   const { loading: permLoading, canPerform } = usePermissions()
   const [loading, setLoading] = useState(true)
   const [users, setUsers] = useState<AdminUser[]>([])
   const [totalUsers, setTotalUsers] = useState(0)
-  const [page, setPage] = useState(1)
-  const [pageSize] = useState(25)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null)
   const [showRoleDialog, setShowRoleDialog] = useState(false)
   const [showResetDialog, setShowResetDialog] = useState(false)
   const [newRole, setNewRole] = useState<string>('')
   const [resetLink, setResetLink] = useState('')
+  const [logoutTarget, setLogoutTarget] = useState<AdminUser | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<AdminUser | null>(null)
 
   const fetchUsers = useCallback(async () => {
     try {
-      const data = await listUsers({ page, pageSize })
+      const data = await listUsers()
       setUsers(data.users || [])
-      setTotalUsers(data.total || 0)
+      setTotalUsers(data.total ?? data.users?.length ?? 0)
     } catch (error) {
       clientLogger.error('Failed to fetch users:', error)
     } finally {
       setLoading(false)
     }
-  }, [page, pageSize])
+  }, [])
 
   useEffect(() => {
     if (!permLoading && canPerform('users:manage')) {
@@ -94,7 +96,7 @@ export default function AdminUsersPage() {
       setShowRoleDialog(false)
     } catch (error) {
       clientLogger.error('Change role failed:', error)
-      alert(error instanceof Error ? error.message : 'An error occurred')
+      toast.error(error instanceof Error ? error.message : 'Failed to change role')
     } finally {
       setActionLoading(null)
     }
@@ -109,37 +111,37 @@ export default function AdminUsersPage() {
       setShowResetDialog(true)
     } catch (error) {
       clientLogger.error('Reset link failed:', error)
-      alert(error instanceof Error ? error.message : 'An error occurred')
+      toast.error(error instanceof Error ? error.message : 'Failed to generate reset link')
     } finally {
       setActionLoading(null)
     }
   }
 
-  const handleForceLogout = async (user: AdminUser) => {
-    if (!confirm(`Force logout ${user.firstName} ${user.lastName}? Their active sessions will be terminated.`)) return
+  const executeForceLogout = async (user: AdminUser) => {
     setActionLoading(user.id)
     try {
       const data = await forceLogout(user.id)
-      alert(data.message)
+      toast.success(data.message)
     } catch (error) {
       clientLogger.error('Force logout failed:', error)
-      alert(error instanceof Error ? error.message : 'An error occurred')
+      toast.error(error instanceof Error ? error.message : 'Failed to force logout')
     } finally {
       setActionLoading(null)
+      setLogoutTarget(null)
     }
   }
 
-  const handleDeleteUser = async (user: AdminUser) => {
-    if (!confirm(`Delete ${user.firstName} ${user.lastName}? This action cannot be undone.`)) return
+  const executeDeleteUser = async (user: AdminUser) => {
     setActionLoading(user.id)
     try {
       await deleteUser(user.id)
       fetchUsers()
     } catch (error) {
       clientLogger.error('Delete user failed:', error)
-      alert(error instanceof Error ? error.message : 'An error occurred')
+      toast.error(error instanceof Error ? error.message : 'Failed to delete user')
     } finally {
       setActionLoading(null)
+      setDeleteTarget(null)
     }
   }
 
@@ -171,7 +173,6 @@ export default function AdminUsersPage() {
   const students = users.filter((u) => u.role === 'STUDENT')
   const supervisors = users.filter((u) => u.role === 'SUPERVISOR')
   const admins = users.filter((u) => u.role === 'ADMIN')
-  const totalPages = Math.max(1, Math.ceil(totalUsers / pageSize))
 
   const columns = [
     {
@@ -260,14 +261,14 @@ export default function AdminUsersPage() {
               <Key className="h-4 w-4 mr-2" />
               Generate Reset Link
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleForceLogout(user)}>
+            <DropdownMenuItem onClick={() => setLogoutTarget(user)}>
               <LogOut className="h-4 w-4 mr-2" />
               Force Logout
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
               className="text-red-600"
-              onClick={() => handleDeleteUser(user)}
+              onClick={() => setDeleteTarget(user)}
               disabled={user.role === 'ADMIN'}
             >
               <Trash2 className="h-4 w-4 mr-2" />
@@ -343,7 +344,7 @@ export default function AdminUsersPage() {
             columns={columns}
             searchKeys={['firstName', 'lastName', 'email']}
             searchPlaceholder="Search by name or email..."
-            pageSize={15}
+            pageSize={20}
             filters={[
               {
                 key: 'role',
@@ -356,29 +357,6 @@ export default function AdminUsersPage() {
               },
             ]}
           />
-          <div className="mt-4 flex items-center justify-between text-sm text-gray-600">
-            <span>
-              Page {page} of {totalPages}
-            </span>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page === 1}
-              >
-                Prev
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
-              >
-                Next
-              </Button>
-            </div>
-          </div>
         </CardContent>
       </Card>
 
@@ -438,7 +416,7 @@ export default function AdminUsersPage() {
               variant="outline"
               onClick={() => {
                 navigator.clipboard.writeText(resetLink)
-                alert('Link copied to clipboard!')
+                toast.success('Link copied to clipboard')
               }}
             >
               Copy Link
@@ -447,6 +425,28 @@ export default function AdminUsersPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={logoutTarget !== null}
+        onOpenChange={(open) => { if (!open) setLogoutTarget(null) }}
+        title="Force Logout"
+        description={`Force logout ${logoutTarget?.firstName} ${logoutTarget?.lastName}? Their active sessions will be terminated.`}
+        confirmLabel="Force Logout"
+        variant="destructive"
+        loading={actionLoading === logoutTarget?.id}
+        onConfirm={() => { if (logoutTarget) executeForceLogout(logoutTarget) }}
+      />
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}
+        title="Delete User"
+        description={`Delete ${deleteTarget?.firstName} ${deleteTarget?.lastName}? This action cannot be undone.`}
+        confirmLabel="Delete"
+        variant="destructive"
+        loading={actionLoading === deleteTarget?.id}
+        onConfirm={() => { if (deleteTarget) executeDeleteUser(deleteTarget) }}
+      />
     </div>
   )
 }

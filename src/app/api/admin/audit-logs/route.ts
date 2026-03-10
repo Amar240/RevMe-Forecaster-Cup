@@ -1,29 +1,26 @@
-import { NextResponse } from 'next/server'
-import { prisma } from '@/server/db'
-import { canPerformAdminAction } from '@/server/permissions'
-import { logger } from '@/server/logger'
-import { getSession } from '@/server/auth'
-import { jsonError } from '@/server/http'
+import { prisma } from '@/lib/db'
+import { requireAdminOrResponse, jsonOk, jsonError } from '@/server/http'
+
+export const dynamic = 'force-dynamic'
+
 
 export async function GET(request: Request) {
   try {
-    const user = await getSession()
-    const canView = await canPerformAdminAction(user, 'audit:view')
-
-    if (!user || !canView) {
-      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
-    }
+    const { response } = await requireAdminOrResponse('audit:view')
+    if (response) return response
 
     const { searchParams } = new URL(request.url)
-    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10))
-    const pageSize = Math.min(200, Math.max(20, parseInt(searchParams.get('pageSize') || '50', 10)))
-    const skip = (page - 1) * pageSize
+    const pageParam = searchParams.get('page')
+    const pageSizeParam = searchParams.get('pageSize')
+    const usePagination = pageParam !== null && pageSizeParam !== null
+
+    const page = usePagination ? Math.max(1, parseInt(pageParam, 10)) : 1
+    const pageSize = usePagination ? Math.min(200, Math.max(20, parseInt(pageSizeParam, 10))) : undefined
 
     const [logs, totalLogs] = await Promise.all([
       prisma.auditLog.findMany({
         orderBy: { createdAt: 'desc' },
-        skip,
-        take: pageSize,
+        ...(usePagination ? { skip: (page - 1) * pageSize!, take: pageSize } : {}),
       }),
       prisma.auditLog.count(),
     ])
@@ -52,9 +49,8 @@ export async function GET(request: Request) {
       }
     })
 
-    return NextResponse.json({ logs: formattedLogs, totalLogs, page, pageSize })
+    return jsonOk({ logs: formattedLogs, totalLogs, page, pageSize })
   } catch (error) {
-    logger.error('Audit logs fetch error:', error)
     return jsonError(error, 'Failed to fetch audit logs')
   }
 }

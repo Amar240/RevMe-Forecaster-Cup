@@ -3,17 +3,27 @@
 import { clientLogger } from '@/lib/client-logger'
 import { createSeason, getSeasonOverview, updateRoundStatus, updateSeasonStatus } from '@/features/season/api'
 import type { SeasonSummary } from '@/features/season/types'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Checkbox } from '@/components/ui/checkbox'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Play, Pause, Square, RotateCcw, Clock, Edit2, Check, X, AlertTriangle } from 'lucide-react'
+import { AlertBanner } from '@/components/ui/alert-banner'
+import { PageLoader } from '@/components/ui/page-loader'
+import { csrfFetch } from '@/lib/csrf'
+import { toast } from 'sonner'
+
+interface MarketOption {
+  id: string
+  name: string
+}
+
+const DEFAULT_MARKET_NAMES = ['Nashville CBD', 'Dubai', 'Hamburg']
 
 export default function AdminSeasonPage() {
-  const totalRounds = 7
-  const daysPerRound = 7
-  const totalSeasonDays = totalRounds * daysPerRound
   const [season, setSeason] = useState<SeasonSummary | null>(null)
   const [completedSeasons, setCompletedSeasons] = useState<SeasonSummary[]>([])
   const [loading, setLoading] = useState(true)
@@ -23,23 +33,48 @@ export default function AdminSeasonPage() {
   const [success, setSuccess] = useState('')
   const [editingRound, setEditingRound] = useState<string | null>(null)
   const [editDates, setEditDates] = useState({ opensAt: '', closesAt: '' })
+  const [availableMarkets, setAvailableMarkets] = useState<MarketOption[]>([])
   const [formData, setFormData] = useState({
     name: '',
     startDate: '',
     endDate: '',
+    totalRounds: 7,
+    daysPerRound: 7,
+    marketIds: [] as string[],
   })
 
-  const computeEndDate = (startDate: string) => {
+  const [confirmComplete, setConfirmComplete] = useState(false)
+  const [confirmCloseRound, setConfirmCloseRound] = useState<string | null>(null)
+
+  const computeEndDate = useCallback((startDate: string, totalRounds: number, daysPerRound: number) => {
     if (!startDate) return ''
     const [year, month, day] = startDate.split('-').map(Number)
     const date = new Date(year, month - 1, day)
-    date.setDate(date.getDate() + totalSeasonDays - 1)
+    date.setDate(date.getDate() + totalRounds * daysPerRound - 1)
     return date.toISOString().slice(0, 10)
-  }
+  }, [])
+
+  const fetchMarkets = useCallback(async () => {
+    try {
+      const res = await csrfFetch('/api/admin/markets')
+      if (res.ok) {
+        const data = await res.json()
+        const markets: MarketOption[] = data.markets ?? []
+        setAvailableMarkets(markets)
+        const defaultIds = markets
+          .filter((m) => DEFAULT_MARKET_NAMES.includes(m.name))
+          .map((m) => m.id)
+        setFormData((prev) => ({ ...prev, marketIds: defaultIds }))
+      }
+    } catch {
+      clientLogger.error('Failed to fetch markets')
+    }
+  }, [])
 
   useEffect(() => {
     fetchSeason()
-  }, [])
+    fetchMarkets()
+  }, [fetchMarkets])
 
   const fetchSeason = async () => {
     try {
@@ -48,6 +83,7 @@ export default function AdminSeasonPage() {
       setCompletedSeasons(data.completedSeasons || [])
     } catch (err) {
       clientLogger.error('Failed to fetch season:', err)
+      toast.error('Failed to load season data')
     } finally {
       setLoading(false)
     }
@@ -59,7 +95,14 @@ export default function AdminSeasonPage() {
     setCreating(true)
 
     try {
-      await createSeason(formData)
+      await createSeason({
+        name: formData.name,
+        startDate: formData.startDate,
+        endDate: formData.endDate,
+        totalRounds: formData.totalRounds,
+        daysPerRound: formData.daysPerRound,
+        marketIds: formData.marketIds.length > 0 ? formData.marketIds : undefined,
+      })
       fetchSeason()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
@@ -132,7 +175,7 @@ export default function AdminSeasonPage() {
   }
 
   if (loading) {
-    return <div className="text-center py-12">Loading...</div>
+    return <PageLoader message="Loading season data…" />
   }
 
   return (
@@ -143,19 +186,15 @@ export default function AdminSeasonPage() {
       </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center space-x-2">
-          <AlertTriangle className="h-5 w-5" />
-          <span>{error}</span>
-          <button onClick={() => setError('')} className="ml-auto text-red-500 hover:text-red-700">×</button>
-        </div>
+        <AlertBanner variant="error" dismissible className="[&_button]:!p-1" icon={<AlertTriangle className="h-5 w-5 flex-shrink-0 mt-0.5" />}>
+          {error}
+        </AlertBanner>
       )}
 
       {success && (
-        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg flex items-center space-x-2">
-          <Check className="h-5 w-5" />
-          <span>{success}</span>
-          <button onClick={() => setSuccess('')} className="ml-auto text-green-500 hover:text-green-700">×</button>
-        </div>
+        <AlertBanner variant="success" dismissible>
+          {success}
+        </AlertBanner>
       )}
 
       {season ? (
@@ -198,7 +237,7 @@ export default function AdminSeasonPage() {
                       </Button>
                       <Button 
                         variant="outline"
-                        onClick={() => handleSeasonAction('complete')}
+                        onClick={() => setConfirmComplete(true)}
                         disabled={actionLoading === 'complete'}
                       >
                         <Square className="h-4 w-4 mr-2" />
@@ -218,7 +257,7 @@ export default function AdminSeasonPage() {
                       </Button>
                       <Button 
                         variant="outline"
-                        onClick={() => handleSeasonAction('complete')}
+                        onClick={() => setConfirmComplete(true)}
                         disabled={actionLoading === 'complete'}
                       >
                         <Square className="h-4 w-4 mr-2" />
@@ -246,13 +285,9 @@ export default function AdminSeasonPage() {
               </div>
 
               {season.status === 'PAUSED' && (
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-start space-x-3">
-                  <Pause className="h-5 w-5 text-amber-600 mt-0.5" />
-                  <div>
-                    <p className="font-medium text-amber-800">Season Paused</p>
-                    <p className="text-sm text-amber-700">All submissions are blocked while the season is paused.</p>
-                  </div>
-                </div>
+                <AlertBanner variant="warning" title="Season Paused" icon={<Pause className="h-5 w-5 flex-shrink-0 mt-0.5" />}>
+                  All submissions are blocked while the season is paused.
+                </AlertBanner>
               )}
             </CardContent>
           </Card>
@@ -260,7 +295,7 @@ export default function AdminSeasonPage() {
           <Card>
             <CardHeader>
               <CardTitle>Markets</CardTitle>
-              <CardDescription>Active markets for this season (exactly 3 required)</CardDescription>
+              <CardDescription>Active markets for this season</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="flex flex-wrap gap-2">
@@ -407,7 +442,7 @@ export default function AdminSeasonPage() {
                                     variant="outline"
                                     className="h-8 text-red-600 border-red-300 hover:bg-red-50"
                                     disabled={isLoading}
-                                    onClick={() => handleRoundStatusChange(round.id, 'CLOSED')}
+                                    onClick={() => setConfirmCloseRound(round.id)}
                                   >
                                     <Square className="h-3 w-3 mr-1" />
                                     Close
@@ -432,7 +467,7 @@ export default function AdminSeasonPage() {
                                     variant="outline"
                                     className="h-8 text-red-600 border-red-300 hover:bg-red-50"
                                     disabled={isLoading}
-                                    onClick={() => handleRoundStatusChange(round.id, 'CLOSED')}
+                                    onClick={() => setConfirmCloseRound(round.id)}
                                   >
                                     <Square className="h-3 w-3 mr-1" />
                                     Close
@@ -474,9 +509,9 @@ export default function AdminSeasonPage() {
           <form onSubmit={handleCreate}>
             <CardContent className="space-y-4">
               {error && (
-                <div className="bg-red-50 text-red-600 px-4 py-2 rounded-md text-sm">
+                <AlertBanner variant="error">
                   {error}
-                </div>
+                </AlertBanner>
               )}
               <div className="space-y-2">
                 <Label htmlFor="name">Season Name</Label>
@@ -488,6 +523,46 @@ export default function AdminSeasonPage() {
                   required
                 />
               </div>
+
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="totalRounds">Total Rounds</Label>
+                  <Input
+                    id="totalRounds"
+                    type="number"
+                    min={1}
+                    max={20}
+                    value={formData.totalRounds}
+                    onChange={(e) => {
+                      const totalRounds = Math.max(1, Math.min(20, parseInt(e.target.value) || 1))
+                      setFormData((prev) => ({
+                        ...prev,
+                        totalRounds,
+                        endDate: computeEndDate(prev.startDate, totalRounds, prev.daysPerRound),
+                      }))
+                    }}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="daysPerRound">Days Per Round</Label>
+                  <Input
+                    id="daysPerRound"
+                    type="number"
+                    min={1}
+                    max={30}
+                    value={formData.daysPerRound}
+                    onChange={(e) => {
+                      const daysPerRound = Math.max(1, Math.min(30, parseInt(e.target.value) || 1))
+                      setFormData((prev) => ({
+                        ...prev,
+                        daysPerRound,
+                        endDate: computeEndDate(prev.startDate, prev.totalRounds, daysPerRound),
+                      }))
+                    }}
+                  />
+                </div>
+              </div>
+
               <div className="grid md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="startDate">Start Date</Label>
@@ -500,7 +575,7 @@ export default function AdminSeasonPage() {
                       setFormData((prev) => ({
                         ...prev,
                         startDate: value,
-                        endDate: computeEndDate(value),
+                        endDate: computeEndDate(value, prev.totalRounds, prev.daysPerRound),
                       }))
                     }}
                     required
@@ -516,9 +591,43 @@ export default function AdminSeasonPage() {
                     aria-readonly="true"
                     required
                   />
-                  <p className="text-xs text-gray-500">Calculated as 7 weekly rounds from the start date.</p>
+                  <p className="text-xs text-gray-500">
+                    Auto-calculated: {formData.totalRounds} rounds × {formData.daysPerRound} days = {formData.totalRounds * formData.daysPerRound} days total.
+                  </p>
                 </div>
               </div>
+
+              {availableMarkets.length > 0 && (
+                <div className="space-y-3">
+                  <Label>Markets</Label>
+                  <p className="text-xs text-gray-500">Select which markets to include in this season. Defaults to Nashville CBD, Dubai, and Hamburg.</p>
+                  <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-3">
+                    {availableMarkets.map((market) => (
+                      <label
+                        key={market.id}
+                        className="flex items-center space-x-2 p-2 border rounded-lg cursor-pointer hover:bg-gray-50"
+                      >
+                        <Checkbox
+                          checked={formData.marketIds.includes(market.id)}
+                          onCheckedChange={(checked) => {
+                            setFormData((prev) => ({
+                              ...prev,
+                              marketIds: checked
+                                ? [...prev.marketIds, market.id]
+                                : prev.marketIds.filter((id) => id !== market.id),
+                            }))
+                          }}
+                        />
+                        <span className="text-sm">{market.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                  {formData.marketIds.length === 0 && (
+                    <p className="text-xs text-amber-600">No markets selected — the default 3 markets will be used.</p>
+                  )}
+                </div>
+              )}
+
               <Button type="submit" disabled={creating}>
                 {creating ? 'Creating...' : 'Create Season'}
               </Button>
@@ -567,6 +676,36 @@ export default function AdminSeasonPage() {
           </CardContent>
         </Card>
       )}
+
+      <ConfirmDialog
+        open={confirmComplete}
+        onOpenChange={setConfirmComplete}
+        title="Complete Season"
+        description="This will end the competition. Are you sure?"
+        confirmLabel="Complete Season"
+        variant="destructive"
+        loading={actionLoading === 'complete'}
+        onConfirm={async () => {
+          await handleSeasonAction('complete')
+          setConfirmComplete(false)
+        }}
+      />
+
+      <ConfirmDialog
+        open={confirmCloseRound !== null}
+        onOpenChange={(open) => { if (!open) setConfirmCloseRound(null) }}
+        title="Close Round"
+        description="Closing this round will prevent further submissions. Continue?"
+        confirmLabel="Close Round"
+        variant="destructive"
+        loading={confirmCloseRound !== null && actionLoading === confirmCloseRound}
+        onConfirm={async () => {
+          if (confirmCloseRound) {
+            await handleRoundStatusChange(confirmCloseRound, 'CLOSED')
+            setConfirmCloseRound(null)
+          }
+        }}
+      />
     </div>
   )
 }

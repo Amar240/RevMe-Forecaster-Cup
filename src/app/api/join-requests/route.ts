@@ -1,16 +1,16 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/db'
-import { getSession } from '@/lib/auth'
+import { requireUserOrResponse, jsonOk, jsonError, ApiError } from '@/server/http'
+
+export const dynamic = 'force-dynamic'
 
 export async function GET() {
   try {
-    const user = await getSession()
-    if (!user) {
-      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
-    }
+    const { user, response } = await requireUserOrResponse()
+    if (response) return response
 
     const requests = await prisma.joinRequest.findMany({
-      where: { studentId: user.id },
+      where: { studentId: user!.id },
       include: {
         supervisor: { select: { id: true, firstName: true, lastName: true, email: true } },
         season: { select: { id: true, name: true } },
@@ -18,41 +18,42 @@ export async function GET() {
       orderBy: { createdAt: 'desc' },
     })
 
-    return NextResponse.json({ requests })
+    return jsonOk({ requests })
   } catch (error) {
-    console.error('Failed to fetch join requests:', error)
-    return NextResponse.json({ message: 'Failed to fetch join requests' }, { status: 500 })
+    return jsonError(error, 'Failed to fetch join requests')
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await getSession()
-    if (!user || user.role !== 'STUDENT') {
-      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
+    const { user, response } = await requireUserOrResponse()
+    if (response) return response
+
+    if (user!.role !== 'STUDENT') {
+      throw new ApiError('Only students can create join requests', 403, 'FORBIDDEN')
     }
 
     const body = await request.json()
     const { supervisorEmail, message } = body
 
     if (!supervisorEmail) {
-      return NextResponse.json({ message: 'Supervisor email is required' }, { status: 400 })
+      throw new ApiError('Supervisor email is required', 400, 'INVALID_INPUT')
     }
 
     const existingMembership = await prisma.teamMember.findFirst({
-      where: { userId: user.id },
+      where: { userId: user!.id },
     })
 
     if (existingMembership) {
-      return NextResponse.json({ message: 'You are already a member of a team' }, { status: 400 })
+      throw new ApiError('You are already a member of a team', 400, 'CONFLICT')
     }
 
     const pendingRequest = await prisma.joinRequest.findFirst({
-      where: { studentId: user.id, status: 'PENDING' },
+      where: { studentId: user!.id, status: 'PENDING' },
     })
 
     if (pendingRequest) {
-      return NextResponse.json({ message: 'You already have a pending join request' }, { status: 400 })
+      throw new ApiError('You already have a pending join request', 400, 'CONFLICT')
     }
 
     const supervisor = await prisma.user.findFirst({
@@ -65,7 +66,7 @@ export async function POST(request: NextRequest) {
 
     const joinRequest = await prisma.joinRequest.create({
       data: {
-        studentId: user.id,
+        studentId: user!.id,
         supervisorId: supervisor?.id || null,
         supervisorEmailEntered: supervisorEmail.toLowerCase(),
         seasonId: activeSeason?.id || null,
@@ -77,37 +78,34 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    return NextResponse.json({ request: joinRequest })
+    return jsonOk({ request: joinRequest })
   } catch (error) {
-    console.error('Failed to create join request:', error)
-    return NextResponse.json({ message: 'Failed to create join request' }, { status: 500 })
+    return jsonError(error, 'Failed to create join request')
   }
 }
 
 export async function DELETE(request: NextRequest) {
   try {
-    const user = await getSession()
-    if (!user) {
-      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
-    }
+    const { user, response } = await requireUserOrResponse()
+    if (response) return response
 
     const { searchParams } = new URL(request.url)
     const requestId = searchParams.get('id')
 
     if (!requestId) {
-      return NextResponse.json({ message: 'Request ID is required' }, { status: 400 })
+      throw new ApiError('Request ID is required', 400, 'INVALID_INPUT')
     }
 
     const joinRequest = await prisma.joinRequest.findUnique({
       where: { id: requestId },
     })
 
-    if (!joinRequest || joinRequest.studentId !== user.id) {
-      return NextResponse.json({ message: 'Join request not found' }, { status: 404 })
+    if (!joinRequest || joinRequest.studentId !== user!.id) {
+      throw new ApiError('Join request not found', 404, 'NOT_FOUND')
     }
 
     if (joinRequest.status !== 'PENDING') {
-      return NextResponse.json({ message: 'Only pending requests can be canceled' }, { status: 400 })
+      throw new ApiError('Only pending requests can be canceled', 400, 'INVALID_INPUT')
     }
 
     await prisma.joinRequest.update({
@@ -115,9 +113,8 @@ export async function DELETE(request: NextRequest) {
       data: { status: 'CANCELED' },
     })
 
-    return NextResponse.json({ message: 'Request canceled' })
+    return jsonOk({ message: 'Request canceled' })
   } catch (error) {
-    console.error('Failed to cancel join request:', error)
-    return NextResponse.json({ message: 'Failed to cancel join request' }, { status: 500 })
+    return jsonError(error, 'Failed to cancel join request')
   }
 }

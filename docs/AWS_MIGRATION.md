@@ -1,10 +1,10 @@
 # AWS Migration Path (RevME Forecaster Cup)
 
-This guide outlines a clean path from local development to AWS using MySQL.
+This guide outlines a clean path from local development to AWS using PostgreSQL.
 
 ## Recommended Architecture
 - App: Next.js 14 (App Router)
-- Database: Amazon RDS for MySQL 8.0
+- Database: Amazon RDS for PostgreSQL 16
 - Secrets: AWS Secrets Manager or SSM Parameter Store
 - Files/exports: Amazon S3
 - Logs/metrics: CloudWatch
@@ -21,27 +21,27 @@ This guide outlines a clean path from local development to AWS using MySQL.
 3. Apply migrations using `npx prisma migrate deploy` during CI/CD.
 
 ## Deployment Options
-### Option A: Vercel + RDS (Fastest)
+### Option A: Vercel + RDS (Fastest — Recommended)
 - Host Next.js on Vercel.
-- Use RDS MySQL for the database.
+- Use RDS PostgreSQL for the database.
 - Set `DATABASE_URL` and SMTP secrets in Vercel env vars.
 - Run `prisma migrate deploy` in build step.
 
 ### Option B: AWS ECS Fargate + RDS (Full AWS)
 - Containerize app (Dockerfile) and deploy on ECS Fargate.
-- Use RDS MySQL for database.
+- Use RDS PostgreSQL for database.
 - Store secrets in Secrets Manager.
 - Use a CI/CD pipeline (GitHub Actions or CodePipeline).
 
 ### Option C: Elastic Beanstalk + RDS (Simpler AWS)
 - Deploy Next.js to Elastic Beanstalk.
-- Use RDS MySQL.
+- Use RDS PostgreSQL.
 - Configure environment variables in EB console.
 
 ## Database Migration Steps (Local -> RDS)
-1. Create RDS MySQL (8.0).
+1. Create RDS PostgreSQL 16 instance.
 2. Create DB and user (least privilege).
-3. Set `DATABASE_URL` to the RDS endpoint.
+3. Set `DATABASE_URL` to the RDS endpoint (e.g., `postgresql://user:pass@host:5432/revme?sslmode=require`).
 4. Run `npx prisma migrate deploy`.
 5. (Optional) Seed: `npx prisma db seed`.
 

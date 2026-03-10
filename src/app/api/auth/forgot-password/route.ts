@@ -1,8 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/db'
 import { randomBytes } from 'crypto'
-import { z } from 'zod'
+import { jsonOk, jsonError, parseJson } from '@/server/http'
 import { sendPasswordResetEmail } from '@/lib/email'
+import { z } from 'zod'
+
+export const dynamic = 'force-dynamic'
 
 const forgotPasswordSchema = z.object({
   email: z.string().email(),
@@ -10,8 +13,7 @@ const forgotPasswordSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { email } = forgotPasswordSchema.parse(body)
+    const { email } = await parseJson(request, forgotPasswordSchema)
 
     const user = await prisma.user.findUnique({
       where: { email: email.toLowerCase() },
@@ -23,26 +25,16 @@ export async function POST(request: NextRequest) {
 
       await prisma.user.update({
         where: { id: user.id },
-        data: {
-          resetToken,
-          resetTokenExpiry,
-        },
+        data: { resetToken, resetTokenExpiry },
       })
 
       await sendPasswordResetEmail(email, resetToken)
     }
 
-    return NextResponse.json({
+    return jsonOk({
       message: 'If an account exists, reset instructions have been sent',
     })
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json({ message: 'Invalid email' }, { status: 400 })
-    }
-    console.error('Forgot password error:', error)
-    return NextResponse.json(
-      { message: 'Failed to process request' },
-      { status: 500 }
-    )
+    return jsonError(error, 'Failed to process request')
   }
 }

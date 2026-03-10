@@ -12,6 +12,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { UserMinus, Crown } from 'lucide-react'
+import { PageLoader } from '@/components/ui/page-loader'
+import { toast } from 'sonner'
 
 const STATUS_BADGES: Record<string, { label: string; className: string }> = {
   ACTIVE: { label: 'Active', className: 'bg-green-100 text-green-700' },
@@ -58,6 +60,7 @@ export default function TeamDetailPage() {
       }
     } catch (err) {
       clientLogger.error('Failed to fetch team:', err)
+      toast.error('Failed to load team details')
     } finally {
       setLoading(false)
     }
@@ -120,7 +123,7 @@ export default function TeamDetailPage() {
   }
 
   if (loading) {
-    return <div className="text-center py-12">Loading...</div>
+    return <PageLoader message="Loading team details…" />
   }
 
   if (!team) {

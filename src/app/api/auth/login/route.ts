@@ -1,7 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/db'
 import { verifyPassword, createSession } from '@/lib/auth'
+import { jsonOk, jsonError, parseJson, ApiError } from '@/server/http'
 import { z } from 'zod'
+
+export const dynamic = 'force-dynamic'
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -10,32 +13,25 @@ const loginSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const data = loginSchema.parse(body)
+    const data = await parseJson(request, loginSchema)
 
     const user = await prisma.user.findUnique({
       where: { email: data.email.toLowerCase() },
     })
 
     if (!user) {
-      return NextResponse.json(
-        { message: 'Invalid email or password' },
-        { status: 401 }
-      )
+      throw new ApiError('Invalid email or password', 401, 'UNAUTHORIZED')
     }
 
     const validPassword = await verifyPassword(data.password, user.passwordHash)
 
     if (!validPassword) {
-      return NextResponse.json(
-        { message: 'Invalid email or password' },
-        { status: 401 }
-      )
+      throw new ApiError('Invalid email or password', 401, 'UNAUTHORIZED')
     }
 
     await createSession(user.id)
 
-    return NextResponse.json({
+    return jsonOk({
       message: 'Login successful',
       user: {
         id: user.id,
@@ -46,16 +42,6 @@ export async function POST(request: NextRequest) {
       },
     })
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { message: 'Invalid input' },
-        { status: 400 }
-      )
-    }
-    console.error('Login error:', error)
-    return NextResponse.json(
-      { message: 'Login failed' },
-      { status: 500 }
-    )
+    return jsonError(error, 'Login failed')
   }
 }

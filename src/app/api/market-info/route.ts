@@ -1,13 +1,13 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/db'
-import { getSession } from '@/lib/auth'
+import { requireUserOrResponse, jsonOk, jsonError } from '@/server/http'
+
+export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
   try {
-    const user = await getSession()
-    if (!user) {
-      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
-    }
+    const { user, response } = await requireUserOrResponse()
+    if (response) return response
 
     const { searchParams } = new URL(request.url)
     const marketId = searchParams.get('marketId')
@@ -22,12 +22,7 @@ export async function GET(request: NextRequest) {
     })
 
     if (!activeSeason) {
-      return NextResponse.json({ 
-        marketInfos: [], 
-        season: null, 
-        userRole: user.role,
-        markets: [],
-      })
+      return jsonOk({ marketInfos: [], season: null, userRole: user!.role, markets: [] })
     }
 
     const currentRound = activeSeason.rounds.find((r) => r.status === 'OPEN') ||
@@ -37,10 +32,7 @@ export async function GET(request: NextRequest) {
     if (marketId) {
       const marketInfo = await prisma.marketInfo.findUnique({
         where: { seasonId_marketId: { seasonId: activeSeason.id, marketId } },
-        include: {
-          resourceLinks: { orderBy: { order: 'asc' } },
-          market: true,
-        },
+        include: { resourceLinks: { orderBy: { order: 'asc' } }, market: true },
       })
 
       const roundUpdates = await prisma.marketRoundUpdate.findMany({
@@ -52,23 +44,17 @@ export async function GET(request: NextRequest) {
         ? roundUpdates.find((u) => u.roundNumber === currentRound.number)
         : null
 
-      return NextResponse.json({
+      return jsonOk({
         season: { id: activeSeason.id, name: activeSeason.name },
         currentRound: currentRound ? { number: currentRound.number } : null,
-        marketInfo,
-        currentRoundUpdate,
-        roundUpdates,
-        userRole: user.role,
+        marketInfo, currentRoundUpdate, roundUpdates, userRole: user!.role,
       })
     }
 
     const markets = activeSeason.markets.map((m) => m.market)
     const marketInfos = await prisma.marketInfo.findMany({
       where: { seasonId: activeSeason.id },
-      include: {
-        resourceLinks: { orderBy: { order: 'asc' }, take: 3 },
-        market: true,
-      },
+      include: { resourceLinks: { orderBy: { order: 'asc' }, take: 3 }, market: true },
     })
 
     const roundUpdates = currentRound
@@ -77,16 +63,12 @@ export async function GET(request: NextRequest) {
         })
       : []
 
-    return NextResponse.json({
+    return jsonOk({
       season: { id: activeSeason.id, name: activeSeason.name },
       currentRound: currentRound ? { number: currentRound.number } : null,
-      markets,
-      marketInfos,
-      currentRoundUpdates: roundUpdates,
-      userRole: user.role,
+      markets, marketInfos, currentRoundUpdates: roundUpdates, userRole: user!.role,
     })
   } catch (error) {
-    console.error('Get market info error:', error)
-    return NextResponse.json({ message: 'Failed to get market info' }, { status: 500 })
+    return jsonError(error, 'Failed to get market info')
   }
 }

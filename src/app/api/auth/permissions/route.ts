@@ -1,20 +1,23 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { jsonOk, jsonError } from '@/server/http'
 
-export async function GET(request: NextRequest) {
+export const dynamic = 'force-dynamic'
+
+export async function GET() {
   try {
     const user = await getSession()
     if (!user) {
-      return NextResponse.json({ hasAccess: false, permissions: [] })
+      return jsonOk({ hasAccess: false, permissions: [] })
     }
 
     if (user.role === 'ADMIN') {
-      return NextResponse.json({ 
-        hasAccess: true, 
+      return jsonOk({
+        hasAccess: true,
         isAdmin: true,
         hasFullAccess: true,
-        permissions: ['all'] 
+        permissions: ['all'],
       })
     }
 
@@ -25,11 +28,11 @@ export async function GET(request: NextRequest) {
       })
 
       if (fullUser?.hasFullAccess) {
-        return NextResponse.json({ 
-          hasAccess: true, 
+        return jsonOk({
+          hasAccess: true,
           isAdmin: false,
           hasFullAccess: true,
-          permissions: ['all'] 
+          permissions: ['all'],
         })
       }
 
@@ -38,20 +41,17 @@ export async function GET(request: NextRequest) {
         include: { permission: true },
       })
 
-      const permissions = userPermissions.map(up => up.permission.name)
-
-      return NextResponse.json({ 
-        hasAccess: true, 
+      return jsonOk({
+        hasAccess: true,
         isAdmin: false,
         hasFullAccess: false,
-        permissions 
+        permissions: userPermissions.map((up) => up.permission.name),
       })
     }
 
-    return NextResponse.json({ hasAccess: false, permissions: [] })
+    return jsonOk({ hasAccess: false, permissions: [] })
   } catch (error) {
-    console.error('Get permissions error:', error)
-    return NextResponse.json({ hasAccess: false, permissions: [] })
+    return jsonError(error, 'Failed to get permissions')
   }
 }
 
@@ -59,13 +59,13 @@ export async function POST(request: NextRequest) {
   try {
     const user = await getSession()
     if (!user) {
-      return NextResponse.json({ allowed: false })
+      return jsonOk({ allowed: false })
     }
 
     const { permission } = await request.json()
 
     if (user.role === 'ADMIN') {
-      return NextResponse.json({ allowed: true })
+      return jsonOk({ allowed: true })
     }
 
     if (user.role === 'SUB_ADMIN') {
@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
       })
 
       if (fullUser?.hasFullAccess) {
-        return NextResponse.json({ allowed: true })
+        return jsonOk({ allowed: true })
       }
 
       const userPermission = await prisma.userPermission.findFirst({
@@ -85,12 +85,11 @@ export async function POST(request: NextRequest) {
         },
       })
 
-      return NextResponse.json({ allowed: !!userPermission })
+      return jsonOk({ allowed: !!userPermission })
     }
 
-    return NextResponse.json({ allowed: false })
+    return jsonOk({ allowed: false })
   } catch (error) {
-    console.error('Check permission error:', error)
-    return NextResponse.json({ allowed: false })
+    return jsonError(error, 'Failed to check permission')
   }
 }

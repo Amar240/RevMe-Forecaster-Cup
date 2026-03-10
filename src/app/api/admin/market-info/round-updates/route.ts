@@ -1,94 +1,54 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/db'
-import { getSession } from '@/lib/auth'
+import { requireAdminOrResponse, jsonOk, jsonError, ApiError } from '@/server/http'
+
+export const dynamic = 'force-dynamic'
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await getSession()
-    if (!user || (user.role !== 'ADMIN' && user.role !== 'SUB_ADMIN')) {
-      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
-    }
+    const { user, response } = await requireAdminOrResponse()
+    if (response) return response
 
     const body = await request.json()
     const { seasonId, marketId, roundNumber, headline, whatChanged } = body
 
     if (!seasonId || !marketId || roundNumber === undefined || !headline || !whatChanged) {
-      return NextResponse.json({ message: 'All fields are required' }, { status: 400 })
+      throw new ApiError('All fields are required', 400, 'INVALID_INPUT')
     }
 
     const roundUpdate = await prisma.marketRoundUpdate.upsert({
-      where: {
-        seasonId_marketId_roundNumber: { seasonId, marketId, roundNumber },
-      },
-      create: {
-        seasonId,
-        marketId,
-        roundNumber,
-        headline,
-        whatChanged,
-        createdById: user.id,
-      },
-      update: {
-        headline,
-        whatChanged,
-      },
-      include: {
-        createdBy: { select: { firstName: true, lastName: true } },
-      },
+      where: { seasonId_marketId_roundNumber: { seasonId, marketId, roundNumber } },
+      create: { seasonId, marketId, roundNumber, headline, whatChanged, createdById: user!.id },
+      update: { headline, whatChanged },
+      include: { createdBy: { select: { firstName: true, lastName: true } } },
     })
 
     await prisma.auditLog.create({
-      data: {
-        userId: user.id,
-        userEmail: user.email,
-        userRole: user.role,
-        action: 'UPDATE_MARKET_ROUND_UPDATE',
-        entityType: 'MarketRoundUpdate',
-        entityId: roundUpdate.id,
-        details: { marketId, roundNumber, headline },
-      },
+      data: { userId: user!.id, userEmail: user!.email, userRole: user!.role, action: 'UPDATE_MARKET_ROUND_UPDATE', entityType: 'MarketRoundUpdate', entityId: roundUpdate.id, details: { marketId, roundNumber, headline } },
     })
 
-    return NextResponse.json({ roundUpdate })
+    return jsonOk({ roundUpdate })
   } catch (error) {
-    console.error('Save round update error:', error)
-    return NextResponse.json({ message: 'Failed to save round update' }, { status: 500 })
+    return jsonError(error, 'Failed to save round update')
   }
 }
 
 export async function DELETE(request: NextRequest) {
   try {
-    const user = await getSession()
-    if (!user || (user.role !== 'ADMIN' && user.role !== 'SUB_ADMIN')) {
-      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
-    }
+    const { user, response } = await requireAdminOrResponse()
+    if (response) return response
 
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
+    if (!id) throw new ApiError('ID is required', 400, 'INVALID_INPUT')
 
-    if (!id) {
-      return NextResponse.json({ message: 'ID is required' }, { status: 400 })
-    }
-
-    const roundUpdate = await prisma.marketRoundUpdate.delete({
-      where: { id },
-    })
-
+    const roundUpdate = await prisma.marketRoundUpdate.delete({ where: { id } })
     await prisma.auditLog.create({
-      data: {
-        userId: user.id,
-        userEmail: user.email,
-        userRole: user.role,
-        action: 'DELETE_MARKET_ROUND_UPDATE',
-        entityType: 'MarketRoundUpdate',
-        entityId: id,
-        details: { headline: roundUpdate.headline, roundNumber: roundUpdate.roundNumber },
-      },
+      data: { userId: user!.id, userEmail: user!.email, userRole: user!.role, action: 'DELETE_MARKET_ROUND_UPDATE', entityType: 'MarketRoundUpdate', entityId: id, details: { headline: roundUpdate.headline, roundNumber: roundUpdate.roundNumber } },
     })
 
-    return NextResponse.json({ success: true })
+    return jsonOk({ success: true })
   } catch (error) {
-    console.error('Delete round update error:', error)
-    return NextResponse.json({ message: 'Failed to delete round update' }, { status: 500 })
+    return jsonError(error, 'Failed to delete round update')
   }
 }

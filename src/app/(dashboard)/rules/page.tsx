@@ -9,6 +9,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { CheckCircle, AlertTriangle, Trophy, Users, Clock, Target, Calculator, Send, HelpCircle, ChevronDown, ChevronUp, Mail } from 'lucide-react'
+import { toast } from 'sonner'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 
@@ -41,6 +42,7 @@ export default function RulesPage() {
       }
     } catch (error) {
       clientLogger.error('Failed to fetch:', error)
+      toast.error('Failed to load rules')
     }
   }
 
@@ -58,6 +60,7 @@ export default function RulesPage() {
       }
     } catch (error) {
       clientLogger.error('Failed to acknowledge:', error)
+      toast.error('Failed to acknowledge rules')
     } finally {
       setLoading(false)
     }

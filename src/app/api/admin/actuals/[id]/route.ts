@@ -1,10 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/server/db'
-import { canPerformAdminAction } from '@/server/permissions'
+import { NextRequest } from 'next/server'
+import { prisma } from '@/lib/db'
 import { z } from 'zod'
-import { logger } from '@/server/logger'
-import { getSession } from '@/server/auth'
-import { jsonError } from '@/server/http'
+import { requireAdminOrResponse, jsonOk, jsonError } from '@/server/http'
+
+export const dynamic = 'force-dynamic'
+
 
 const updateSchema = z.object({
   value: z.number().min(0),
@@ -20,10 +20,8 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await getSession()
-    if (!user || (user.role !== 'ADMIN' && user.role !== 'SUB_ADMIN')) {
-      return NextResponse.json({ message: 'Forbidden' }, { status: 403 })
-    }
+    const { response } = await requireAdminOrResponse()
+    if (response) return response
 
     const { id } = await params
 
@@ -44,10 +42,10 @@ export async function GET(
     })
 
     if (!actual) {
-      return NextResponse.json({ message: 'Actual not found' }, { status: 404 })
+      return jsonOk({ message: 'Actual not found' }, 404)
     }
 
-    return NextResponse.json({
+    return jsonOk({
       actual: {
         id: actual.id,
         roundId: actual.roundId,
@@ -81,7 +79,6 @@ export async function GET(
       },
     })
   } catch (error) {
-    logger.error('Get actual error:', error)
     return jsonError(error, 'Failed to get actual')
   }
 }
@@ -91,12 +88,8 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await getSession()
-    const canUpload = await canPerformAdminAction(user, 'actuals:upload')
-
-    if (!user || !canUpload) {
-      return NextResponse.json({ message: 'Forbidden' }, { status: 403 })
-    }
+    const { user, response } = await requireAdminOrResponse('actuals:upload')
+    if (response) return response
 
     const { id } = await params
     const body = await request.json()
@@ -108,18 +101,18 @@ export async function PUT(
     })
 
     if (!actual) {
-      return NextResponse.json({ message: 'Actual not found' }, { status: 404 })
+      return jsonOk({ message: 'Actual not found' }, 404)
     }
 
     const isLockedOrScored = actual.round.isLockedActuals || actual.round.lastScoredAt !== null
 
     if (isLockedOrScored && !data.reason) {
-      return NextResponse.json(
+      return jsonOk(
         {
           message: 'Reason is required when editing actuals for a locked or scored round',
           requiresReason: true,
         },
-        { status: 400 }
+        400
       )
     }
 
@@ -130,14 +123,14 @@ export async function PUT(
         where: { id },
         data: {
           value: data.value,
-          updatedById: user.id,
+          updatedById: user!.id,
         },
       })
 
       await tx.actualValueRevision.create({
         data: {
           actualId: id,
-          actorId: user.id,
+          actorId: user!.id,
           action: 'EDIT',
           oldValue,
           newValue: data.value,
@@ -156,12 +149,8 @@ export async function PUT(
       }
     })
 
-    return NextResponse.json({ message: 'Actual updated' })
+    return jsonOk({ message: 'Actual updated' })
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json({ message: 'Invalid input', errors: error.errors }, { status: 400 })
-    }
-    logger.error('Update actual error:', error)
     return jsonError(error, 'Failed to update actual')
   }
 }
@@ -171,12 +160,8 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await getSession()
-    const canUpload = await canPerformAdminAction(user, 'actuals:upload')
-
-    if (!user || !canUpload) {
-      return NextResponse.json({ message: 'Forbidden' }, { status: 403 })
-    }
+    const { user, response } = await requireAdminOrResponse('actuals:upload')
+    if (response) return response
 
     const { id } = await params
     const body = await request.json().catch(() => ({}))
@@ -188,18 +173,18 @@ export async function DELETE(
     })
 
     if (!actual) {
-      return NextResponse.json({ message: 'Actual not found' }, { status: 404 })
+      return jsonOk({ message: 'Actual not found' }, 404)
     }
 
     const isLockedOrScored = actual.round.isLockedActuals || actual.round.lastScoredAt !== null
 
     if (isLockedOrScored && !data.reason) {
-      return NextResponse.json(
+      return jsonOk(
         {
           message: 'Reason is required when voiding actuals for a locked or scored round',
           requiresReason: true,
         },
-        { status: 400 }
+        400
       )
     }
 
@@ -208,14 +193,14 @@ export async function DELETE(
         where: { id },
         data: {
           isVoided: true,
-          updatedById: user.id,
+          updatedById: user!.id,
         },
       })
 
       await tx.actualValueRevision.create({
         data: {
           actualId: id,
-          actorId: user.id,
+          actorId: user!.id,
           action: 'VOID',
           oldValue: actual.value,
           newValue: null,
@@ -234,12 +219,8 @@ export async function DELETE(
       }
     })
 
-    return NextResponse.json({ message: 'Actual voided' })
+    return jsonOk({ message: 'Actual voided' })
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json({ message: 'Invalid input', errors: error.errors }, { status: 400 })
-    }
-    logger.error('Void actual error:', error)
     return jsonError(error, 'Failed to void actual')
   }
 }

@@ -1,16 +1,16 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/db'
-import { getSession } from '@/lib/auth'
+import { requireUserOrResponse, jsonOk, jsonError, ApiError } from '@/server/http'
+
+export const dynamic = 'force-dynamic'
 
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string; memberId: string }> }
 ) {
   try {
-    const user = await getSession()
-    if (!user) {
-      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
-    }
+    const { user, response } = await requireUserOrResponse()
+    if (response) return response
 
     const { id, memberId } = await params
 
@@ -20,16 +20,16 @@ export async function DELETE(
     })
 
     if (!team) {
-      return NextResponse.json({ message: 'Team not found' }, { status: 404 })
+      throw new ApiError('Team not found', 404, 'NOT_FOUND')
     }
 
-    if (user.role !== 'ADMIN' && team.supervisorId !== user.id) {
-      return NextResponse.json({ message: 'Forbidden' }, { status: 403 })
+    if (user!.role !== 'ADMIN' && team.supervisorId !== user!.id) {
+      throw new ApiError('Forbidden', 403, 'FORBIDDEN')
     }
 
     const member = team.members.find((m) => m.id === memberId)
     if (!member) {
-      return NextResponse.json({ message: 'Member not found' }, { status: 404 })
+      throw new ApiError('Member not found', 404, 'NOT_FOUND')
     }
 
     await prisma.teamMember.delete({
@@ -46,9 +46,8 @@ export async function DELETE(
       }
     }
 
-    return NextResponse.json({ message: 'Member removed' })
+    return jsonOk({ message: 'Member removed' })
   } catch (error) {
-    console.error('Remove member error:', error)
-    return NextResponse.json({ message: 'Failed to remove member' }, { status: 500 })
+    return jsonError(error, 'Failed to remove member')
   }
 }

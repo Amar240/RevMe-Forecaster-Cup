@@ -3,8 +3,13 @@ const bcrypt = require('bcryptjs')
 
 async function main() {
   const prisma = new PrismaClient()
-  const email = 'admin@udel.edu'
-  const password = 'Admin@123'
+  const email = process.env.ADMIN_EMAIL
+  const password = process.env.ADMIN_PASSWORD
+  const universityName = process.env.ADMIN_UNIVERSITY_NAME || 'University of Delaware'
+
+  if (!email || !password) {
+    throw new Error('ADMIN_EMAIL and ADMIN_PASSWORD environment variables are required.')
+  }
 
   const existing = await prisma.user.findUnique({ where: { email } })
   if (existing) {
@@ -18,12 +23,12 @@ async function main() {
   }
 
   let university = await prisma.university.findUnique({
-    where: { name: 'University of Delaware' },
+    where: { name: universityName },
   })
 
   if (!university) {
     university = await prisma.university.create({
-      data: { name: 'University of Delaware' },
+      data: { name: universityName },
     })
   }
 
@@ -41,7 +46,7 @@ async function main() {
     },
   })
 
-  console.log('Created admin user')
+  console.log(`Created admin user: ${email}`)
   await prisma.$disconnect()
 }
 

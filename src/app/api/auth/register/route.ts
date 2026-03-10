@@ -1,8 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/db'
 import { hashPassword, createSession } from '@/lib/auth'
 import { sendWelcomeEmail } from '@/lib/email'
+import { jsonOk, jsonError, parseJson, ApiError } from '@/server/http'
 import { z } from 'zod'
+
+export const dynamic = 'force-dynamic'
 
 const registerSchema = z.object({
   email: z.string().email(),
@@ -15,18 +18,14 @@ const registerSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const data = registerSchema.parse(body)
+    const data = await parseJson(request, registerSchema)
 
     const existingUser = await prisma.user.findUnique({
       where: { email: data.email.toLowerCase() },
     })
 
     if (existingUser) {
-      return NextResponse.json(
-        { message: 'Email already registered' },
-        { status: 409 }
-      )
+      throw new ApiError('Email already registered', 409, 'CONFLICT')
     }
 
     let university = await prisma.university.findUnique({
@@ -55,9 +54,9 @@ export async function POST(request: NextRequest) {
 
     await createSession(user.id)
 
-    sendWelcomeEmail(user.email, user.firstName, user.role as 'STUDENT' | 'SUPERVISOR').catch(console.error)
+    sendWelcomeEmail(user.email, user.firstName, user.role as 'STUDENT' | 'SUPERVISOR').catch(() => {})
 
-    return NextResponse.json({
+    return jsonOk({
       message: 'Registration successful',
       user: {
         id: user.id,
@@ -68,16 +67,6 @@ export async function POST(request: NextRequest) {
       },
     })
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { message: 'Invalid input', errors: error.errors },
-        { status: 400 }
-      )
-    }
-    console.error('Registration error:', error)
-    return NextResponse.json(
-      { message: 'Registration failed' },
-      { status: 500 }
-    )
+    return jsonError(error, 'Registration failed')
   }
 }

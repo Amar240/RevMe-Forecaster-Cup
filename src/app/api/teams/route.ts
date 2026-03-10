@@ -1,7 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/db'
-import { getSession } from '@/lib/auth'
+import { requireUserOrResponse, jsonOk, jsonError, parseJson, ApiError } from '@/server/http'
 import { z } from 'zod'
+
+export const dynamic = 'force-dynamic'
 
 const createTeamSchema = z.object({
   name: z.string().min(1).max(100),
@@ -9,13 +11,11 @@ const createTeamSchema = z.object({
 
 export async function GET() {
   try {
-    const user = await getSession()
-    if (!user) {
-      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
-    }
+    const { user, response } = await requireUserOrResponse()
+    if (response) return response
 
     const teams = await prisma.team.findMany({
-      where: user.role === 'ADMIN' ? {} : { supervisorId: user.id },
+      where: user!.role === 'ADMIN' ? {} : { supervisorId: user!.id },
       include: {
         university: true,
         members: { include: { user: true } },
@@ -24,58 +24,45 @@ export async function GET() {
       orderBy: { createdAt: 'desc' },
     })
 
-    return NextResponse.json({ teams })
+    return jsonOk({ teams })
   } catch (error) {
-    console.error('Get teams error:', error)
-    return NextResponse.json({ message: 'Failed to get teams' }, { status: 500 })
+    return jsonError(error, 'Failed to get teams')
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await getSession()
-    if (!user) {
-      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
+    const { user, response } = await requireUserOrResponse()
+    if (response) return response
+
+    if (user!.role !== 'SUPERVISOR' && user!.role !== 'ADMIN') {
+      throw new ApiError('Forbidden', 403, 'FORBIDDEN')
     }
 
-    if (user.role !== 'SUPERVISOR' && user.role !== 'ADMIN') {
-      return NextResponse.json({ message: 'Forbidden' }, { status: 403 })
-    }
-
-    const body = await request.json()
-    const data = createTeamSchema.parse(body)
+    const data = await parseJson(request, createTeamSchema)
 
     const existingTeamWithName = await prisma.team.findFirst({
       where: { name: { equals: data.name, mode: 'insensitive' } },
     })
 
     if (existingTeamWithName) {
-      return NextResponse.json(
-        { message: 'A team with this name already exists. Please choose a different name.' },
-        { status: 422 }
-      )
+      throw new ApiError('A team with this name already exists. Please choose a different name.', 422, 'CONFLICT')
     }
 
     const teamCount = await prisma.team.count({
-      where: { supervisorId: user.id },
+      where: { supervisorId: user!.id },
     })
 
     if (teamCount >= 10) {
-      return NextResponse.json(
-        { message: 'Maximum 10 teams per supervisor' },
-        { status: 422 }
-      )
+      throw new ApiError('Maximum 10 teams per supervisor', 422, 'CONFLICT')
     }
 
-    if (!user.universityId) {
-      return NextResponse.json(
-        { message: 'User must be associated with a university' },
-        { status: 422 }
-      )
+    if (!user!.universityId) {
+      throw new ApiError('User must be associated with a university', 422, 'INVALID_INPUT')
     }
 
     const university = await prisma.university.findUnique({
-      where: { id: user.universityId },
+      where: { id: user!.universityId },
     })
 
     const activeSeason = await prisma.season.findFirst({
@@ -83,14 +70,11 @@ export async function POST(request: NextRequest) {
     })
 
     if (!activeSeason) {
-      return NextResponse.json(
-        { message: 'No active season for team registration' },
-        { status: 422 }
-      )
+      throw new ApiError('No active season for team registration', 422, 'INVALID_INPUT')
     }
 
     const existingTeamsCount = await prisma.team.count({
-      where: { universityId: user.universityId },
+      where: { universityId: user!.universityId },
     })
 
     const displayId = `${university?.name || 'Team'}${existingTeamsCount + 1}`
@@ -99,8 +83,8 @@ export async function POST(request: NextRequest) {
       data: {
         name: data.name,
         displayId,
-        supervisorId: user.id,
-        universityId: user.universityId,
+        supervisorId: user!.id,
+        universityId: user!.universityId,
         seasonId: activeSeason.id,
       },
       include: {
@@ -109,12 +93,8 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    return NextResponse.json({ team }, { status: 201 })
+    return jsonOk({ team }, 201)
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json({ message: 'Invalid input' }, { status: 400 })
-    }
-    console.error('Create team error:', error)
-    return NextResponse.json({ message: 'Failed to create team' }, { status: 500 })
+    return jsonError(error, 'Failed to create team')
   }
 }

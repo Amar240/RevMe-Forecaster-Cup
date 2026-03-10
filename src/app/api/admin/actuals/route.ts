@@ -1,10 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/server/db'
-import { canPerformAdminAction } from '@/server/permissions'
+import { NextRequest } from 'next/server'
+import { prisma } from '@/lib/db'
 import { z } from 'zod'
-import { logger } from '@/server/logger'
-import { getSession } from '@/server/auth'
-import { jsonError } from '@/server/http'
+import { requireAdminOrResponse, jsonOk, jsonError } from '@/server/http'
+
+export const dynamic = 'force-dynamic'
+
 
 const actualSchema = z.object({
   roundId: z.string(),
@@ -18,12 +18,8 @@ const actualSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await getSession()
-    const canUpload = await canPerformAdminAction(user, 'actuals:upload')
-
-    if (!user || !canUpload) {
-      return NextResponse.json({ message: 'Forbidden' }, { status: 403 })
-    }
+    const { user, response } = await requireAdminOrResponse('actuals:upload')
+    if (response) return response
 
     const body = await request.json()
     const data = actualSchema.parse(body)
@@ -34,7 +30,7 @@ export async function POST(request: NextRequest) {
     })
 
     if (!round) {
-      return NextResponse.json({ message: 'Round not found' }, { status: 404 })
+      return jsonOk({ message: 'Round not found' }, 404)
     }
 
     const seasonId = round.seasonId
@@ -54,12 +50,12 @@ export async function POST(request: NextRequest) {
     const isLockedOrScored = round.isLockedActuals || round.lastScoredAt !== null
 
     if (isLockedOrScored && !data.reason) {
-      return NextResponse.json(
+      return jsonOk(
         {
           message: 'Reason is required when modifying actuals for a locked or scored round',
           requiresReason: true,
         },
-        { status: 400 }
+        400
       )
     }
 
@@ -70,7 +66,7 @@ export async function POST(request: NextRequest) {
           where: { id: existingActual.id },
           data: {
             value: data.value,
-            updatedById: user.id,
+            updatedById: user!.id,
             source: data.source,
           },
         })
@@ -78,7 +74,7 @@ export async function POST(request: NextRequest) {
         await tx.actualValueRevision.create({
           data: {
             actualId: existingActual.id,
-            actorId: user.id,
+            actorId: user!.id,
             action: 'EDIT',
             oldValue,
             newValue: data.value,
@@ -107,15 +103,15 @@ export async function POST(request: NextRequest) {
             weekOffset: data.weekOffset,
             value: data.value,
             source: data.source,
-            createdById: user.id,
-            updatedById: user.id,
+            createdById: user!.id,
+            updatedById: user!.id,
           },
         })
 
         await tx.actualValueRevision.create({
           data: {
             actualId: newActual.id,
-            actorId: user.id,
+            actorId: user!.id,
             action: 'CREATE',
             oldValue: null,
             newValue: data.value,
@@ -135,22 +131,16 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    return NextResponse.json({ message: 'Actual saved' }, { status: 201 })
+    return jsonOk({ message: 'Actual saved' }, 201)
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json({ message: 'Invalid input', errors: error.errors }, { status: 400 })
-    }
-    logger.error('Create actual error:', error)
     return jsonError(error, 'Failed to save actual')
   }
 }
 
 export async function GET(request: NextRequest) {
   try {
-    const user = await getSession()
-    if (!user || (user.role !== 'ADMIN' && user.role !== 'SUB_ADMIN')) {
-      return NextResponse.json({ message: 'Forbidden' }, { status: 403 })
-    }
+    const { response } = await requireAdminOrResponse()
+    if (response) return response
 
     const { searchParams } = new URL(request.url)
     const roundId = searchParams.get('roundId')
@@ -164,7 +154,7 @@ export async function GET(request: NextRequest) {
     })
 
     if (!activeSeason) {
-      return NextResponse.json({ actuals: [], rounds: [] })
+      return jsonOk({ actuals: [], rounds: [] })
     }
 
     interface WhereClause {
@@ -208,7 +198,7 @@ export async function GET(request: NextRequest) {
       prisma.actual.count({ where }),
     ])
 
-    return NextResponse.json({
+    return jsonOk({
       actuals: actuals.map((a) => ({
         id: a.id,
         roundId: a.roundId,
@@ -231,7 +221,6 @@ export async function GET(request: NextRequest) {
       pageSize,
     })
   } catch (error) {
-    logger.error('Get actuals error:', error)
     return jsonError(error, 'Failed to get actuals')
   }
 }

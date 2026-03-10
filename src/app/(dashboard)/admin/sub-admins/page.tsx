@@ -11,6 +11,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Loader2, UserCog, Shield, Trash2, Edit, Plus, Eye, EyeOff } from 'lucide-react'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { DataTable } from '@/components/ui/data-table'
+import { toast } from 'sonner'
 
 const AVAILABLE_PERMISSIONS = [
   { name: 'season:write', label: 'Manage Seasons' },
@@ -49,6 +52,7 @@ export default function SubAdminsPage() {
   const [password, setPassword] = useState('')
   const [hasFullAccess, setHasFullAccess] = useState(false)
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>([])
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
 
   useEffect(() => {
     fetchSubAdmins()
@@ -63,6 +67,7 @@ export default function SubAdminsPage() {
       }
     } catch (err) {
       clientLogger.error('Failed to fetch sub-admins:', err)
+      toast.error('Failed to load sub-admins')
     } finally {
       setLoading(false)
     }
@@ -110,6 +115,7 @@ export default function SubAdminsPage() {
       }
     } catch (err) {
       clientLogger.error('Failed to save sub-admin:', err)
+      toast.error('Failed to save sub-admin')
     } finally {
       setSubmitting(false)
     }
@@ -125,9 +131,7 @@ export default function SubAdminsPage() {
     setShowForm(true)
   }
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to remove this sub-admin?')) return
-
+  const executeDelete = async (id: string) => {
     try {
       const res = await csrfFetch(`/api/admin/sub-admins/${id}`, {
         method: 'DELETE',
@@ -138,6 +142,9 @@ export default function SubAdminsPage() {
       }
     } catch (err) {
       clientLogger.error('Failed to delete sub-admin:', err)
+      toast.error('Failed to delete sub-admin')
+    } finally {
+      setDeleteTarget(null)
     }
   }
 
@@ -162,8 +169,31 @@ export default function SubAdminsPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+      <div className="space-y-6 animate-pulse">
+        <div className="flex items-center justify-between">
+          <div className="space-y-2">
+            <div className="h-7 bg-gray-200 rounded w-56" />
+            <div className="h-4 bg-gray-100 rounded w-80" />
+          </div>
+          <div className="h-9 bg-gray-200 rounded w-32" />
+        </div>
+        <div className="h-10 bg-gray-100 rounded w-full max-w-sm" />
+        <div className="border rounded-lg overflow-hidden">
+          <div className="bg-gray-50 border-b px-4 py-3 flex gap-4">
+            <div className="h-4 bg-gray-200 rounded w-1/4" />
+            <div className="h-4 bg-gray-200 rounded w-1/4" />
+            <div className="h-4 bg-gray-200 rounded w-1/4" />
+            <div className="h-4 bg-gray-200 rounded w-1/4" />
+          </div>
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="px-4 py-3 border-b last:border-0 flex gap-4">
+              <div className="h-4 bg-gray-100 rounded w-1/3" />
+              <div className="h-4 bg-gray-100 rounded w-1/4" />
+              <div className="h-4 bg-gray-100 rounded w-1/5" />
+              <div className="h-4 bg-gray-100 rounded w-1/6" />
+            </div>
+          ))}
+        </div>
       </div>
     )
   }
@@ -294,81 +324,66 @@ export default function SubAdminsPage() {
         </Card>
       )}
 
-      {subAdmins.length === 0 ? (
-        <Card>
-          <CardContent className="py-12 text-center">
-            <UserCog className="h-12 w-12 mx-auto text-gray-400 mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No Sub-Admins</h3>
-            <p className="text-gray-500">Create sub-admin accounts to delegate administrative tasks</p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid gap-4">
-          {subAdmins.map((admin) => (
-            <Card key={admin.id}>
-              <CardContent className="py-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="p-2 bg-purple-100 rounded-full">
-                      <UserCog className="h-5 w-5 text-purple-600" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <p className="font-medium text-gray-900">
-                          {admin.firstName} {admin.lastName}
-                        </p>
-                        {admin.hasFullAccess && (
-                          <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs rounded-full font-medium">
-                            Full Access
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-sm text-gray-500">{admin.email}</p>
-                    </div>
-                  </div>
+      <DataTable
+        data={subAdmins}
+        columns={[
+          {
+            key: 'firstName',
+            header: 'Name',
+            sortable: true,
+            render: (admin: SubAdmin) => (
+              <span className="font-medium">{admin.firstName} {admin.lastName}</span>
+            ),
+          },
+          { key: 'email', header: 'Email', sortable: true },
+          {
+            key: 'permissions',
+            header: 'Permissions',
+            render: (admin: SubAdmin) =>
+              admin.hasFullAccess ? (
+                <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs rounded-full font-medium">
+                  Full Access
+                </span>
+              ) : (
+                <span className="text-sm text-gray-600">
+                  {admin.permissions.length} permission{admin.permissions.length !== 1 ? 's' : ''}
+                </span>
+              ),
+          },
+          {
+            key: 'actions',
+            header: 'Actions',
+            render: (admin: SubAdmin) => (
+              <div className="flex gap-1">
+                <Button variant="ghost" size="sm" onClick={() => handleEdit(admin)}>
+                  <Edit className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setDeleteTarget(admin.id)}
+                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            ),
+          },
+        ]}
+        searchKeys={['firstName', 'lastName', 'email']}
+        searchPlaceholder="Search sub-admins..."
+        pageSize={10}
+      />
 
-                  <div className="flex items-center gap-4">
-                    <div className="flex flex-wrap gap-1">
-                      {admin.hasFullAccess ? (
-                        <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs rounded">
-                          All Permissions
-                        </span>
-                      ) : (
-                        <>
-                          {admin.permissions.slice(0, 3).map((p, i) => (
-                            <span key={i} className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded">
-                              {AVAILABLE_PERMISSIONS.find(ap => ap.name === p.permission.name)?.label || p.permission.name}
-                            </span>
-                          ))}
-                          {admin.permissions.length > 3 && (
-                            <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded">
-                              +{admin.permissions.length - 3} more
-                            </span>
-                          )}
-                        </>
-                      )}
-                    </div>
-
-                    <div className="flex gap-1">
-                      <Button variant="ghost" size="sm" onClick={() => handleEdit(admin)}>
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDelete(admin.id)}
-                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}
+        title="Remove Sub-Admin"
+        description="Are you sure you want to remove this sub-admin?"
+        confirmLabel="Remove"
+        variant="destructive"
+        onConfirm={() => { if (deleteTarget) executeDelete(deleteTarget) }}
+      />
     </div>
   )
 }

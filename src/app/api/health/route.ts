@@ -1,5 +1,7 @@
-import { NextResponse } from 'next/server'
+import { jsonOk } from '@/server/http'
+
+export const dynamic = 'force-dynamic'
 
 export async function GET() {
-  return NextResponse.json({ status: 'ok' })
+  return jsonOk({ status: 'ok' })
 }

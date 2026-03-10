@@ -1,45 +1,28 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/db'
-import { getSession } from '@/lib/auth'
+import { requireAdminOrResponse, jsonOk, jsonError, ApiError } from '@/server/http'
 import { logAuditAction } from '@/lib/audit'
+
+export const dynamic = 'force-dynamic'
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await getSession()
-    if (!user || user.role !== 'ADMIN') {
-      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
-    }
+    const { user, response } = await requireAdminOrResponse()
+    if (response) return response
 
     const { id } = await params
-
     const team = await prisma.team.findUnique({ where: { id } })
-    if (!team) {
-      return NextResponse.json({ message: 'Team not found' }, { status: 404 })
-    }
+    if (!team) throw new ApiError('Team not found', 404, 'NOT_FOUND')
+    if (team.status === 'ACTIVE') throw new ApiError('Team is already active', 400, 'INVALID_INPUT')
 
-    if (team.status === 'ACTIVE') {
-      return NextResponse.json({ message: 'Team is already active' }, { status: 400 })
-    }
+    await prisma.team.update({ where: { id }, data: { status: 'ACTIVE', disqualifiedAt: null, disqualifiedReason: null } })
+    await logAuditAction(user!.id, 'REINSTATE_TEAM', 'Team', id, { teamName: team.name })
 
-    await prisma.team.update({
-      where: { id },
-      data: {
-        status: 'ACTIVE',
-        disqualifiedAt: null,
-        disqualifiedReason: null,
-      },
-    })
-
-    await logAuditAction(user.id, 'REINSTATE_TEAM', 'Team', id, {
-      teamName: team.name,
-    })
-
-    return NextResponse.json({ message: 'Team reinstated successfully' })
+    return jsonOk({ message: 'Team reinstated successfully' })
   } catch (error) {
-    console.error('Reinstate team error:', error)
-    return NextResponse.json({ message: 'Failed to reinstate team' }, { status: 500 })
+    return jsonError(error, 'Failed to reinstate team')
   }
 }

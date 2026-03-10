@@ -3,6 +3,9 @@ import { prisma } from '@/server/db'
 import { logger } from '@/server/logger'
 import { requireUserOrResponse, jsonError } from '@/server/http'
 
+export const dynamic = 'force-dynamic'
+
+
 const AUTO_ESCALATION_HOURS = 48
 
 export async function POST(request: NextRequest) {

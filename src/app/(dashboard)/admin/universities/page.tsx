@@ -11,6 +11,10 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Building2, Plus, Trash2 } from 'lucide-react'
+import { PageLoader } from '@/components/ui/page-loader'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { DataTable } from '@/components/ui/data-table'
+import { toast } from 'sonner'
 
 interface University {
   id: string
@@ -26,6 +30,7 @@ export default function AdminUniversitiesPage() {
   const [formData, setFormData] = useState({ name: '', country: '' })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
 
   useEffect(() => {
     fetchUniversities()
@@ -40,6 +45,7 @@ export default function AdminUniversitiesPage() {
       }
     } catch (err) {
       clientLogger.error('Failed to fetch universities:', err)
+      toast.error('Failed to load universities')
     } finally {
       setLoading(false)
     }
@@ -72,19 +78,19 @@ export default function AdminUniversitiesPage() {
     }
   }
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this university?')) return
-
+  const executeDelete = async (id: string) => {
     try {
       await csrfFetch(`/api/admin/universities/${id}`, { method: 'DELETE' })
       fetchUniversities()
     } catch {
       setError('Failed to delete university')
+    } finally {
+      setDeleteTarget(null)
     }
   }
 
   if (loading) {
-    return <div className="text-center py-12">Loading...</div>
+    return <PageLoader message="Loading universities…" />
   }
 
   return (
@@ -146,56 +152,39 @@ export default function AdminUniversitiesPage() {
         </Card>
       )}
 
-      {universities.length === 0 ? (
-        <Card>
-          <CardContent className="py-12 text-center">
-            <Building2 className="h-12 w-12 mx-auto text-gray-400 mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No Universities</h3>
-            <p className="text-gray-500">Add universities to get started.</p>
-          </CardContent>
-        </Card>
-      ) : (
-        <Card>
-          <CardHeader>
-            <CardTitle>All Universities ({universities.length})</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="text-left text-sm text-gray-500 border-b">
-                    <th className="pb-3 pr-4">Name</th>
-                    <th className="pb-3 pr-4">Country</th>
-                    <th className="pb-3 pr-4 text-right">Users</th>
-                    <th className="pb-3 pr-4 text-right">Teams</th>
-                    <th className="pb-3"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {universities.map((uni) => (
-                    <tr key={uni.id} className="border-b last:border-0">
-                      <td className="py-3 pr-4 font-medium">{uni.name}</td>
-                      <td className="py-3 pr-4 text-gray-600">{uni.country || '-'}</td>
-                      <td className="py-3 pr-4 text-right">{uni._count.users}</td>
-                      <td className="py-3 pr-4 text-right">{uni._count.teams}</td>
-                      <td className="py-3 text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDelete(uni.id)}
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      <DataTable
+        data={universities}
+        columns={[
+          { key: 'name', header: 'Name', sortable: true },
+          {
+            key: 'actions',
+            header: 'Actions',
+            render: (uni: University) => (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setDeleteTarget(uni.id)}
+                className="text-red-600 hover:text-red-700 hover:bg-red-50"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            ),
+          },
+        ]}
+        searchKeys={['name']}
+        searchPlaceholder="Search universities..."
+        pageSize={10}
+      />
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}
+        title="Delete University"
+        description="Are you sure you want to delete this university?"
+        confirmLabel="Delete"
+        variant="destructive"
+        onConfirm={() => { if (deleteTarget) executeDelete(deleteTarget) }}
+      />
     </div>
   )
 }

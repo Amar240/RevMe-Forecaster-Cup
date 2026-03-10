@@ -505,3 +505,82 @@ The RevME Team
     return false
   }
 }
+
+export async function sendEmail(params: {
+  to: string
+  subject: string
+  html: string
+}): Promise<boolean> {
+  const transporter = getTransporter()
+  if (!transporter) {
+    logger.info('Email skipped (SMTP not configured)', { to: params.to, subject: params.subject })
+    return false
+  }
+  try {
+    await transporter.sendMail({
+      from: `"RevME Forecaster Cup" <${getFromEmail()}>`,
+      to: params.to,
+      subject: params.subject,
+      html: `${emailHeader}${params.html}${emailFooter}`,
+    })
+    logger.info('Email sent', { to: params.to, subject: params.subject })
+    return true
+  } catch (error) {
+    logger.error('Failed to send email', {
+      to: params.to,
+      subject: params.subject,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return false
+  }
+}
+
+export async function sendDemoRequestEmail(params: {
+  name: string
+  email: string
+  organization?: string | null
+  message?: string | null
+}): Promise<boolean> {
+  const transporter = getTransporter()
+  const notifyEmail = process.env.DEMO_REQUEST_NOTIFY_EMAIL || getFromEmail()
+
+  if (!transporter) {
+    logger.info('Demo request email skipped (SMTP not configured)', {
+      email: params.email,
+      organization: params.organization,
+    })
+    return false
+  }
+
+  try {
+    await transporter.sendMail({
+      from: `"RevME Forecaster Cup" <${getFromEmail()}>`,
+      to: notifyEmail,
+      subject: `New Demo Request - ${params.organization ?? 'Organization'}`,
+      text: `
+New demo request received.
+
+Name: ${params.name}
+Email: ${params.email}
+Organization: ${params.organization ?? 'N/A'}
+Message: ${params.message ?? 'N/A'}
+      `,
+      html: `${emailHeader}
+        <h2 style="margin-top: 0; color: #1e293b;">New Demo Request</h2>
+        <p><strong>Name:</strong> ${params.name}</p>
+        <p><strong>Email:</strong> ${params.email}</p>
+        <p><strong>Organization:</strong> ${params.organization ?? 'N/A'}</p>
+        <p><strong>Message:</strong> ${params.message ?? 'N/A'}</p>
+      ${emailFooter}`,
+    })
+
+    logger.info('Demo request email sent', { email: params.email })
+    return true
+  } catch (error) {
+    logger.error('Failed to send demo request email', {
+      email: params.email,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return false
+  }
+}

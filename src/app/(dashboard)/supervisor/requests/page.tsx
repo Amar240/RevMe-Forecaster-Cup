@@ -9,7 +9,9 @@ import { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Loader2, UserPlus, Users, CheckCircle, XCircle, Clock } from 'lucide-react'
+import { toast } from 'sonner'
 
 interface JoinRequest {
   id: string
@@ -88,6 +90,7 @@ export default function SupervisorRequestsPage() {
       }
     } catch (err) {
       clientLogger.error('Failed to process request:', err)
+      toast.error('Failed to process request')
     } finally {
       setProcessing(null)
     }
@@ -167,18 +170,16 @@ export default function SupervisorRequestsPage() {
                 ) : (
                   <div className="flex flex-wrap gap-2">
                     {teams.filter(t => t.memberCount < 5).length > 0 && (
-                      <select
-                        className="border rounded-lg px-3 py-2 text-sm"
-                        value={selectedTeam}
-                        onChange={(e) => setSelectedTeam(e.target.value)}
-                      >
-                        <option value="">Select existing team...</option>
-                        {teams.filter(t => t.memberCount < 5).map(team => (
-                          <option key={team.id} value={team.id}>
-                            {team.name} ({team.memberCount}/5)
-                          </option>
-                        ))}
-                      </select>
+                      <Select value={selectedTeam} onValueChange={setSelectedTeam}>
+                        <SelectTrigger className="w-[220px]"><SelectValue placeholder="Select existing team..." /></SelectTrigger>
+                        <SelectContent>
+                          {teams.filter(t => t.memberCount < 5).map(team => (
+                            <SelectItem key={team.id} value={team.id}>
+                              {team.name} ({team.memberCount}/5)
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     )}
 
                     {selectedTeam && (

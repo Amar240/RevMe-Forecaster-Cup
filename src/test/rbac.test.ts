@@ -14,7 +14,7 @@ describe('RBAC enforcement', () => {
     await loginAs(student.id)
 
     const res = await getAdminTeams()
-    expect(res.status).toBe(401)
+    expect(res.status).toBe(403)
   })
 
   it('blocks supervisor from admin routes', async () => {
@@ -23,7 +23,7 @@ describe('RBAC enforcement', () => {
     await loginAs(supervisor.id)
 
     const res = await getAdminTeams()
-    expect(res.status).toBe(401)
+    expect(res.status).toBe(403)
   })
 
   it('allows admin on admin routes', async () => {
@@ -44,6 +44,6 @@ describe('RBAC enforcement', () => {
     expect(allowed.status).toBe(200)
 
     const forbidden = await getAdminTeams()
-    expect(forbidden.status).toBe(401)
+    expect(forbidden.status).toBe(403)
   })
 })

@@ -9,6 +9,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Users, AlertTriangle, Check, Ban, RefreshCw, MoreVertical } from 'lucide-react'
+import { toast } from 'sonner'
 import { DataTable } from '@/components/ui/data-table'
 import { CardSkeleton, TableSkeleton } from '@/components/ui/skeleton'
 import {
@@ -27,6 +28,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 
 type TeamStatus = 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'ACTIVE' | 'REJECTED' | 'DISQUALIFIED'
 
@@ -55,28 +57,27 @@ export default function AdminTeamsPage() {
   const [loading, setLoading] = useState(true)
   const [teams, setTeams] = useState<Team[]>([])
   const [totalTeams, setTotalTeams] = useState(0)
-  const [page, setPage] = useState(1)
-  const [pageSize] = useState(25)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null)
   const [disqualifyReason, setDisqualifyReason] = useState('')
   const [showDisqualifyDialog, setShowDisqualifyDialog] = useState(false)
   const [showTeamDetails, setShowTeamDetails] = useState(false)
+  const [reinstateTarget, setReinstateTarget] = useState<Team | null>(null)
 
   const fetchTeams = useCallback(async () => {
     try {
-      const res = await csrfFetch(`/api/admin/teams?page=${page}&pageSize=${pageSize}`)
+      const res = await csrfFetch('/api/admin/teams')
       if (res.ok) {
         const data = await res.json()
         setTeams(data.teams || [])
-        setTotalTeams(data.totalTeams || 0)
+        setTotalTeams(data.totalTeams ?? data.teams?.length ?? 0)
       }
     } catch (error) {
       clientLogger.error('Failed to fetch teams:', error)
     } finally {
       setLoading(false)
     }
-  }, [page, pageSize])
+  }, [])
 
   useEffect(() => {
     fetchTeams()
@@ -97,18 +98,17 @@ export default function AdminTeamsPage() {
         setShowDisqualifyDialog(false)
         setDisqualifyReason('')
       } else {
-        alert(data.message || 'Failed to disqualify team')
+        toast.error(data.message || 'Failed to disqualify team')
       }
     } catch (error) {
       clientLogger.error('Disqualify failed:', error)
-      alert('An error occurred')
+      toast.error('An error occurred while disqualifying')
     } finally {
       setActionLoading(null)
     }
   }
 
-  const handleReinstate = async (team: Team) => {
-    if (!confirm(`Reinstate team "${team.name}"? They will be able to participate again.`)) return
+  const executeReinstate = async (team: Team) => {
     setActionLoading(team.id)
     try {
       const res = await csrfFetch(`/api/admin/teams/${team.id}/reinstate`, { method: 'POST' })
@@ -116,33 +116,39 @@ export default function AdminTeamsPage() {
       if (res.ok) {
         fetchTeams()
       } else {
-        alert(data.message || 'Failed to reinstate team')
+        toast.error(data.message || 'Failed to reinstate team')
       }
     } catch (error) {
       clientLogger.error('Reinstate failed:', error)
-      alert('An error occurred')
+      toast.error('An error occurred while reinstating')
     } finally {
       setActionLoading(null)
+      setReinstateTarget(null)
     }
   }
 
   if (loading) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-6 animate-pulse">
         <div className="space-y-2">
-          <div className="h-8 w-32 bg-gray-200 rounded animate-pulse" />
-          <div className="h-4 w-48 bg-gray-200 rounded animate-pulse" />
+          <div className="h-7 bg-gray-200 rounded w-32" />
+          <div className="h-4 bg-gray-100 rounded w-64" />
         </div>
-        <div className="grid md:grid-cols-3 gap-6">
+        <div className="grid md:grid-cols-4 gap-6">
+          <CardSkeleton />
           <CardSkeleton />
           <CardSkeleton />
           <CardSkeleton />
         </div>
         <Card>
           <CardHeader>
-            <div className="h-6 w-24 bg-gray-200 rounded animate-pulse" />
+            <div className="h-6 bg-gray-200 rounded w-24" />
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
+            <div className="flex gap-4">
+              <div className="h-10 bg-gray-100 rounded w-full max-w-sm" />
+              <div className="h-10 bg-gray-100 rounded w-32" />
+            </div>
             <TableSkeleton rows={5} columns={7} />
           </CardContent>
         </Card>
@@ -153,7 +159,6 @@ export default function AdminTeamsPage() {
   const activeTeams = teams.filter((t) => t.status === 'ACTIVE')
   const pendingTeams = teams.filter((t) => t.status === 'PENDING_APPROVAL' || t.status === 'APPROVED' || t.status === 'DRAFT')
   const disqualifiedTeams = teams.filter((t) => t.status === 'DISQUALIFIED' || t.status === 'REJECTED')
-  const totalPages = Math.max(1, Math.ceil(totalTeams / pageSize))
 
   const columns = [
     {
@@ -263,7 +268,7 @@ export default function AdminTeamsPage() {
             ) : (
               <DropdownMenuItem
                 className="text-green-600"
-                onClick={() => handleReinstate(team)}
+                onClick={() => setReinstateTarget(team)}
               >
                 <RefreshCw className="h-4 w-4 mr-2" />
                 Reinstate
@@ -338,7 +343,7 @@ export default function AdminTeamsPage() {
               columns={columns}
               searchKeys={['name', 'displayId', 'university.name']}
               searchPlaceholder="Search by team name or university..."
-              pageSize={15}
+              pageSize={20}
               filters={[
                 {
                   key: 'status',
@@ -354,29 +359,6 @@ export default function AdminTeamsPage() {
                 },
               ]}
           />
-          <div className="mt-4 flex items-center justify-between text-sm text-gray-600">
-            <span>
-              Page {page} of {totalPages}
-            </span>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page === 1}
-              >
-                Prev
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
-              >
-                Next
-              </Button>
-            </div>
-          </div>
         </CardContent>
       </Card>
       )}
@@ -483,6 +465,16 @@ export default function AdminTeamsPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={reinstateTarget !== null}
+        onOpenChange={(open) => { if (!open) setReinstateTarget(null) }}
+        title="Reinstate Team"
+        description={`Reinstate team "${reinstateTarget?.name}"? They will be able to participate again.`}
+        confirmLabel="Reinstate"
+        loading={actionLoading === reinstateTarget?.id}
+        onConfirm={() => { if (reinstateTarget) executeReinstate(reinstateTarget) }}
+      />
     </div>
   )
 }

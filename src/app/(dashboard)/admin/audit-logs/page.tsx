@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/ui/data-table'
 import { TableSkeleton } from '@/components/ui/skeleton'
 import { Download, FileText, Shield } from 'lucide-react'
+import { toast } from 'sonner'
 import { AccessDenied } from '@/components/ui/access-denied'
 import { usePermissions } from '@/hooks/usePermissions'
 
@@ -32,13 +33,11 @@ export default function AdminAuditLogsPage() {
   const [logs, setLogs] = useState<AuditLog[]>([])
   const [exporting, setExporting] = useState(false)
   const [totalLogs, setTotalLogs] = useState(0)
-  const [page, setPage] = useState(1)
-  const [pageSize] = useState(50)
   const { loading: permLoading, canPerform } = usePermissions()
 
   const fetchLogs = useCallback(async () => {
     try {
-      const res = await csrfFetch(`/api/admin/audit-logs?page=${page}&pageSize=${pageSize}`)
+      const res = await csrfFetch('/api/admin/audit-logs')
       if (res.ok) {
         const data = await res.json()
         setLogs(data.logs || [])
@@ -46,10 +45,11 @@ export default function AdminAuditLogsPage() {
       }
     } catch (error) {
       clientLogger.error('Failed to fetch audit logs:', error)
+      toast.error('Failed to load audit logs')
     } finally {
       setLoading(false)
     }
-  }, [page, pageSize])
+  }, [])
 
   useEffect(() => {
     if (!permLoading && canPerform('audit:view')) {
@@ -74,6 +74,7 @@ export default function AdminAuditLogsPage() {
       }
     } catch (error) {
       clientLogger.error('Export failed:', error)
+      toast.error('Failed to export audit logs')
     } finally {
       setExporting(false)
     }
@@ -201,7 +202,6 @@ export default function AdminAuditLogsPage() {
 
   const uniqueActions = [...new Set(logs.map(l => l.action))]
   const uniqueEntityTypes = [...new Set(logs.map(l => l.entityType))]
-  const totalPages = Math.max(1, Math.ceil(totalLogs / pageSize))
 
   return (
     <div className="space-y-6">
@@ -267,7 +267,7 @@ export default function AdminAuditLogsPage() {
             columns={columns}
             searchKeys={['action', 'entityType', 'userName', 'userEmail']}
             searchPlaceholder="Search logs..."
-            pageSize={20}
+            pageSize={25}
             filters={[
               {
                 key: 'action',
@@ -281,29 +281,6 @@ export default function AdminAuditLogsPage() {
               },
             ]}
           />
-          <div className="mt-4 flex items-center justify-between text-sm text-gray-600">
-            <span>
-              Page {page} of {totalPages}
-            </span>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page === 1}
-              >
-                Prev
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
-              >
-                Next
-              </Button>
-            </div>
-          </div>
         </CardContent>
       </Card>
     </div>

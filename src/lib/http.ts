@@ -14,7 +14,9 @@ type ApiErrorCode =
   | 'FORBIDDEN'
   | 'NOT_FOUND'
   | 'CONFLICT'
+  | 'DUPLICATE'
   | 'INTERNAL_ERROR'
+  | (string & {})
 
 export class ApiError extends Error {
   status: number

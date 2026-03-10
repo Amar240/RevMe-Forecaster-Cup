@@ -1,73 +1,44 @@
-import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
-import { getSession } from '@/lib/auth'
+import { requireAdminOrResponse, jsonOk, jsonError, ApiError } from '@/server/http'
 import { sendRoundOpenEmail } from '@/lib/email'
+
+export const dynamic = 'force-dynamic'
 
 export async function POST() {
   try {
-    const user = await getSession()
-    if (!user || user.role !== 'ADMIN') {
-      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
-    }
+    const { response } = await requireAdminOrResponse()
+    if (response) return response
 
-    const activeSeason = await prisma.season.findFirst({
-      where: { status: 'ACTIVE' },
-    })
-
-    if (!activeSeason) {
-      return NextResponse.json({ message: 'No active season' }, { status: 400 })
-    }
+    const activeSeason = await prisma.season.findFirst({ where: { status: 'ACTIVE' } })
+    if (!activeSeason) throw new ApiError('No active season', 400, 'INVALID_INPUT')
 
     const currentRound = await prisma.round.findFirst({
-      where: {
-        seasonId: activeSeason.id,
-        opensAt: { lte: new Date() },
-        closesAt: { gt: new Date() },
-      },
+      where: { seasonId: activeSeason.id, opensAt: { lte: new Date() }, closesAt: { gt: new Date() } },
     })
-
-    if (!currentRound) {
-      return NextResponse.json({ message: 'No active round' }, { status: 400 })
-    }
+    if (!currentRound) throw new ApiError('No active round', 400, 'INVALID_INPUT')
 
     const teams = await prisma.team.findMany({
       where: { status: 'ACTIVE' },
-      include: {
-        members: {
-          where: { isSubmitter: true },
-          include: { user: true },
-        },
-      },
+      include: { members: { where: { isSubmitter: true }, include: { user: true } } },
     })
 
     const existingSubmissions = await prisma.submission.findMany({
-      where: { roundId: currentRound.id },
-      select: { teamId: true },
+      where: { roundId: currentRound.id }, select: { teamId: true },
     })
     const submittedTeamIds = new Set(existingSubmissions.map((s) => s.teamId))
 
     let emailsSent = 0
     for (const team of teams) {
       if (submittedTeamIds.has(team.id)) continue
-
       const submitter = team.members[0]
       if (submitter?.user.email) {
-        const sent = await sendRoundOpenEmail(
-          submitter.user.email,
-          currentRound.number,
-          currentRound.closesAt,
-          team.name
-        )
+        const sent = await sendRoundOpenEmail(submitter.user.email, currentRound.number, currentRound.closesAt, team.name)
         if (sent) emailsSent++
       }
     }
 
-    return NextResponse.json({
-      message: `Sent ${emailsSent} round reminder emails`,
-      emailsSent,
-    })
+    return jsonOk({ message: `Sent ${emailsSent} round reminder emails`, emailsSent })
   } catch (error) {
-    console.error('Round reminder error:', error)
-    return NextResponse.json({ message: 'Failed to send reminders' }, { status: 500 })
+    return jsonError(error, 'Failed to send reminders')
   }
 }

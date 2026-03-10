@@ -1,22 +1,20 @@
-import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
-import { getSession } from '@/lib/auth'
+import { requireUserOrResponse, jsonOk, jsonError } from '@/server/http'
+
+export const dynamic = 'force-dynamic'
 
 export async function POST() {
   try {
-    const user = await getSession()
-    if (!user) {
-      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
-    }
+    const { user, response } = await requireUserOrResponse()
+    if (response) return response
 
     await prisma.user.update({
-      where: { id: user.id },
+      where: { id: user!.id },
       data: { rulesAcknowledgedAt: new Date() },
     })
 
-    return NextResponse.json({ message: 'Rules acknowledged' })
+    return jsonOk({ message: 'Rules acknowledged' })
   } catch (error) {
-    console.error('Acknowledge rules error:', error)
-    return NextResponse.json({ message: 'Failed to acknowledge rules' }, { status: 500 })
+    return jsonError(error, 'Failed to acknowledge rules')
   }
 }

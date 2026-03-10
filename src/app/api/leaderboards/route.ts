@@ -4,6 +4,9 @@ import { logger } from '@/server/logger'
 import { getSession } from '@/server/auth'
 import { jsonError } from '@/server/http'
 
+export const dynamic = 'force-dynamic'
+
+
 export async function GET(request: NextRequest) {
   try {
     const user = await getSession()

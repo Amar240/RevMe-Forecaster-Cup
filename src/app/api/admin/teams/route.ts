@@ -1,13 +1,12 @@
-import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
-import { getSession } from '@/lib/auth'
+import { requireAdminOrResponse, jsonOk, jsonError } from '@/server/http'
+
+export const dynamic = 'force-dynamic'
 
 export async function GET() {
   try {
-    const user = await getSession()
-    if (!user || user.role !== 'ADMIN') {
-      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
-    }
+    const { response } = await requireAdminOrResponse()
+    if (response) return response
 
     const teams = await prisma.team.findMany({
       include: {
@@ -19,9 +18,8 @@ export async function GET() {
       orderBy: { createdAt: 'desc' },
     })
 
-    return NextResponse.json({ teams })
+    return jsonOk({ teams, totalTeams: teams.length })
   } catch (error) {
-    console.error('Get teams error:', error)
-    return NextResponse.json({ message: 'Failed to get teams' }, { status: 500 })
+    return jsonError(error, 'Failed to get teams')
   }
 }

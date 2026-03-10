@@ -1,8 +1,5 @@
 import { beforeAll, beforeEach, afterAll, vi } from 'vitest'
 import { resetDatabase, prisma } from './db'
-import * as dotenv from 'dotenv'
-
-dotenv.config({ path: '.env.test' })
 
 declare global {
   // eslint-disable-next-line no-var

@@ -11,6 +11,10 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Save, Plus, Trash2, ExternalLink, ChevronRight, AlertCircle, GripVertical } from 'lucide-react'
+import { AlertBanner } from '@/components/ui/alert-banner'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
+import { toast } from 'sonner'
 
 interface Market {
   id: string
@@ -193,6 +197,7 @@ useEffect(() => {
       }
     } catch (err) {
       clientLogger.error('Failed to add link:', err)
+      toast.error('Failed to add link')
     }
   }
 
@@ -202,6 +207,7 @@ useEffect(() => {
       fetchData()
     } catch (err) {
       clientLogger.error('Failed to delete link:', err)
+      toast.error('Failed to delete link')
     }
   }
 
@@ -226,6 +232,7 @@ useEffect(() => {
       }
     } catch (err) {
       clientLogger.error('Failed to add round update:', err)
+      toast.error('Failed to add round update')
     }
   }
 
@@ -235,6 +242,7 @@ useEffect(() => {
       fetchData()
     } catch (err) {
       clientLogger.error('Failed to delete round update:', err)
+      toast.error('Failed to delete round update')
     }
   }
 
@@ -266,10 +274,50 @@ useEffect(() => {
 
   if (loading) {
     return (
-      <div className="p-8">
-        <div className="animate-pulse space-y-4">
-          <div className="h-8 bg-gray-200 rounded w-1/4" />
-          <div className="h-64 bg-gray-200 rounded" />
+      <div className="p-8 animate-pulse">
+        <div className="mb-6 space-y-2">
+          <div className="h-7 bg-gray-200 rounded w-48" />
+          <div className="h-4 bg-gray-100 rounded w-72" />
+        </div>
+        <div className="grid grid-cols-12 gap-6">
+          <div className="col-span-3">
+            <div className="border rounded-lg p-4 space-y-3">
+              <div className="h-4 bg-gray-200 rounded w-20" />
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="h-8 bg-gray-100 rounded w-full" />
+              ))}
+            </div>
+          </div>
+          <div className="col-span-9 space-y-6">
+            <div className="border rounded-lg p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="space-y-2">
+                  <div className="h-6 bg-gray-200 rounded w-40" />
+                  <div className="h-4 bg-gray-100 rounded w-56" />
+                </div>
+                <div className="h-9 bg-gray-200 rounded w-28" />
+              </div>
+              <div className="space-y-3">
+                <div className="h-10 bg-gray-100 rounded w-full" />
+                <div className="h-10 bg-gray-100 rounded w-full" />
+                <div className="h-24 bg-gray-100 rounded w-full" />
+              </div>
+              <div className="grid md:grid-cols-2 gap-6">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="space-y-2">
+                    <div className="h-4 bg-gray-200 rounded w-28" />
+                    <div className="h-10 bg-gray-100 rounded w-full" />
+                    <div className="h-10 bg-gray-100 rounded w-full" />
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="border rounded-lg p-6 space-y-3">
+              <div className="h-5 bg-gray-200 rounded w-32" />
+              <div className="h-4 bg-gray-100 rounded w-48" />
+              <div className="h-12 bg-gray-100 rounded w-full" />
+            </div>
+          </div>
         </div>
       </div>
     )
@@ -296,10 +344,10 @@ useEffect(() => {
       </div>
 
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-600">{error}</div>
+        <AlertBanner variant="error" className="mb-4">{error}</AlertBanner>
       )}
       {success && (
-        <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded text-green-600">{success}</div>
+        <AlertBanner variant="success" className="mb-4">{success}</AlertBanner>
       )}
 
       <div className="grid grid-cols-12 gap-6">
@@ -369,9 +417,9 @@ useEffect(() => {
                     </div>
                     <div>
                       <Label htmlFor="description">Description</Label>
-                      <textarea
+                      <Textarea
                         id="description"
-                        className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 min-h-[100px]"
+                        className="min-h-[100px]"
                         value={formData.description}
                         onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
                         placeholder="Detailed description of the market..."
@@ -522,16 +570,15 @@ useEffect(() => {
                         />
                       </div>
                       <div className="grid grid-cols-2 gap-3">
-                        <select
-                          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                          value={newLink.type}
-                          onChange={(e) => setNewLink((prev) => ({ ...prev, type: e.target.value }))}
-                        >
-                          <option value="DATA">Data Source</option>
-                          <option value="DOCUMENT">Document</option>
-                          <option value="TUTORIAL">Tutorial</option>
-                          <option value="OTHER">Other</option>
-                        </select>
+                        <Select value={newLink.type} onValueChange={(val) => setNewLink((prev) => ({ ...prev, type: val }))}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="DATA">Data Source</SelectItem>
+                            <SelectItem value="DOCUMENT">Document</SelectItem>
+                            <SelectItem value="TUTORIAL">Tutorial</SelectItem>
+                            <SelectItem value="OTHER">Other</SelectItem>
+                          </SelectContent>
+                        </Select>
                         <Input
                           placeholder="Note (optional)"
                           value={newLink.note}
@@ -608,8 +655,7 @@ useEffect(() => {
                           />
                         </div>
                       </div>
-                      <textarea
-                        className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring min-h-[80px]"
+                      <Textarea
                         placeholder="What changed this round..."
                         value={newRoundUpdate.whatChanged}
                         onChange={(e) => setNewRoundUpdate((prev) => ({ ...prev, whatChanged: e.target.value }))}

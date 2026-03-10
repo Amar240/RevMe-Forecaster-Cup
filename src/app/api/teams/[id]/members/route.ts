@@ -1,7 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/db'
-import { getSession } from '@/lib/auth'
+import { requireUserOrResponse, jsonOk, jsonError, parseJson, ApiError } from '@/server/http'
 import { z } from 'zod'
+
+export const dynamic = 'force-dynamic'
 
 const addMemberSchema = z.object({
   email: z.string().email(),
@@ -12,14 +14,11 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await getSession()
-    if (!user) {
-      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
-    }
+    const { user, response } = await requireUserOrResponse()
+    if (response) return response
 
     const { id } = await params
-    const body = await request.json()
-    const data = addMemberSchema.parse(body)
+    const data = await parseJson(request, addMemberSchema)
 
     const team = await prisma.team.findUnique({
       where: { id },
@@ -27,18 +26,15 @@ export async function POST(
     })
 
     if (!team) {
-      return NextResponse.json({ message: 'Team not found' }, { status: 404 })
+      throw new ApiError('Team not found', 404, 'NOT_FOUND')
     }
 
-    if (user.role !== 'ADMIN' && team.supervisorId !== user.id) {
-      return NextResponse.json({ message: 'Forbidden' }, { status: 403 })
+    if (user!.role !== 'ADMIN' && team.supervisorId !== user!.id) {
+      throw new ApiError('Forbidden', 403, 'FORBIDDEN')
     }
 
     if (team.members.length >= 5) {
-      return NextResponse.json(
-        { message: 'Maximum 5 students per team' },
-        { status: 422 }
-      )
+      throw new ApiError('Maximum 5 students per team', 422, 'CONFLICT')
     }
 
     const student = await prisma.user.findUnique({
@@ -46,17 +42,11 @@ export async function POST(
     })
 
     if (!student) {
-      return NextResponse.json(
-        { message: 'Student not found. They must register first.' },
-        { status: 404 }
-      )
+      throw new ApiError('Student not found. They must register first.', 404, 'NOT_FOUND')
     }
 
     if (student.role !== 'STUDENT') {
-      return NextResponse.json(
-        { message: 'User is not a student' },
-        { status: 422 }
-      )
+      throw new ApiError('User is not a student', 422, 'INVALID_INPUT')
     }
 
     const existingMembership = await prisma.teamMember.findFirst({
@@ -64,10 +54,7 @@ export async function POST(
     })
 
     if (existingMembership) {
-      return NextResponse.json(
-        { message: 'Student is already on a team' },
-        { status: 409 }
-      )
+      throw new ApiError('Student is already on a team', 409, 'CONFLICT')
     }
 
     const isFirstMember = team.members.length === 0
@@ -81,12 +68,8 @@ export async function POST(
       include: { user: true },
     })
 
-    return NextResponse.json({ member }, { status: 201 })
+    return jsonOk({ member }, 201)
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json({ message: 'Invalid email' }, { status: 400 })
-    }
-    console.error('Add member error:', error)
-    return NextResponse.json({ message: 'Failed to add member' }, { status: 500 })
+    return jsonError(error, 'Failed to add member')
   }
 }

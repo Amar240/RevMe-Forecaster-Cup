@@ -1,18 +1,14 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/server/db'
-import { canPerformAdminAction } from '@/server/permissions'
-import { logger } from '@/server/logger'
-import { getSession } from '@/server/auth'
-import { jsonError } from '@/server/http'
+import { NextRequest } from 'next/server'
+import { prisma } from '@/lib/db'
+import { requireAdminOrResponse, jsonOk, jsonError } from '@/server/http'
+
+export const dynamic = 'force-dynamic'
+
 
 export async function GET(request: NextRequest) {
   try {
-    const user = await getSession()
-    const canUpload = await canPerformAdminAction(user, 'actuals:upload')
-
-    if (!user || !canUpload) {
-      return NextResponse.json({ message: 'Forbidden' }, { status: 403 })
-    }
+    const { response } = await requireAdminOrResponse('actuals:upload')
+    if (response) return response
 
     const { searchParams } = new URL(request.url)
     const includeVoided = searchParams.get('includeVoided') === 'true'
@@ -22,7 +18,7 @@ export async function GET(request: NextRequest) {
     })
 
     if (!activeSeason) {
-      return NextResponse.json({ actuals: [] })
+      return jsonOk({ actuals: [] })
     }
 
     interface WhereClause {
@@ -39,7 +35,7 @@ export async function GET(request: NextRequest) {
       orderBy: [{ roundId: 'asc' }, { marketId: 'asc' }, { metric: 'asc' }, { weekOffset: 'asc' }],
     })
 
-    return NextResponse.json({
+    return jsonOk({
       actuals: actuals.map((a) => ({
         id: a.id,
         roundId: a.roundId,
@@ -58,7 +54,6 @@ export async function GET(request: NextRequest) {
       })),
     })
   } catch (error) {
-    logger.error('Get actuals summary error:', error)
     return jsonError(error, 'Failed to get actuals summary')
   }
 }

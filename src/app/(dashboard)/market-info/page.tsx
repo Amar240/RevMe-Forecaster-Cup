@@ -9,6 +9,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Loader2, MapPin, ExternalLink, FileText, TrendingUp, TrendingDown, AlertTriangle, Lightbulb, ChevronRight, ArrowUpRight } from 'lucide-react'
+import { toast } from 'sonner'
 
 interface ResourceLink {
   id: string
@@ -72,6 +73,7 @@ export default function MarketInfoPage() {
       }
     } catch (err) {
       clientLogger.error('Failed to fetch data:', err)
+      toast.error('Failed to load market information')
     } finally {
       setLoading(false)
     }
@@ -111,6 +113,7 @@ export default function MarketInfoPage() {
       }
     } catch (err) {
       clientLogger.error('Failed to fetch market detail:', err)
+      toast.error('Failed to load market details')
     }
   }
 

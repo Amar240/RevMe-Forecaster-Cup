@@ -1,19 +1,23 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/db'
-import { getSession } from '@/lib/auth'
+import { requireUserOrResponse, jsonOk, jsonError, ApiError } from '@/server/http'
+
+export const dynamic = 'force-dynamic'
 
 export async function GET() {
   try {
-    const user = await getSession()
-    if (!user || (user.role !== 'SUPERVISOR' && user.role !== 'ADMIN')) {
-      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
+    const { user, response } = await requireUserOrResponse()
+    if (response) return response
+
+    if (user!.role !== 'SUPERVISOR' && user!.role !== 'ADMIN') {
+      throw new ApiError('Forbidden', 403, 'FORBIDDEN')
     }
 
     const requests = await prisma.joinRequest.findMany({
       where: {
         OR: [
-          { supervisorId: user.id },
-          { supervisorEmailEntered: user.email },
+          { supervisorId: user!.id },
+          { supervisorEmailEntered: user!.email },
         ],
         status: 'PENDING',
       },
@@ -32,25 +36,26 @@ export async function GET() {
       orderBy: { createdAt: 'desc' },
     })
 
-    return NextResponse.json({ requests })
+    return jsonOk({ requests })
   } catch (error) {
-    console.error('Failed to fetch supervisor join requests:', error)
-    return NextResponse.json({ message: 'Failed to fetch join requests' }, { status: 500 })
+    return jsonError(error, 'Failed to fetch join requests')
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await getSession()
-    if (!user || (user.role !== 'SUPERVISOR' && user.role !== 'ADMIN')) {
-      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
+    const { user, response } = await requireUserOrResponse()
+    if (response) return response
+
+    if (user!.role !== 'SUPERVISOR' && user!.role !== 'ADMIN') {
+      throw new ApiError('Forbidden', 403, 'FORBIDDEN')
     }
 
     const body = await request.json()
     const { requestId, action, teamId, teamName } = body
 
     if (!requestId || !action) {
-      return NextResponse.json({ message: 'Request ID and action are required' }, { status: 400 })
+      throw new ApiError('Request ID and action are required', 400, 'INVALID_INPUT')
     }
 
     const joinRequest = await prisma.joinRequest.findUnique({
@@ -59,15 +64,15 @@ export async function POST(request: NextRequest) {
     })
 
     if (!joinRequest) {
-      return NextResponse.json({ message: 'Join request not found' }, { status: 404 })
+      throw new ApiError('Join request not found', 404, 'NOT_FOUND')
     }
 
-    if (joinRequest.supervisorId !== user.id && joinRequest.supervisorEmailEntered !== user.email) {
-      return NextResponse.json({ message: 'You are not authorized to handle this request' }, { status: 403 })
+    if (joinRequest.supervisorId !== user!.id && joinRequest.supervisorEmailEntered !== user!.email) {
+      throw new ApiError('You are not authorized to handle this request', 403, 'FORBIDDEN')
     }
 
     if (joinRequest.status !== 'PENDING') {
-      return NextResponse.json({ message: 'This request has already been processed' }, { status: 400 })
+      throw new ApiError('This request has already been processed', 400, 'INVALID_INPUT')
     }
 
     if (action === 'reject') {
@@ -75,7 +80,7 @@ export async function POST(request: NextRequest) {
         where: { id: requestId },
         data: { status: 'REJECTED', resolvedAt: new Date() },
       })
-      return NextResponse.json({ message: 'Request rejected' })
+      return jsonOk({ message: 'Request rejected' })
     }
 
     if (action === 'accept') {
@@ -87,11 +92,11 @@ export async function POST(request: NextRequest) {
         })
 
         const existingTeamsCount = await prisma.team.count({
-          where: { supervisorId: user.id },
+          where: { supervisorId: user!.id },
         })
 
         if (existingTeamsCount >= 10) {
-          return NextResponse.json({ message: 'Maximum 10 teams per supervisor reached' }, { status: 400 })
+          throw new ApiError('Maximum 10 teams per supervisor reached', 400, 'CONFLICT')
         }
 
         const displayId = `T-${Date.now().toString(36).toUpperCase()}`
@@ -99,8 +104,8 @@ export async function POST(request: NextRequest) {
           data: {
             name: teamName,
             displayId,
-            supervisorId: user.id,
-            universityId: joinRequest.student.universityId || user.universityId!,
+            supervisorId: user!.id,
+            universityId: joinRequest.student.universityId || user!.universityId!,
             seasonId: activeSeason?.id || null,
             status: 'PENDING_APPROVAL',
           },
@@ -109,7 +114,7 @@ export async function POST(request: NextRequest) {
       }
 
       if (!targetTeamId) {
-        return NextResponse.json({ message: 'Team ID or team name is required' }, { status: 400 })
+        throw new ApiError('Team ID or team name is required', 400, 'INVALID_INPUT')
       }
 
       const team = await prisma.team.findUnique({
@@ -118,11 +123,11 @@ export async function POST(request: NextRequest) {
       })
 
       if (!team) {
-        return NextResponse.json({ message: 'Team not found' }, { status: 404 })
+        throw new ApiError('Team not found', 404, 'NOT_FOUND')
       }
 
       if (team.members.length >= 5) {
-        return NextResponse.json({ message: 'Maximum 5 members per team reached' }, { status: 400 })
+        throw new ApiError('Maximum 5 members per team reached', 400, 'CONFLICT')
       }
 
       await prisma.$transaction([
@@ -143,12 +148,11 @@ export async function POST(request: NextRequest) {
         }),
       ])
 
-      return NextResponse.json({ message: 'Student added to team' })
+      return jsonOk({ message: 'Student added to team' })
     }
 
-    return NextResponse.json({ message: 'Invalid action' }, { status: 400 })
+    throw new ApiError('Invalid action', 400, 'INVALID_INPUT')
   } catch (error) {
-    console.error('Failed to process join request:', error)
-    return NextResponse.json({ message: 'Failed to process join request' }, { status: 500 })
+    return jsonError(error, 'Failed to process join request')
   }
 }

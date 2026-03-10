@@ -1,43 +1,28 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/db'
-import { getSession } from '@/lib/auth'
+import { requireAdminOrResponse, jsonOk, jsonError, ApiError } from '@/server/http'
 import { logAuditAction } from '@/lib/audit'
+
+export const dynamic = 'force-dynamic'
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await getSession()
-    if (!user || user.role !== 'ADMIN') {
-      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
-    }
+    const { user, response } = await requireAdminOrResponse()
+    if (response) return response
 
     const { id } = await params
-
     const targetUser = await prisma.user.findUnique({ where: { id } })
-    if (!targetUser) {
-      return NextResponse.json({ message: 'User not found' }, { status: 404 })
-    }
+    if (!targetUser) throw new ApiError('User not found', 404, 'NOT_FOUND')
+    if (targetUser.id === user!.id) throw new ApiError('Cannot force logout yourself', 400, 'INVALID_INPUT')
 
-    if (targetUser.id === user.id) {
-      return NextResponse.json({ message: 'Cannot force logout yourself' }, { status: 400 })
-    }
+    const result = await prisma.session.deleteMany({ where: { userId: id } })
+    await logAuditAction(user!.id, 'FORCE_LOGOUT', 'User', id, { userEmail: targetUser.email, sessionsDeleted: result.count })
 
-    const result = await prisma.session.deleteMany({
-      where: { userId: id },
-    })
-
-    await logAuditAction(user.id, 'FORCE_LOGOUT', 'User', id, {
-      userEmail: targetUser.email,
-      sessionsDeleted: result.count,
-    })
-
-    return NextResponse.json({
-      message: `User logged out. ${result.count} session(s) terminated.`,
-    })
+    return jsonOk({ message: `User logged out. ${result.count} session(s) terminated.` })
   } catch (error) {
-    console.error('Force logout error:', error)
-    return NextResponse.json({ message: 'Failed to force logout' }, { status: 500 })
+    return jsonError(error, 'Failed to force logout')
   }
 }

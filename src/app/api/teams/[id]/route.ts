@@ -1,16 +1,16 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/db'
-import { getSession } from '@/lib/auth'
+import { requireUserOrResponse, jsonOk, jsonError, ApiError } from '@/server/http'
+
+export const dynamic = 'force-dynamic'
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await getSession()
-    if (!user) {
-      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
-    }
+    const { user, response } = await requireUserOrResponse()
+    if (response) return response
 
     const { id } = await params
 
@@ -33,19 +33,18 @@ export async function GET(
     })
 
     if (!team) {
-      return NextResponse.json({ message: 'Team not found' }, { status: 404 })
+      throw new ApiError('Team not found', 404, 'NOT_FOUND')
     }
 
-    if (user.role !== 'ADMIN' && team.supervisorId !== user.id) {
-      const isMember = team.members.some((m) => m.userId === user.id)
+    if (user!.role !== 'ADMIN' && team.supervisorId !== user!.id) {
+      const isMember = team.members.some((m) => m.userId === user!.id)
       if (!isMember) {
-        return NextResponse.json({ message: 'Forbidden' }, { status: 403 })
+        throw new ApiError('Forbidden', 403, 'FORBIDDEN')
       }
     }
 
-    return NextResponse.json({ team })
+    return jsonOk({ team })
   } catch (error) {
-    console.error('Get team error:', error)
-    return NextResponse.json({ message: 'Failed to get team' }, { status: 500 })
+    return jsonError(error, 'Failed to get team')
   }
 }

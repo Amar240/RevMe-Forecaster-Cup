@@ -1,8 +1,10 @@
 import { redirect } from 'next/navigation'
 import { headers } from 'next/headers'
 import { getSession } from '@/lib/auth'
-import { Sidebar } from '@/components/dashboard/sidebar'
-import { Header } from '@/components/dashboard/header'
+import { DashboardShell } from '@/components/dashboard/dashboard-shell'
+import { CommandPalette } from '@/components/admin/CommandPalette'
+
+export const dynamic = 'force-dynamic'
 
 export default async function DashboardLayout({
   children,
@@ -28,14 +30,9 @@ export default async function DashboardLayout({
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Header user={user} />
-      <div className="flex">
-        <Sidebar role={user.role} />
-        <main className="flex-1 p-6 lg:p-8">
-          {children}
-        </main>
-      </div>
-    </div>
+    <>
+      {user?.role === 'ADMIN' || user?.role === 'SUB_ADMIN' ? <CommandPalette /> : null}
+      <DashboardShell user={user}>{children}</DashboardShell>
+    </>
   )
 }

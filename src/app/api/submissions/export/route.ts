@@ -1,16 +1,16 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
-import { getSession } from '@/lib/auth'
+import { requireUserOrResponse, jsonError } from '@/server/http'
+
+export const dynamic = 'force-dynamic'
 
 export async function GET() {
   try {
-    const user = await getSession()
-    if (!user) {
-      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
-    }
+    const { user, response } = await requireUserOrResponse()
+    if (response) return response
 
     const teamMember = await prisma.teamMember.findFirst({
-      where: { userId: user.id },
+      where: { userId: user!.id },
       include: { team: true },
     })
 
@@ -20,25 +20,14 @@ export async function GET() {
 
     const submissions = await prisma.submission.findMany({
       where: { teamId: teamMember.teamId },
-      include: {
-        round: true,
-        values: {
-          include: {
-            market: true,
-          },
-        },
-      },
+      include: { round: true, values: { include: { market: true } } },
       orderBy: [{ round: { number: 'asc' } }],
     })
 
-    const errors = await prisma.predictionError.findMany({
-      where: { teamId: teamMember.teamId },
-    })
-
+    const errors = await prisma.predictionError.findMany({ where: { teamId: teamMember.teamId } })
     const errorMap = new Map<string, number>()
     for (const err of errors) {
-      const key = `${err.roundId}-${err.marketId}-${err.metric}-${err.weekOffset}`
-      errorMap.set(key, err.absError)
+      errorMap.set(`${err.roundId}-${err.marketId}-${err.metric}-${err.weekOffset}`, err.absError)
     }
 
     const csvRows = [
@@ -47,30 +36,19 @@ export async function GET() {
 
     for (const sub of submissions) {
       for (const val of sub.values) {
-        const errorKey = `${sub.roundId}-${val.marketId}-${val.metric}-${val.weekOffset}`
-        const absError = errorMap.get(errorKey)
+        const absError = errorMap.get(`${sub.roundId}-${val.marketId}-${val.metric}-${val.weekOffset}`)
         csvRows.push([
-          `Round ${sub.round.number}`,
-          val.market.name,
-          `Week+${val.weekOffset}`,
-          val.metric,
-          val.value.toFixed(2),
-          new Date(sub.submittedAt).toISOString(),
-          absError?.toFixed(4) || '',
+          `Round ${sub.round.number}`, val.market.name, `Week+${val.weekOffset}`,
+          val.metric, val.value.toFixed(2), new Date(sub.submittedAt).toISOString(), absError?.toFixed(4) || '',
         ])
       }
     }
 
     const csvContent = csvRows.map((row) => row.join(',')).join('\n')
-
     return new NextResponse(csvContent, {
-      headers: {
-        'Content-Type': 'text/csv',
-        'Content-Disposition': `attachment; filename="submissions-${teamMember.team.displayId}.csv"`,
-      },
+      headers: { 'Content-Type': 'text/csv', 'Content-Disposition': `attachment; filename="submissions-${teamMember.team.displayId}.csv"` },
     })
   } catch (error) {
-    console.error('Export submissions error:', error)
-    return NextResponse.json({ message: 'Failed to export' }, { status: 500 })
+    return jsonError(error, 'Failed to export')
   }
 }

@@ -1,10 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/server/db'
-import { canPerformAdminAction } from '@/server/permissions'
+import { NextRequest } from 'next/server'
+import { prisma } from '@/lib/db'
 import { z } from 'zod'
-import { logger } from '@/server/logger'
-import { getSession } from '@/server/auth'
-import { jsonError } from '@/server/http'
+import { requireAdminOrResponse, jsonOk, jsonError } from '@/server/http'
+
+export const dynamic = 'force-dynamic'
+
 
 const unvoidSchema = z.object({
   reason: z.string().optional(),
@@ -15,12 +15,8 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await getSession()
-    const canUpload = await canPerformAdminAction(user, 'actuals:upload')
-
-    if (!user || !canUpload) {
-      return NextResponse.json({ message: 'Forbidden' }, { status: 403 })
-    }
+    const { user, response } = await requireAdminOrResponse('actuals:upload')
+    if (response) return response
 
     const { id } = await params
     const body = await request.json().catch(() => ({}))
@@ -32,22 +28,22 @@ export async function POST(
     })
 
     if (!actual) {
-      return NextResponse.json({ message: 'Actual not found' }, { status: 404 })
+      return jsonOk({ message: 'Actual not found' }, 404)
     }
 
     if (!actual.isVoided) {
-      return NextResponse.json({ message: 'Actual is not voided' }, { status: 400 })
+      return jsonOk({ message: 'Actual is not voided' }, 400)
     }
 
     const isLockedOrScored = actual.round.isLockedActuals || actual.round.lastScoredAt !== null
 
     if (isLockedOrScored && !data.reason) {
-      return NextResponse.json(
+      return jsonOk(
         {
           message: 'Reason is required when unvoiding actuals for a locked or scored round',
           requiresReason: true,
         },
-        { status: 400 }
+        400
       )
     }
 
@@ -56,14 +52,14 @@ export async function POST(
         where: { id },
         data: {
           isVoided: false,
-          updatedById: user.id,
+          updatedById: user!.id,
         },
       })
 
       await tx.actualValueRevision.create({
         data: {
           actualId: id,
-          actorId: user.id,
+          actorId: user!.id,
           action: 'UNVOID',
           oldValue: null,
           newValue: actual.value,
@@ -82,12 +78,8 @@ export async function POST(
       }
     })
 
-    return NextResponse.json({ message: 'Actual restored' })
+    return jsonOk({ message: 'Actual restored' })
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json({ message: 'Invalid input', errors: error.errors }, { status: 400 })
-    }
-    logger.error('Unvoid actual error:', error)
     return jsonError(error, 'Failed to restore actual')
   }
 }

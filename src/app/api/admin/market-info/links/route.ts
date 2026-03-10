@@ -1,133 +1,75 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/db'
-import { getSession } from '@/lib/auth'
+import { requireAdminOrResponse, jsonOk, jsonError, ApiError } from '@/server/http'
+
+export const dynamic = 'force-dynamic'
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await getSession()
-    if (!user || (user.role !== 'ADMIN' && user.role !== 'SUB_ADMIN')) {
-      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
-    }
+    const { user, response } = await requireAdminOrResponse()
+    if (response) return response
 
     const body = await request.json()
     const { marketInfoId, label, url, type, note } = body
 
-    if (!marketInfoId || !label || !url) {
-      return NextResponse.json({ message: 'marketInfoId, label, and url are required' }, { status: 400 })
-    }
+    if (!marketInfoId || !label || !url) throw new ApiError('marketInfoId, label, and url are required', 400, 'INVALID_INPUT')
 
-    const maxOrder = await prisma.marketResourceLink.aggregate({
-      where: { marketInfoId },
-      _max: { order: true },
-    })
-
+    const maxOrder = await prisma.marketResourceLink.aggregate({ where: { marketInfoId }, _max: { order: true } })
     const link = await prisma.marketResourceLink.create({
-      data: {
-        marketInfoId,
-        label,
-        url,
-        type: type || 'OTHER',
-        note,
-        order: (maxOrder._max.order || 0) + 1,
-      },
+      data: { marketInfoId, label, url, type: type || 'OTHER', note, order: (maxOrder._max.order || 0) + 1 },
     })
 
     await prisma.auditLog.create({
-      data: {
-        userId: user.id,
-        userEmail: user.email,
-        userRole: user.role,
-        action: 'CREATE_MARKET_LINK',
-        entityType: 'MarketResourceLink',
-        entityId: link.id,
-        details: { label, url, type },
-      },
+      data: { userId: user!.id, userEmail: user!.email, userRole: user!.role, action: 'CREATE_MARKET_LINK', entityType: 'MarketResourceLink', entityId: link.id, details: { label, url, type } },
     })
 
-    return NextResponse.json({ link })
+    return jsonOk({ link })
   } catch (error) {
-    console.error('Create market link error:', error)
-    return NextResponse.json({ message: 'Failed to create link' }, { status: 500 })
+    return jsonError(error, 'Failed to create link')
   }
 }
 
 export async function PUT(request: NextRequest) {
   try {
-    const user = await getSession()
-    if (!user || (user.role !== 'ADMIN' && user.role !== 'SUB_ADMIN')) {
-      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
-    }
+    const { user, response } = await requireAdminOrResponse()
+    if (response) return response
 
     const body = await request.json()
     const { id, label, url, type, note, order } = body
 
-    if (!id) {
-      return NextResponse.json({ message: 'Link ID is required' }, { status: 400 })
-    }
+    if (!id) throw new ApiError('Link ID is required', 400, 'INVALID_INPUT')
 
     const link = await prisma.marketResourceLink.update({
       where: { id },
-      data: {
-        ...(label && { label }),
-        ...(url && { url }),
-        ...(type && { type }),
-        ...(note !== undefined && { note }),
-        ...(order !== undefined && { order }),
-      },
+      data: { ...(label && { label }), ...(url && { url }), ...(type && { type }), ...(note !== undefined && { note }), ...(order !== undefined && { order }) },
     })
 
     await prisma.auditLog.create({
-      data: {
-        userId: user.id,
-        userEmail: user.email,
-        userRole: user.role,
-        action: 'UPDATE_MARKET_LINK',
-        entityType: 'MarketResourceLink',
-        entityId: link.id,
-        details: { label, url, type },
-      },
+      data: { userId: user!.id, userEmail: user!.email, userRole: user!.role, action: 'UPDATE_MARKET_LINK', entityType: 'MarketResourceLink', entityId: link.id, details: { label, url, type } },
     })
 
-    return NextResponse.json({ link })
+    return jsonOk({ link })
   } catch (error) {
-    console.error('Update market link error:', error)
-    return NextResponse.json({ message: 'Failed to update link' }, { status: 500 })
+    return jsonError(error, 'Failed to update link')
   }
 }
 
 export async function DELETE(request: NextRequest) {
   try {
-    const user = await getSession()
-    if (!user || (user.role !== 'ADMIN' && user.role !== 'SUB_ADMIN')) {
-      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
-    }
+    const { user, response } = await requireAdminOrResponse()
+    if (response) return response
 
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
+    if (!id) throw new ApiError('Link ID is required', 400, 'INVALID_INPUT')
 
-    if (!id) {
-      return NextResponse.json({ message: 'Link ID is required' }, { status: 400 })
-    }
-
-    const link = await prisma.marketResourceLink.delete({
-      where: { id },
-    })
-
+    const link = await prisma.marketResourceLink.delete({ where: { id } })
     await prisma.auditLog.create({
-      data: {
-        userId: user.id,
-        userEmail: user.email,
-        userRole: user.role,
-        action: 'DELETE_MARKET_LINK',
-        entityType: 'MarketResourceLink',
-        entityId: id,
-        details: { label: link.label },
-      },
+      data: { userId: user!.id, userEmail: user!.email, userRole: user!.role, action: 'DELETE_MARKET_LINK', entityType: 'MarketResourceLink', entityId: id, details: { label: link.label } },
     })
 
-    return NextResponse.json({ success: true })
+    return jsonOk({ success: true })
   } catch (error) {
-    console.error('Delete market link error:', error)
-    return NextResponse.json({ message: 'Failed to delete link' }, { status: 500 })
+    return jsonError(error, 'Failed to delete link')
   }
 }

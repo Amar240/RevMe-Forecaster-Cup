@@ -1,7 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/db'
 import { hashPassword } from '@/lib/auth'
+import { jsonOk, jsonError, parseJson, ApiError } from '@/server/http'
 import { z } from 'zod'
+
+export const dynamic = 'force-dynamic'
 
 const resetPasswordSchema = z.object({
   token: z.string(),
@@ -10,8 +13,7 @@ const resetPasswordSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { token, password } = resetPasswordSchema.parse(body)
+    const { token, password } = await parseJson(request, resetPasswordSchema)
 
     const user = await prisma.user.findFirst({
       where: {
@@ -21,10 +23,7 @@ export async function POST(request: NextRequest) {
     })
 
     if (!user) {
-      return NextResponse.json(
-        { message: 'Invalid or expired reset token' },
-        { status: 400 }
-      )
+      throw new ApiError('Invalid or expired reset token', 400, 'INVALID_INPUT')
     }
 
     const passwordHash = await hashPassword(password)
@@ -38,18 +37,8 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    return NextResponse.json({ message: 'Password reset successful' })
+    return jsonOk({ message: 'Password reset successful' })
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { message: 'Password must be at least 8 characters' },
-        { status: 400 }
-      )
-    }
-    console.error('Reset password error:', error)
-    return NextResponse.json(
-      { message: 'Failed to reset password' },
-      { status: 500 }
-    )
+    return jsonError(error, 'Failed to reset password')
   }
 }

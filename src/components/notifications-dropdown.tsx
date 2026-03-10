@@ -7,6 +7,7 @@ import { Bell, X, ExternalLink } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 import { clientLogger } from '@/lib/client-logger'
+import { toast } from 'sonner'
 
 interface Notification {
   id: string
@@ -42,6 +43,7 @@ export function NotificationsDropdown() {
       clientLogger.error('Failed to fetch notifications', {
         error: error instanceof Error ? error.message : String(error),
       })
+      toast.error('Failed to load notifications')
     }
   }
 
@@ -75,6 +77,7 @@ export function NotificationsDropdown() {
       clientLogger.error('Failed to mark notification read', {
         error: error instanceof Error ? error.message : String(error),
       })
+      toast.error('Failed to update notification')
     }
   }
 

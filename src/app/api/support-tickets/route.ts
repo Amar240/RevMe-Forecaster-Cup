@@ -4,6 +4,9 @@ import { MessageVisibility, TicketCategory } from '@prisma/client'
 import { logger } from '@/server/logger'
 import { requireUserOrResponse, jsonError } from '@/server/http'
 
+export const dynamic = 'force-dynamic'
+
+
 export async function GET(request: NextRequest) {
   try {
     const { user, response } = await requireUserOrResponse()

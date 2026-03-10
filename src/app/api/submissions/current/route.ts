@@ -3,6 +3,9 @@ import { prisma } from '@/server/db'
 import { logger } from '@/server/logger'
 import { requireUserOrResponse, jsonError } from '@/server/http'
 
+export const dynamic = 'force-dynamic'
+
+
 export async function GET() {
   try {
     const { user, response } = await requireUserOrResponse()

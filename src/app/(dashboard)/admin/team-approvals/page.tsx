@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Loader2, Users, CheckCircle, XCircle, Clock, Building2, User } from 'lucide-react'
+import { toast } from 'sonner'
 
 export default function TeamApprovalsPage() {
   const [teams, setTeams] = useState<PendingTeam[]>([])
@@ -26,6 +27,7 @@ export default function TeamApprovalsPage() {
       setTeams(data.teams || [])
     } catch (err) {
       clientLogger.error('Failed to fetch pending teams:', err)
+      toast.error('Failed to load pending teams')
     } finally {
       setLoading(false)
     }
@@ -44,6 +46,7 @@ export default function TeamApprovalsPage() {
       setRejectReason('')
     } catch (err) {
       clientLogger.error('Failed to process team:', err)
+      toast.error('Failed to process team request')
     } finally {
       setProcessing(null)
     }

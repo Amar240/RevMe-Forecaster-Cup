@@ -8,6 +8,10 @@ import { clientLogger } from '@/lib/client-logger'
 import { useState, useEffect, useCallback } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { toast } from 'sonner'
 import { 
   Loader2, 
   Send, 
@@ -23,6 +27,8 @@ import {
   AlertTriangle,
   UserCog
 } from 'lucide-react'
+import { AlertBanner } from '@/components/ui/alert-banner'
+import { Checkbox } from '@/components/ui/checkbox'
 
 interface TicketReply {
   id: string
@@ -88,6 +94,7 @@ export default function AdminEscalationsPage() {
       }
     } catch (err) {
       clientLogger.error('Failed to fetch tickets:', err)
+      toast.error('Failed to load escalated tickets')
     } finally {
       setLoading(false)
     }
@@ -149,6 +156,7 @@ export default function AdminEscalationsPage() {
       }
     } catch (err) {
       clientLogger.error('Failed to reply:', err)
+      toast.error('Failed to send reply')
     } finally {
       setSubmitting(false)
     }
@@ -170,6 +178,7 @@ export default function AdminEscalationsPage() {
       }
     } catch (err) {
       clientLogger.error('Failed to resolve:', err)
+      toast.error('Failed to resolve ticket')
     } finally {
       setSubmitting(false)
     }
@@ -192,6 +201,7 @@ export default function AdminEscalationsPage() {
       }
     } catch (err) {
       clientLogger.error('Failed to assign:', err)
+      toast.error('Failed to assign ticket')
     } finally {
       setSubmitting(false)
     }
@@ -226,8 +236,38 @@ export default function AdminEscalationsPage() {
 
   if (loading && tickets.length === 0) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+      <div className="space-y-6 animate-pulse">
+        <div className="space-y-2">
+          <div className="h-7 bg-gray-200 rounded w-40" />
+          <div className="h-4 bg-gray-100 rounded w-72" />
+        </div>
+        <div className="flex flex-wrap gap-4">
+          <div className="space-y-1">
+            <div className="h-4 bg-gray-100 rounded w-12" />
+            <div className="h-10 bg-gray-200 rounded w-[180px]" />
+          </div>
+          <div className="space-y-1">
+            <div className="h-4 bg-gray-100 rounded w-16" />
+            <div className="h-10 bg-gray-200 rounded w-[180px]" />
+          </div>
+        </div>
+        <div className="space-y-3">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="border rounded-lg p-4 space-y-3">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1 space-y-2">
+                  <div className="h-5 bg-gray-200 rounded w-3/4" />
+                  <div className="flex gap-2">
+                    <div className="h-4 bg-gray-100 rounded w-24" />
+                    <div className="h-4 bg-gray-100 rounded w-20" />
+                    <div className="h-4 bg-gray-100 rounded w-16" />
+                  </div>
+                </div>
+                <div className="h-6 bg-gray-200 rounded-full w-20" />
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     )
   }
@@ -269,43 +309,27 @@ export default function AdminEscalationsPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             {selectedTicket.escalationReason && (
-              <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-                <div className="flex items-start gap-2">
-                  <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5" />
-                  <div>
-                    <p className="text-sm font-medium text-red-800">Escalation Reason</p>
-                    <p className="text-sm text-red-700 mt-1">{selectedTicket.escalationReason}</p>
-                    {selectedTicket.escalatedBy && (
-                      <p className="text-xs text-red-600 mt-2">
-                        Escalated by {selectedTicket.escalatedBy.firstName} {selectedTicket.escalatedBy.lastName}
-                        {selectedTicket.escalatedAt && ` on ${new Date(selectedTicket.escalatedAt).toLocaleString()}`}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
+              <AlertBanner variant="error" title="Escalation Reason">
+                <p className="mt-1">{selectedTicket.escalationReason}</p>
+                {selectedTicket.escalatedBy && (
+                  <p className="text-xs opacity-75 mt-2">
+                    Escalated by {selectedTicket.escalatedBy.firstName} {selectedTicket.escalatedBy.lastName}
+                    {selectedTicket.escalatedAt && ` on ${new Date(selectedTicket.escalatedAt).toLocaleString()}`}
+                  </p>
+                )}
+              </AlertBanner>
             )}
 
             {selectedTicket.autoEscalatedAt && (
-              <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
-                <div className="flex items-start gap-2">
-                  <Clock className="h-5 w-5 text-amber-600 mt-0.5" />
-                  <div>
-                    <p className="text-sm font-medium text-amber-800">Auto-Escalated</p>
-                    <p className="text-xs text-amber-600 mt-1">
-                      This ticket was automatically escalated on {new Date(selectedTicket.autoEscalatedAt).toLocaleString()} due to supervisor inactivity.
-                    </p>
-                  </div>
-                </div>
-              </div>
+              <AlertBanner variant="warning" title="Auto-Escalated" icon={<Clock className="h-5 w-5 flex-shrink-0 mt-0.5" />}>
+                This ticket was automatically escalated on {new Date(selectedTicket.autoEscalatedAt).toLocaleString()} due to supervisor inactivity.
+              </AlertBanner>
             )}
 
             {selectedTicket.assignedTo && (
-              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                <p className="text-sm text-blue-700">
-                  <span className="font-medium">Assigned to:</span> {selectedTicket.assignedTo.firstName} {selectedTicket.assignedTo.lastName} ({selectedTicket.assignedTo.email})
-                </p>
-              </div>
+              <AlertBanner variant="info">
+                <span className="font-medium">Assigned to:</span> {selectedTicket.assignedTo.firstName} {selectedTicket.assignedTo.lastName} ({selectedTicket.assignedTo.email})
+              </AlertBanner>
             )}
 
             <div className="p-4 bg-gray-50 rounded-lg border-l-4 border-gray-300">
@@ -358,18 +382,16 @@ export default function AdminEscalationsPage() {
                 <div className="border-t pt-4 space-y-3">
                   <div className="flex items-center gap-4 flex-wrap">
                     <div className="flex items-center gap-2">
-                      <select
-                        className="border rounded-lg px-3 py-2 text-sm"
-                        value={selectedAssignee}
-                        onChange={(e) => setSelectedAssignee(e.target.value)}
-                      >
-                        <option value="">Assign to...</option>
-                        {adminUsers.map((admin) => (
-                          <option key={admin.id} value={admin.id}>
-                            {admin.firstName} {admin.lastName} ({admin.role})
-                          </option>
-                        ))}
-                      </select>
+                      <Select value={selectedAssignee} onValueChange={setSelectedAssignee}>
+                        <SelectTrigger className="w-[200px]"><SelectValue placeholder="Assign to..." /></SelectTrigger>
+                        <SelectContent>
+                          {adminUsers.map((admin) => (
+                            <SelectItem key={admin.id} value={admin.id}>
+                              {admin.firstName} {admin.lastName} ({admin.role})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                       <Button 
                         variant="outline" 
                         size="sm" 
@@ -379,20 +401,18 @@ export default function AdminEscalationsPage() {
                         Assign
                       </Button>
                     </div>
-                    <label className="flex items-center gap-2 text-sm text-gray-600">
-                      <input
-                        type="checkbox"
+                    <Label className="flex items-center gap-2 text-sm font-normal text-gray-600 cursor-pointer">
+                      <Checkbox
                         checked={isInternalNote}
-                        onChange={(e) => setIsInternalNote(e.target.checked)}
-                        className="rounded border-gray-300"
+                        onCheckedChange={(checked) => setIsInternalNote(checked === true)}
                       />
                       <EyeOff className="h-4 w-4" />
                       Internal note (hidden from student)
-                    </label>
+                    </Label>
                   </div>
                   <div className="flex gap-2">
-                    <textarea
-                      className="flex-1 border rounded-lg px-3 py-2 min-h-[80px] text-sm"
+                    <Textarea
+                      className="flex-1 min-h-[80px]"
                       placeholder={isInternalNote ? "Add an internal note..." : "Type your reply..."}
                       value={replyMessage}
                       onChange={(e) => setReplyMessage(e.target.value)}
@@ -440,30 +460,28 @@ export default function AdminEscalationsPage() {
       </div>
 
       <div className="flex flex-wrap gap-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-          <select
-            className="border rounded-lg px-3 py-2 text-sm"
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-          >
-            <option value="all">All Statuses</option>
-            <option value="ESCALATED">Escalated</option>
-            <option value="RESOLVED">Resolved</option>
-          </select>
+        <div className="space-y-1">
+          <Label>Status</Label>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Statuses</SelectItem>
+              <SelectItem value="ESCALATED">Escalated</SelectItem>
+              <SelectItem value="RESOLVED">Resolved</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-          <select
-            className="border rounded-lg px-3 py-2 text-sm"
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
-          >
-            <option value="all">All Categories</option>
-            {categories.map((cat) => (
-              <option key={cat} value={cat}>{cat.charAt(0) + cat.slice(1).toLowerCase()}</option>
-            ))}
-          </select>
+        <div className="space-y-1">
+          <Label>Category</Label>
+          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+            <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Categories</SelectItem>
+              {categories.map((cat) => (
+                <SelectItem key={cat} value={cat}>{cat.charAt(0) + cat.slice(1).toLowerCase()}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 

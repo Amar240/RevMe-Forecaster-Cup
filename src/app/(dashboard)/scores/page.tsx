@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { FileText, CheckCircle, AlertCircle, TrendingDown, BarChart3, Filter, ChevronDown, ChevronUp, Download, TrendingUp, Trophy } from 'lucide-react'
+import { toast } from 'sonner'
 import { CardSkeleton, ChartSkeleton, TableSkeleton } from '@/components/ui/skeleton'
 
 const ScoreTrendChart = dynamic(
@@ -15,7 +16,7 @@ const ScoreTrendChart = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="h-[280px] w-full rounded-lg bg-gray-50 animate-pulse" />
+      <div className="h-[280px] w-full rounded-lg bg-gray-50 dark:bg-gray-800 animate-pulse" />
     ),
   }
 )
@@ -93,6 +94,7 @@ export default function ScoresPage() {
       }
     } catch (error) {
       clientLogger.error('Failed to fetch scores:', error)
+      toast.error('Failed to load scores')
     } finally {
       setLoading(false)
     }
@@ -114,6 +116,7 @@ export default function ScoresPage() {
       }
     } catch (error) {
       clientLogger.error('Failed to download:', error)
+      toast.error('Failed to download scores')
     }
   }
 
@@ -128,8 +131,8 @@ export default function ScoresPage() {
       <div className="space-y-8">
         <div className="flex items-center justify-between">
           <div className="space-y-2">
-            <div className="h-8 w-32 bg-gray-200 rounded animate-pulse" />
-            <div className="h-4 w-48 bg-gray-200 rounded animate-pulse" />
+            <div className="h-8 w-32 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+            <div className="h-4 w-48 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
           </div>
         </div>
         <div className="grid md:grid-cols-3 gap-6">
@@ -155,11 +158,11 @@ export default function ScoresPage() {
       <div className="max-w-lg mx-auto mt-12">
         <Card>
           <CardContent className="py-16 text-center">
-            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">
               <AlertCircle className="h-8 w-8 text-gray-400" />
             </div>
-            <h3 className="text-xl font-bold text-gray-900 mb-2">Not on a Team</h3>
-            <p className="text-gray-500">You need to be added to a team to view scores.</p>
+            <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">Not on a Team</h3>
+            <p className="text-gray-500 dark:text-gray-400">You need to be added to a team to view scores.</p>
           </CardContent>
         </Card>
       </div>
@@ -196,8 +199,8 @@ export default function ScoresPage() {
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">My Scores</h1>
-          <p className="text-gray-500">Team: {team.name}</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">My Scores</h1>
+          <p className="text-gray-500 dark:text-gray-400">Team: {team.name}</p>
         </div>
         <Button variant="outline" onClick={handleDownload}>
           <Download className="h-4 w-4 mr-2" />
@@ -219,10 +222,10 @@ export default function ScoresPage() {
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-amber-50 to-white border-amber-200">
+        <Card className="bg-gradient-to-br from-amber-50 to-white dark:from-amber-950/30 dark:to-gray-900 border-amber-200 dark:border-amber-800">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">Final Score</CardTitle>
-            <div className="p-2 bg-amber-100 rounded-lg">
+            <CardTitle className="text-sm font-medium text-gray-600 dark:text-gray-400">Final Score</CardTitle>
+            <div className="p-2 bg-amber-100 dark:bg-amber-900/40 rounded-lg">
               <Trophy className="h-5 w-5 text-amber-600" />
             </div>
           </CardHeader>
@@ -232,14 +235,14 @@ export default function ScoresPage() {
                 ? ((((totalOccupancyAPE / scoredCount) + (totalAdrAPE / scoredCount)) / 2) * 100).toFixed(2) + '%'
                 : '-'}
             </p>
-            <p className="text-sm text-gray-500">(Occupancy MAPE + ADR MAPE) / 2</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">(Occupancy MAPE + ADR MAPE) / 2</p>
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-blue-50 to-white border-blue-100">
+        <Card className="bg-gradient-to-br from-blue-50 to-white dark:from-blue-950/30 dark:to-gray-900 border-blue-100 dark:border-blue-800">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">Occupancy MAPE</CardTitle>
-            <div className="p-2 bg-blue-100 rounded-lg">
+            <CardTitle className="text-sm font-medium text-gray-600 dark:text-gray-400">Occupancy MAPE</CardTitle>
+            <div className="p-2 bg-blue-100 dark:bg-blue-900/40 rounded-lg">
               <TrendingDown className="h-5 w-5 text-blue-600" />
             </div>
           </CardHeader>
@@ -247,14 +250,14 @@ export default function ScoresPage() {
             <p className="text-4xl font-bold text-blue-600">
               {scoredCount > 0 ? `${((totalOccupancyAPE / scoredCount) * 100).toFixed(2)}%` : '-'}
             </p>
-            <p className="text-sm text-gray-500">lower is better</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">lower is better</p>
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-emerald-50 to-white border-emerald-100">
+        <Card className="bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-950/30 dark:to-gray-900 border-emerald-100 dark:border-emerald-800">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">ADR MAPE</CardTitle>
-            <div className="p-2 bg-emerald-100 rounded-lg">
+            <CardTitle className="text-sm font-medium text-gray-600 dark:text-gray-400">ADR MAPE</CardTitle>
+            <div className="p-2 bg-emerald-100 dark:bg-emerald-900/40 rounded-lg">
               <BarChart3 className="h-5 w-5 text-emerald-600" />
             </div>
           </CardHeader>
@@ -262,7 +265,7 @@ export default function ScoresPage() {
             <p className="text-4xl font-bold text-emerald-600">
               {scoredCount > 0 ? ((totalAdrAPE / scoredCount) * 100).toFixed(2) + '%' : '-'}
             </p>
-            <p className="text-sm text-gray-500">lower is better</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">lower is better</p>
           </CardContent>
         </Card>
       </div>
@@ -285,14 +288,14 @@ export default function ScoresPage() {
       {markets.length > 1 && (
         <div className="flex items-center space-x-2">
           <Filter className="h-4 w-4 text-gray-400" />
-          <span className="text-sm text-gray-500">Filter by market:</span>
+          <span className="text-sm text-gray-500 dark:text-gray-400">Filter by market:</span>
           <div className="flex space-x-2">
             <button
               onClick={() => setFilterMarket('all')}
               className={`px-3 py-1 text-sm rounded-full transition-colors ${
                 filterMarket === 'all'
-                  ? 'bg-blue-100 text-blue-700'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300'
+                  : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-800/50'
               }`}
             >
               All
@@ -303,8 +306,8 @@ export default function ScoresPage() {
                 onClick={() => setFilterMarket(market)}
                 className={`px-3 py-1 text-sm rounded-full transition-colors ${
                   filterMarket === market
-                    ? 'bg-blue-100 text-blue-700'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300'
+                    : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-800/50'
                 }`}
               >
                 {market}
@@ -317,11 +320,11 @@ export default function ScoresPage() {
       {Object.keys(filteredSubmissionsByRound).length === 0 ? (
         <Card>
           <CardContent className="py-16 text-center">
-            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">
               <FileText className="h-8 w-8 text-gray-400" />
             </div>
-            <h3 className="text-xl font-bold text-gray-900 mb-2">No Submissions Yet</h3>
-            <p className="text-gray-500">Your team hasn&apos;t submitted any forecasts yet.</p>
+            <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">No Submissions Yet</h3>
+            <p className="text-gray-500 dark:text-gray-400">Your team hasn&apos;t submitted any forecasts yet.</p>
           </CardContent>
         </Card>
       ) : (
@@ -346,17 +349,17 @@ export default function ScoresPage() {
                     onClick={() => toggleRound(parseInt(roundNum))}
                     className="w-full text-left"
                   >
-                    <CardHeader className="bg-gray-50 hover:bg-gray-100 transition-colors">
+                    <CardHeader className="bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-800/50 transition-colors">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-4">
                           <CardTitle>Round {roundNum}</CardTitle>
                           {hasScores ? (
-                            <span className="flex items-center text-sm text-green-600 bg-green-100 px-2 py-1 rounded-full">
+                            <span className="flex items-center text-sm text-green-600 bg-green-100 dark:bg-green-900/40 px-2 py-1 rounded-full">
                               <CheckCircle className="h-3 w-3 mr-1" />
                               Scored
                             </span>
                           ) : (
-                            <span className="text-sm text-gray-500 bg-gray-200 px-2 py-1 rounded-full">
+                            <span className="text-sm text-gray-500 dark:text-gray-400 bg-gray-200 dark:bg-gray-700 px-2 py-1 rounded-full">
                               Pending
                             </span>
                           )}
@@ -364,8 +367,12 @@ export default function ScoresPage() {
                         <div className="flex items-center space-x-6">
                           {hasScores && (
                             <div className="flex space-x-4 text-sm">
-                              <span className="text-blue-600">Occ: {(roundOccMAPE * 100).toFixed(2)}%</span>
-                              <span className="text-emerald-600">ADR: {(roundAdrMAPE * 100).toFixed(2)}%</span>
+                              <span className="text-blue-600">
+                                Occ: {roundOccMAPE !== null ? `${(roundOccMAPE * 100).toFixed(2)}%` : '--'}
+                              </span>
+                              <span className="text-emerald-600">
+                                ADR: {roundAdrMAPE !== null ? `${(roundAdrMAPE * 100).toFixed(2)}%` : '--'}
+                              </span>
                               {roundFinalMAPE !== null && (
                                 <span className="text-amber-600">Final: {(roundFinalMAPE * 100).toFixed(2)}%</span>
                               )}
@@ -385,7 +392,7 @@ export default function ScoresPage() {
                       <div className="overflow-x-auto">
                         <table className="w-full text-sm">
                           <thead>
-                            <tr className="text-left text-gray-500 border-b bg-gray-50">
+                            <tr className="text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
                               <th className="px-6 py-3">Market</th>
                               <th className="px-6 py-3">Week</th>
                               <th className="px-6 py-3 text-right">Occupancy</th>
@@ -400,10 +407,10 @@ export default function ScoresPage() {
                           </thead>
                           <tbody>
                             {subs.map((sub) => (
-                              <tr key={sub.id} className="border-b last:border-0 hover:bg-gray-50">
+                              <tr key={sub.id} className="border-b border-gray-200 dark:border-gray-700 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-800">
                                 <td className="px-6 py-4 font-medium">{sub.market.name}</td>
                                 <td className="px-6 py-4">
-                                  <span className="bg-gray-100 px-2 py-1 rounded text-gray-600">
+                                  <span className="bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded text-gray-600 dark:text-gray-400">
                                     +{sub.weekOffset}
                                   </span>
                                 </td>

@@ -9,6 +9,10 @@ import { useState, useEffect, useCallback } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { toast } from 'sonner'
 import { 
   Loader2, 
   Send, 
@@ -86,6 +90,7 @@ export default function SupervisorSupportInboxPage() {
       }
     } catch (err) {
       clientLogger.error('Failed to fetch tickets:', err)
+      toast.error('Failed to load tickets')
     } finally {
       setLoading(false)
     }
@@ -165,6 +170,7 @@ export default function SupervisorSupportInboxPage() {
       }
     } catch (err) {
       clientLogger.error('Failed to resolve:', err)
+      toast.error('Failed to resolve ticket')
     } finally {
       setSubmitting(false)
     }
@@ -188,6 +194,7 @@ export default function SupervisorSupportInboxPage() {
       }
     } catch (err) {
       clientLogger.error('Failed to escalate:', err)
+      toast.error('Failed to escalate ticket')
     } finally {
       setSubmitting(false)
     }
@@ -349,8 +356,8 @@ export default function SupervisorSupportInboxPage() {
                     </label>
                   </div>
                   <div className="flex gap-2">
-                    <textarea
-                      className="flex-1 border rounded-lg px-3 py-2 min-h-[80px] text-sm"
+                    <Textarea
+                      className="flex-1 min-h-[80px]"
                       placeholder={isInternalNote ? "Add an internal note..." : "Type your reply..."}
                       value={replyMessage}
                       onChange={(e) => setReplyMessage(e.target.value)}
@@ -414,8 +421,8 @@ export default function SupervisorSupportInboxPage() {
                 <CardDescription>Please provide a reason for escalating this ticket.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <textarea
-                  className="w-full border rounded-lg px-3 py-2 min-h-[100px]"
+                <Textarea
+                  className="min-h-[100px]"
                   placeholder="Why are you escalating this ticket?"
                   value={escalationReason}
                   onChange={(e) => setEscalationReason(e.target.value)}
@@ -451,33 +458,31 @@ export default function SupervisorSupportInboxPage() {
       </div>
 
       <div className="flex flex-wrap gap-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-          <select
-            className="border rounded-lg px-3 py-2 text-sm"
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-          >
-            <option value="all">All Statuses</option>
-            <option value="OPEN">Open</option>
-            <option value="WAITING_ON_SUPERVISOR">Waiting on You</option>
-            <option value="WAITING_ON_STUDENT">Waiting on Student</option>
-            <option value="ESCALATED">Escalated</option>
-            <option value="RESOLVED">Resolved</option>
-          </select>
+        <div className="space-y-1">
+          <Label>Status</Label>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-[200px]"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Statuses</SelectItem>
+              <SelectItem value="OPEN">Open</SelectItem>
+              <SelectItem value="WAITING_ON_SUPERVISOR">Waiting on You</SelectItem>
+              <SelectItem value="WAITING_ON_STUDENT">Waiting on Student</SelectItem>
+              <SelectItem value="ESCALATED">Escalated</SelectItem>
+              <SelectItem value="RESOLVED">Resolved</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-          <select
-            className="border rounded-lg px-3 py-2 text-sm"
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
-          >
-            <option value="all">All Categories</option>
-            {categories.map((cat) => (
-              <option key={cat} value={cat}>{cat.charAt(0) + cat.slice(1).toLowerCase()}</option>
-            ))}
-          </select>
+        <div className="space-y-1">
+          <Label>Category</Label>
+          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+            <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Categories</SelectItem>
+              {categories.map((cat) => (
+                <SelectItem key={cat} value={cat}>{cat.charAt(0) + cat.slice(1).toLowerCase()}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 

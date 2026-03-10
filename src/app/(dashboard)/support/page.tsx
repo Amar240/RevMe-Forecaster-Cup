@@ -15,7 +15,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
 import { Loader2, MessageSquare, Send, Clock, CheckCircle, AlertCircle, User, ArrowUp, ThumbsUp, ThumbsDown, AlertTriangle } from 'lucide-react'
+import { AlertBanner } from '@/components/ui/alert-banner'
+import { toast } from 'sonner'
 
 export default function SupportPage() {
   const [tickets, setTickets] = useState<TicketSummary[]>([])
@@ -41,6 +45,7 @@ export default function SupportPage() {
       setSupervisorInfo(data.supervisor)
     } catch (err) {
       clientLogger.error('Failed to fetch supervisor:', err)
+      toast.error('Failed to load supervisor info')
     }
   }
 
@@ -50,6 +55,7 @@ export default function SupportPage() {
       setTickets(data.tickets || [])
     } catch (err) {
       clientLogger.error('Failed to fetch tickets:', err)
+      toast.error('Failed to load tickets')
     } finally {
       setLoading(false)
     }
@@ -69,6 +75,7 @@ export default function SupportPage() {
       fetchTickets()
     } catch (err) {
       clientLogger.error('Failed to create ticket:', err)
+      toast.error('Failed to create support ticket')
     } finally {
       setSubmitting(false)
     }
@@ -85,6 +92,7 @@ export default function SupportPage() {
       fetchTickets()
     } catch (err) {
       clientLogger.error('Failed to reply:', err)
+      toast.error('Failed to send reply')
     }
   }
 
@@ -98,6 +106,7 @@ export default function SupportPage() {
       fetchTickets()
     } catch (err) {
       clientLogger.error('Failed to submit feedback:', err)
+      toast.error('Failed to submit feedback')
     }
   }
 
@@ -242,19 +251,9 @@ export default function SupportPage() {
       )}
 
       {!supervisorInfo && (
-        <Card className="bg-amber-50 border-amber-200">
-          <CardContent className="py-4">
-            <div className="flex items-center gap-3">
-              <AlertTriangle className="h-5 w-5 text-amber-600" />
-              <div>
-                <p className="font-medium text-amber-900">No supervisor assigned yet</p>
-                <p className="text-sm text-amber-800">
-                  You need to be on a team before you can open a support ticket. Request to join a supervisor first.
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <AlertBanner variant="warning" title="No supervisor assigned yet">
+          You need to be on a team before you can open a support ticket. Request to join a supervisor first.
+        </AlertBanner>
       )}
 
       {showNewTicket && (
@@ -267,19 +266,18 @@ export default function SupportPage() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
+              <div className="space-y-2">
                 <Label>Category</Label>
-                <select
-                  className="w-full border rounded-lg px-3 py-2"
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                >
-                  <option value="GENERAL">General</option>
-                  <option value="LOGIN">Login Issues</option>
-                  <option value="SUBMISSION">Submission</option>
-                  <option value="SCORING">Scoring</option>
-                  <option value="TEAM">Team</option>
-                </select>
+                <Select value={category} onValueChange={setCategory}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="GENERAL">General</SelectItem>
+                    <SelectItem value="LOGIN">Login Issues</SelectItem>
+                    <SelectItem value="SUBMISSION">Submission</SelectItem>
+                    <SelectItem value="SCORING">Scoring</SelectItem>
+                    <SelectItem value="TEAM">Team</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div>
                 <Label>Subject</Label>
@@ -290,10 +288,10 @@ export default function SupportPage() {
                   required
                 />
               </div>
-              <div>
+              <div className="space-y-2">
                 <Label>Message</Label>
-                <textarea
-                  className="w-full border rounded-lg px-3 py-2 min-h-[100px]"
+                <Textarea
+                  className="min-h-[100px]"
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
                   placeholder="Describe your issue in detail..."

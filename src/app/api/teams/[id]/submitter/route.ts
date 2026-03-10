@@ -1,7 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/db'
-import { getSession } from '@/lib/auth'
+import { requireUserOrResponse, jsonOk, jsonError, parseJson, ApiError } from '@/server/http'
 import { z } from 'zod'
+
+export const dynamic = 'force-dynamic'
 
 const setSubmitterSchema = z.object({
   memberId: z.string(),
@@ -12,14 +14,11 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await getSession()
-    if (!user) {
-      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
-    }
+    const { user, response } = await requireUserOrResponse()
+    if (response) return response
 
     const { id } = await params
-    const body = await request.json()
-    const data = setSubmitterSchema.parse(body)
+    const data = await parseJson(request, setSubmitterSchema)
 
     const team = await prisma.team.findUnique({
       where: { id },
@@ -27,16 +26,16 @@ export async function PATCH(
     })
 
     if (!team) {
-      return NextResponse.json({ message: 'Team not found' }, { status: 404 })
+      throw new ApiError('Team not found', 404, 'NOT_FOUND')
     }
 
-    if (user.role !== 'ADMIN' && team.supervisorId !== user.id) {
-      return NextResponse.json({ message: 'Forbidden' }, { status: 403 })
+    if (user!.role !== 'ADMIN' && team.supervisorId !== user!.id) {
+      throw new ApiError('Forbidden', 403, 'FORBIDDEN')
     }
 
     const member = team.members.find((m) => m.id === data.memberId)
     if (!member) {
-      return NextResponse.json({ message: 'Member not found' }, { status: 404 })
+      throw new ApiError('Member not found', 404, 'NOT_FOUND')
     }
 
     await prisma.$transaction([
@@ -50,12 +49,8 @@ export async function PATCH(
       }),
     ])
 
-    return NextResponse.json({ message: 'Submitter updated' })
+    return jsonOk({ message: 'Submitter updated' })
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json({ message: 'Invalid input' }, { status: 400 })
-    }
-    console.error('Set submitter error:', error)
-    return NextResponse.json({ message: 'Failed to set submitter' }, { status: 500 })
+    return jsonError(error, 'Failed to set submitter')
   }
 }

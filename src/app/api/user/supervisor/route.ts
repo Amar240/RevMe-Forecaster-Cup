@@ -1,20 +1,19 @@
-import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
-import { getSession } from '@/lib/auth'
+import { requireUserOrResponse, jsonOk, jsonError } from '@/server/http'
+
+export const dynamic = 'force-dynamic'
 
 export async function GET() {
   try {
-    const user = await getSession()
-    if (!user) {
-      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
-    }
+    const { user, response } = await requireUserOrResponse()
+    if (response) return response
 
-    if (user.role !== 'STUDENT') {
-      return NextResponse.json({ supervisor: null })
+    if (user!.role !== 'STUDENT') {
+      return jsonOk({ supervisor: null })
     }
 
     const teamMembership = await prisma.teamMember.findFirst({
-      where: { userId: user.id },
+      where: { userId: user!.id },
       include: {
         team: {
           include: {
@@ -32,12 +31,11 @@ export async function GET() {
     })
 
     if (!teamMembership?.team?.supervisor) {
-      return NextResponse.json({ supervisor: null })
+      return jsonOk({ supervisor: null })
     }
 
-    return NextResponse.json({ supervisor: teamMembership.team.supervisor })
+    return jsonOk({ supervisor: teamMembership.team.supervisor })
   } catch (error) {
-    console.error('Failed to fetch supervisor:', error)
-    return NextResponse.json({ message: 'Failed to fetch supervisor' }, { status: 500 })
+    return jsonError(error, 'Failed to fetch supervisor')
   }
 }

@@ -12,12 +12,8 @@ async function parseJson<T>(res: Response): Promise<T> {
   return data as T
 }
 
-export async function listUsers(params: { page: number; pageSize: number }) {
-  const query = new URLSearchParams({
-    page: String(params.page),
-    pageSize: String(params.pageSize),
-  })
-  const res = await csrfFetch(`/api/admin/users?${query.toString()}`)
+export async function listUsers() {
+  const res = await csrfFetch('/api/admin/users')
   return parseJson<AdminUsersResponse>(res)
 }
 

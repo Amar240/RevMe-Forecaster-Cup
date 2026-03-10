@@ -1,7 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/db'
-import { getSession } from '@/lib/auth'
+import { requireAdminOrResponse, jsonOk, jsonError, parseJson, ApiError } from '@/server/http'
 import { z } from 'zod'
+
+export const dynamic = 'force-dynamic'
 
 const universitySchema = z.object({
   name: z.string().min(1),
@@ -10,59 +12,33 @@ const universitySchema = z.object({
 
 export async function GET() {
   try {
-    const user = await getSession()
-    if (!user || user.role !== 'ADMIN') {
-      return NextResponse.json({ message: 'Forbidden' }, { status: 403 })
-    }
+    const { response } = await requireAdminOrResponse()
+    if (response) return response
 
     const universities = await prisma.university.findMany({
-      include: {
-        _count: { select: { users: true, teams: true } },
-      },
+      include: { _count: { select: { users: true, teams: true } } },
       orderBy: { name: 'asc' },
     })
 
-    return NextResponse.json({ universities })
+    return jsonOk({ universities })
   } catch (error) {
-    console.error('Get universities error:', error)
-    return NextResponse.json({ message: 'Failed to get universities' }, { status: 500 })
+    return jsonError(error, 'Failed to get universities')
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await getSession()
-    if (!user || user.role !== 'ADMIN') {
-      return NextResponse.json({ message: 'Forbidden' }, { status: 403 })
-    }
+    const { response } = await requireAdminOrResponse()
+    if (response) return response
 
-    const body = await request.json()
-    const data = universitySchema.parse(body)
+    const data = await parseJson(request, universitySchema)
 
-    const existing = await prisma.university.findUnique({
-      where: { name: data.name },
-    })
+    const existing = await prisma.university.findUnique({ where: { name: data.name } })
+    if (existing) throw new ApiError('University already exists', 409, 'DUPLICATE')
 
-    if (existing) {
-      return NextResponse.json(
-        { message: 'University already exists' },
-        { status: 409 }
-      )
-    }
-
-    const university = await prisma.university.create({
-      data: {
-        name: data.name,
-        country: data.country || null,
-      },
-    })
-
-    return NextResponse.json({ university }, { status: 201 })
+    const university = await prisma.university.create({ data: { name: data.name, country: data.country || null } })
+    return jsonOk({ university }, 201)
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json({ message: 'Invalid input' }, { status: 400 })
-    }
-    console.error('Create university error:', error)
-    return NextResponse.json({ message: 'Failed to create university' }, { status: 500 })
+    return jsonError(error, 'Failed to create university')
   }
 }

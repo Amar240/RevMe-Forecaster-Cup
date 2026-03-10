@@ -10,6 +10,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Clock, Lock, Check, AlertTriangle, ChevronRight, MapPin, DollarSign, Send, Pause, Ban } from 'lucide-react'
+import { AlertBanner } from '@/components/ui/alert-banner'
+import { toast } from 'sonner'
 
 const LOCK_MESSAGES: Record<string, { title: string; description: string; icon: React.ComponentType<{ className?: string }> }> = {
   SEASON_NOT_ACTIVE: {
@@ -137,6 +139,7 @@ export default function SubmitPage() {
       setPredictions(initialPredictions)
     } catch (err) {
       clientLogger.error('Failed to fetch data:', err)
+      toast.error('Failed to load submission data')
     } finally {
       setLoading(false)
     }
@@ -191,7 +194,7 @@ export default function SubmitPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <div className="animate-pulse text-gray-500">Loading...</div>
+        <div className="flex flex-col items-center gap-3"><div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" /><p className="text-sm text-muted-foreground">Loading submissions…</p></div>
       </div>
     )
   }
@@ -208,7 +211,7 @@ export default function SubmitPage() {
             <p className="text-green-100">Your forecast has been locked and cannot be edited.</p>
           </div>
           <CardContent className="p-6 text-center">
-            <p className="text-gray-500">Redirecting to dashboard...</p>
+            <p className="text-gray-500 dark:text-gray-400">Redirecting to dashboard...</p>
           </CardContent>
         </Card>
       </div>
@@ -220,11 +223,11 @@ export default function SubmitPage() {
       <div className="max-w-lg mx-auto mt-12">
         <Card>
           <CardContent className="py-16 text-center">
-            <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <div className="w-16 h-16 bg-amber-100 dark:bg-amber-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
               <AlertTriangle className="h-8 w-8 text-amber-600" />
             </div>
-            <h2 className="text-xl font-bold text-gray-900 mb-2">Markets Not Configured</h2>
-            <p className="text-gray-500">This season needs exactly three active markets before submissions open.</p>
+            <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">Markets Not Configured</h2>
+            <p className="text-gray-500 dark:text-gray-400">This season needs exactly three active markets before submissions open.</p>
           </CardContent>
         </Card>
       </div>
@@ -236,11 +239,11 @@ export default function SubmitPage() {
       <div className="max-w-lg mx-auto mt-12">
         <Card>
           <CardContent className="py-16 text-center">
-            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">
               <Clock className="h-8 w-8 text-gray-400" />
             </div>
-            <h2 className="text-xl font-bold text-gray-900 mb-2">No Active Round</h2>
-            <p className="text-gray-500">There is no round open for submissions right now.</p>
+            <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">No Active Round</h2>
+            <p className="text-gray-500 dark:text-gray-400">There is no round open for submissions right now.</p>
           </CardContent>
         </Card>
       </div>
@@ -256,10 +259,10 @@ export default function SubmitPage() {
     return (
       <div className="max-w-2xl mx-auto space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
             Round {currentRound.number} Submission
           </h1>
-          <p className="text-gray-500">
+          <p className="text-gray-500 dark:text-gray-400">
             Deadline: {new Date(currentRound.closesAt).toLocaleString('en-US', { 
               timeZone: 'America/New_York',
               month: 'short',
@@ -271,9 +274,9 @@ export default function SubmitPage() {
           </p>
         </div>
 
-        <Card className="border-amber-200 bg-amber-50">
+        <Card className="border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/30">
           <CardContent className="py-8 text-center">
-            <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <div className="w-16 h-16 bg-amber-100 dark:bg-amber-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
               <LockIcon className="h-8 w-8 text-amber-600" />
             </div>
             <h2 className="text-xl font-bold text-amber-900 mb-2">{lockInfo.title}</h2>
@@ -291,23 +294,23 @@ export default function SubmitPage() {
           <CardContent>
             <div className="space-y-4">
               {markets.map((market) => (
-                <div key={market.id} className="p-4 bg-gray-50 rounded-lg">
+                <div key={market.id} className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
                   <div className="flex items-center space-x-2 mb-3">
-                    <MapPin className="h-4 w-4 text-gray-500" />
-                    <span className="font-medium text-gray-700">{market.name}</span>
+                    <MapPin className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+                    <span className="font-medium text-gray-700 dark:text-gray-300">{market.name}</span>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     {(currentRound.isFinal ? [1] : [1, 2]).map((week) => (
-                      <div key={week} className="p-3 bg-white rounded border border-gray-200">
-                        <p className="text-sm text-gray-500 mb-2">Week +{week}</p>
+                      <div key={week} className="p-3 bg-white dark:bg-gray-900 rounded border border-gray-200 dark:border-gray-700">
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">Week +{week}</p>
                         <div className="space-y-2">
                           <div className="flex items-center justify-between text-sm">
-                            <span className="text-gray-400">Occupancy</span>
-                            <span className="text-gray-300">---</span>
+                            <span className="text-gray-400 dark:text-gray-500">Occupancy</span>
+                            <span className="text-gray-300 dark:text-gray-400">---</span>
                           </div>
                           <div className="flex items-center justify-between text-sm">
-                            <span className="text-gray-400">ADR</span>
-                            <span className="text-gray-300">$---</span>
+                            <span className="text-gray-400 dark:text-gray-500">ADR</span>
+                            <span className="text-gray-300 dark:text-gray-400">$---</span>
                           </div>
                         </div>
                       </div>
@@ -327,11 +330,11 @@ export default function SubmitPage() {
       <div className="max-w-lg mx-auto mt-12">
         <Card>
           <CardContent className="py-16 text-center">
-            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">
               <Lock className="h-8 w-8 text-gray-400" />
             </div>
-            <h2 className="text-xl font-bold text-gray-900 mb-2">Cannot Submit</h2>
-            <p className="text-gray-500">
+            <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">Cannot Submit</h2>
+            <p className="text-gray-500 dark:text-gray-400">
               You are either not the team submitter, not on a team, or your team is not approved yet.
             </p>
           </CardContent>
@@ -348,15 +351,12 @@ export default function SubmitPage() {
             <ChevronRight className="h-4 w-4 mr-1 rotate-180" />
             Back to Edit
           </Button>
-          <h1 className="text-2xl font-bold text-gray-900">Review Your Submission</h1>
-          <p className="text-gray-500">Please review your predictions before submitting.</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Review Your Submission</h1>
+          <p className="text-gray-500 dark:text-gray-400">Please review your predictions before submitting.</p>
         </div>
 
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg flex items-center space-x-2">
-            <AlertTriangle className="h-5 w-5" />
-            <span>{error}</span>
-          </div>
+          <AlertBanner variant="error">{error}</AlertBanner>
         )}
 
         <div className="grid gap-6">
@@ -373,15 +373,15 @@ export default function SubmitPage() {
                   {(currentRound.isFinal ? [1] : [1, 2]).map((week) => {
                     const key = `${market.id}-${week}`
                     return (
-                      <div key={week} className="bg-gray-50 rounded-lg p-4">
-                        <h4 className="font-medium text-gray-700 mb-3">Week +{week}</h4>
+                      <div key={week} className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+                        <h4 className="font-medium text-gray-700 dark:text-gray-300 mb-3">Week +{week}</h4>
                         <div className="grid grid-cols-2 gap-4">
                           <div>
-                            <p className="text-sm text-gray-500">Occupancy</p>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">Occupancy</p>
                             <p className="text-lg font-semibold text-blue-600">{predictions[key]?.occupancy}</p>
                           </div>
                           <div>
-                            <p className="text-sm text-gray-500">ADR</p>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">ADR</p>
                             <p className="text-lg font-semibold text-emerald-600">${predictions[key]?.adr}</p>
                           </div>
                         </div>
@@ -394,7 +394,7 @@ export default function SubmitPage() {
           ))}
         </div>
 
-        <Card className="border-amber-200 bg-amber-50">
+        <Card className="border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/30">
           <CardContent className="py-4">
             <div className="flex items-start space-x-3">
               <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5" />
@@ -430,14 +430,14 @@ export default function SubmitPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+      <div className="max-w-4xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
             Round {currentRound.number} Submission
           </h1>
-          <p className="text-gray-500">
-            Deadline: {new Date(currentRound.closesAt).toLocaleString('en-US', { 
+          <p className="text-gray-500 dark:text-gray-400">
+            Deadline: {new Date(currentRound.closesAt).toLocaleString('en-US', {
               timeZone: 'America/New_York',
               month: 'short',
               day: 'numeric',
@@ -449,16 +449,16 @@ export default function SubmitPage() {
         </div>
         <div className="flex items-center space-x-2">
           <Clock className="h-4 w-4 text-amber-600" />
-          <span className="text-sm font-medium bg-amber-100 text-amber-700 px-3 py-1 rounded-full">
+          <span className="text-sm font-medium bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 px-3 py-1 rounded-full">
             {timeRemaining}
           </span>
         </div>
       </div>
 
       {hasExisting && (
-        <Card className="border-green-200 bg-gradient-to-r from-green-50 to-emerald-50">
+        <Card className="border-green-200 bg-gradient-to-r from-green-50 to-emerald-50 dark:border-green-800 dark:from-green-900/30 dark:to-emerald-900/30">
           <CardContent className="py-4 flex items-center space-x-3">
-            <div className="p-2 bg-green-100 rounded-full">
+            <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-full">
               <Lock className="h-5 w-5 text-green-600" />
             </div>
             <div>
@@ -470,10 +470,7 @@ export default function SubmitPage() {
       )}
 
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg flex items-center space-x-2">
-          <AlertTriangle className="h-5 w-5" />
-          <span>{error}</span>
-        </div>
+        <AlertBanner variant="error">{error}</AlertBanner>
       )}
 
       {!hasExisting && (
@@ -481,11 +478,11 @@ export default function SubmitPage() {
           <CardContent className="py-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
-                <span className="text-sm text-gray-500">Progress:</span>
-                <span className="font-semibold text-gray-900">{getFilledCount()} / {getTotalRequired()}</span>
-                <span className="text-sm text-gray-500">values entered</span>
+                <span className="text-sm text-gray-500 dark:text-gray-400">Progress:</span>
+                <span className="font-semibold text-gray-900 dark:text-gray-100">{getFilledCount()} / {getTotalRequired()}</span>
+                <span className="text-sm text-gray-500 dark:text-gray-400">values entered</span>
               </div>
-              <div className="w-48 bg-gray-200 rounded-full h-2">
+              <div className="w-48 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
                 <div 
                   className="bg-blue-600 h-2 rounded-full transition-all duration-300"
                   style={{ width: `${(getFilledCount() / getTotalRequired()) * 100}%` }}
@@ -496,7 +493,7 @@ export default function SubmitPage() {
         </Card>
       )}
 
-      <div className="flex space-x-2 border-b">
+      <div className="flex space-x-2 border-b dark:border-gray-700">
         {markets.map((market) => (
           <button
             key={market.id}
@@ -504,7 +501,7 @@ export default function SubmitPage() {
             className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
               activeMarket === market.id
                 ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
             }`}
           >
             <div className="flex items-center space-x-2">
@@ -531,9 +528,9 @@ export default function SubmitPage() {
               {(currentRound.isFinal ? [1] : [1, 2]).map((week) => {
                 const key = `${market.id}-${week}`
                 return (
-                  <div key={week} className="bg-gray-50 rounded-xl p-6">
-                    <h4 className="font-semibold text-gray-900 mb-4 flex items-center space-x-2">
-                      <span className="w-8 h-8 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-sm font-bold">
+                  <div key={week} className="bg-gray-50 dark:bg-gray-800 rounded-xl p-6">
+                    <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center space-x-2">
+                      <span className="w-8 h-8 bg-blue-100 dark:bg-blue-900/30 text-blue-600 rounded-full flex items-center justify-center text-sm font-bold">
                         +{week}
                       </span>
                       <span>Week +{week}</span>
@@ -569,7 +566,7 @@ export default function SubmitPage() {
                           <span>ADR ($)</span>
                         </Label>
                         <div className="relative">
-                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">$</span>
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500">$</span>
                           <Input
                             id={`${key}-adr`}
                             type="number"

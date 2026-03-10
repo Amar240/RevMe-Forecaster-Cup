@@ -6,8 +6,13 @@ const prisma = new PrismaClient()
 async function main() {
   console.log('Seeding database...')
 
-  const adminEmail = 'admin@udel.edu'
-  const adminPassword = 'Admin@123'
+  const adminEmail = process.env.SEED_ADMIN_EMAIL
+  const adminPassword = process.env.SEED_ADMIN_PASSWORD
+
+  if (!adminEmail || !adminPassword) {
+    console.log('SEED_ADMIN_EMAIL or SEED_ADMIN_PASSWORD not set. Skipping admin seed.')
+    return
+  }
 
   let admin = await prisma.user.findUnique({ where: { email: adminEmail } })
   if (!admin) {
@@ -21,13 +26,13 @@ async function main() {
         role: 'ADMIN',
       },
     })
-    console.log('Admin user created: admin@udel.edu / Admin@123')
+    console.log(`Admin user created: ${adminEmail}`)
   } else {
     console.log('Admin user already exists')
   }
 
   console.log('\\n=== Admin Credentials ===')
-  console.log('Admin:      admin@udel.edu / Admin@123')
+  console.log(`Admin:      ${adminEmail} / [hidden]`)
   console.log('==========================\\n')
 }
 

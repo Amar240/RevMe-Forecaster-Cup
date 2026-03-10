@@ -1,6 +1,7 @@
 'use client'
 
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
+import type { TooltipContentProps } from 'recharts/types/component/Tooltip'
 
 interface ScoreData {
   round: string
@@ -29,7 +30,7 @@ export function ScoreTrendChart({ data, height = 300 }: ScoreTrendChartProps) {
 
   const formatPercent = (value: number) => `${value.toFixed(2)}%`
 
-  const renderTooltip = ({ active, payload, label }: { active?: boolean; payload?: Array<{ name?: string; value?: number }>; label?: string }) => {
+  const renderTooltip = ({ active, payload, label }: TooltipContentProps<number, string>) => {
     if (!active || !payload || payload.length === 0) return null
     const occ = payload.find((p) => p.name === 'Occupancy MAPE')?.value
     const adr = payload.find((p) => p.name === 'ADR MAPE')?.value
@@ -38,8 +39,8 @@ export function ScoreTrendChart({ data, height = 300 }: ScoreTrendChartProps) {
     const finalValue = hasOcc && hasAdr ? (occ + adr) / 2 : null
 
     return (
-      <div className="rounded-lg border border-gray-200 bg-white px-3 py-2 shadow-sm">
-        <div className="text-sm font-semibold text-gray-900">{label}</div>
+      <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2 shadow-sm">
+        <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{label}</div>
         {hasOcc && <div className="text-sm text-blue-600">Occupancy MAPE: {formatPercent(occ)}</div>}
         {hasAdr && <div className="text-sm text-emerald-600">ADR MAPE: {formatPercent(adr)}</div>}
         {finalValue !== null && (

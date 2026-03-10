@@ -1,15 +1,12 @@
-import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
-import { getSession } from '@/lib/auth'
-import { canPerformAdminAction } from '@/lib/permissions'
+import { requireAdminOrResponse, jsonOk, jsonError } from '@/server/http'
+
+export const dynamic = 'force-dynamic'
 
 export async function GET() {
   try {
-    const user = await getSession()
-    const canManage = await canPerformAdminAction(user, 'users:manage')
-    if (!canManage) {
-      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
-    }
+    const { response } = await requireAdminOrResponse('users:manage')
+    if (response) return response
 
     const users = await prisma.user.findMany({
       include: {
@@ -19,9 +16,8 @@ export async function GET() {
       orderBy: { createdAt: 'desc' },
     })
 
-    return NextResponse.json({ users })
+    return jsonOk({ users, total: users.length })
   } catch (error) {
-    console.error('Get users error:', error)
-    return NextResponse.json({ message: 'Failed to get users' }, { status: 500 })
+    return jsonError(error, 'Failed to get users')
   }
 }

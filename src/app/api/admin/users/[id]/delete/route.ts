@@ -1,72 +1,48 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/db'
-import { getSession } from '@/lib/auth'
+import { requireAdminOrResponse, jsonOk, jsonError, ApiError } from '@/server/http'
 import { logAuditAction } from '@/lib/audit'
+
+export const dynamic = 'force-dynamic'
 
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await getSession()
-    if (!user || user.role !== 'ADMIN') {
-      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
-    }
+    const { user, response } = await requireAdminOrResponse()
+    if (response) return response
 
     const { id } = await params
-
     const targetUser = await prisma.user.findUnique({ where: { id } })
-    if (!targetUser) {
-      return NextResponse.json({ message: 'User not found' }, { status: 404 })
-    }
+    if (!targetUser) throw new ApiError('User not found', 404, 'NOT_FOUND')
+    if (targetUser.id === user!.id) throw new ApiError('Cannot delete yourself', 400, 'INVALID_INPUT')
+    if (targetUser.role === 'ADMIN') throw new ApiError('Cannot delete admin users', 400, 'FORBIDDEN')
 
-    if (targetUser.id === user.id) {
-      return NextResponse.json({ message: 'Cannot delete yourself' }, { status: 400 })
-    }
-
-    if (targetUser.role === 'ADMIN') {
-      return NextResponse.json({ message: 'Cannot delete admin users' }, { status: 400 })
-    }
-
-    await prisma.session.deleteMany({ where: { userId: id } })
-    await prisma.notification.deleteMany({ where: { userId: id } })
-    await prisma.userPermission.deleteMany({ where: { userId: id } })
-    await prisma.supportTicketReply.deleteMany({ where: { authorId: id } })
-    await prisma.supportTicket.updateMany({ 
-      where: { assignedToId: id },
-      data: { assignedToId: null }
-    })
-    await prisma.supportTicket.deleteMany({ where: { createdById: id } })
-    await prisma.joinRequest.deleteMany({ where: { studentId: id } })
-    await prisma.joinRequest.updateMany({
-      where: { supervisorId: id },
-      data: { supervisorId: null }
-    })
-    
-    const isSupervisor = targetUser.role === 'SUPERVISOR'
-    if (isSupervisor) {
-      const supervisedTeams = await prisma.team.findMany({
-        where: { supervisorId: id }
-      })
+    if (targetUser.role === 'SUPERVISOR') {
+      const supervisedTeams = await prisma.team.findMany({ where: { supervisorId: id } })
       if (supervisedTeams.length > 0) {
-        return NextResponse.json({ 
-          message: 'Cannot delete supervisor with active teams. Please reassign their teams first.' 
-        }, { status: 400 })
+        throw new ApiError('Cannot delete supervisor with active teams. Please reassign their teams first.', 400, 'INVALID_INPUT')
       }
     }
-    
-    await prisma.teamMember.deleteMany({ where: { userId: id } })
-    await prisma.user.delete({ where: { id } })
 
-    await logAuditAction(user.id, 'DELETE_USER', 'User', id, {
-      deletedUserEmail: targetUser.email,
-      deletedUserRole: targetUser.role,
+    await prisma.$transaction(async (tx) => {
+      await tx.session.deleteMany({ where: { userId: id } })
+      await tx.notification.deleteMany({ where: { userId: id } })
+      await tx.userPermission.deleteMany({ where: { userId: id } })
+      await tx.supportTicketReply.deleteMany({ where: { authorId: id } })
+      await tx.supportTicket.updateMany({ where: { assignedToId: id }, data: { assignedToId: null } })
+      await tx.supportTicket.deleteMany({ where: { createdById: id } })
+      await tx.joinRequest.deleteMany({ where: { studentId: id } })
+      await tx.joinRequest.updateMany({ where: { supervisorId: id }, data: { supervisorId: null } })
+      await tx.teamMember.deleteMany({ where: { userId: id } })
+      await tx.user.delete({ where: { id } })
     })
 
-    return NextResponse.json({ message: 'User deleted successfully' })
+    await logAuditAction(user!.id, 'DELETE_USER', 'User', id, { deletedUserEmail: targetUser.email, deletedUserRole: targetUser.role })
+
+    return jsonOk({ message: 'User deleted successfully' })
   } catch (error) {
-    console.error('Delete user error:', error)
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-    return NextResponse.json({ message: `Failed to delete user: ${errorMessage}` }, { status: 500 })
+    return jsonError(error, 'Failed to delete user')
   }
 }

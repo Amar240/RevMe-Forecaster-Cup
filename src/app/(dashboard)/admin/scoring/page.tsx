@@ -9,7 +9,11 @@ import { useState, useEffect, useCallback } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { AccessDenied } from '@/components/ui/access-denied'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { usePermissions } from '@/hooks/usePermissions'
+import { toast } from 'sonner'
+import { PreflightCheck } from '@/components/admin/scoring/PreflightCheck'
+import { AnomalyAlerts } from '@/components/admin/scoring/AnomalyAlerts'
 import { 
   Calculator, 
   Check, 
@@ -71,6 +75,7 @@ export default function ScoringControlCenterPage() {
   const [scopeMode, setScopeMode] = useState<'all' | 'round'>('all')
   const [seasonName, setSeasonName] = useState('')
   const [hasStaleScores, setHasStaleScores] = useState(false)
+  const [preflightOpen, setPreflightOpen] = useState(false)
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -85,6 +90,7 @@ export default function ScoringControlCenterPage() {
       }
     } catch (err) {
       clientLogger.error('Failed to fetch data:', err)
+      toast.error('Failed to load scoring data')
     } finally {
       setLoading(false)
     }
@@ -98,8 +104,33 @@ export default function ScoringControlCenterPage() {
 
   if (permLoading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+      <div className="max-w-6xl mx-auto space-y-8 animate-pulse">
+        <div className="flex items-center justify-between">
+          <div className="space-y-2">
+            <div className="h-7 bg-gray-200 dark:bg-gray-700 rounded w-64" />
+            <div className="h-4 bg-gray-100 dark:bg-gray-800 rounded w-48" />
+          </div>
+          <div className="h-9 bg-gray-200 dark:bg-gray-700 rounded w-24" />
+        </div>
+        <div className="grid md:grid-cols-2 gap-6">
+          <div className="border dark:border-gray-700 rounded-lg p-6 space-y-4">
+            <div className="h-5 bg-gray-200 dark:bg-gray-700 rounded w-32" />
+            <div className="h-4 bg-gray-100 dark:bg-gray-800 rounded w-full" />
+            <div className="h-4 bg-gray-100 dark:bg-gray-800 rounded w-3/4" />
+            <div className="h-4 bg-gray-100 dark:bg-gray-800 rounded w-1/2" />
+          </div>
+          <div className="border dark:border-gray-700 rounded-lg p-6 space-y-4">
+            <div className="h-5 bg-gray-200 dark:bg-gray-700 rounded w-40" />
+            <div className="h-4 bg-gray-100 dark:bg-gray-800 rounded w-full" />
+            <div className="h-4 bg-gray-100 dark:bg-gray-800 rounded w-3/4" />
+            <div className="h-4 bg-gray-100 dark:bg-gray-800 rounded w-1/2" />
+          </div>
+        </div>
+        <div className="border dark:border-gray-700 rounded-lg p-6 space-y-4">
+          <div className="h-5 bg-gray-200 dark:bg-gray-700 rounded w-28" />
+          <div className="h-4 bg-gray-100 dark:bg-gray-800 rounded w-full" />
+          <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded w-32" />
+        </div>
       </div>
     )
   }
@@ -177,8 +208,33 @@ export default function ScoringControlCenterPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <RefreshCw className="h-8 w-8 animate-spin text-gray-400" />
+      <div className="max-w-6xl mx-auto space-y-8 animate-pulse">
+        <div className="flex items-center justify-between">
+          <div className="space-y-2">
+            <div className="h-7 bg-gray-200 dark:bg-gray-700 rounded w-64" />
+            <div className="h-4 bg-gray-100 dark:bg-gray-800 rounded w-48" />
+          </div>
+          <div className="h-9 bg-gray-200 dark:bg-gray-700 rounded w-24" />
+        </div>
+        <div className="grid md:grid-cols-2 gap-6">
+          <div className="border dark:border-gray-700 rounded-lg p-6 space-y-4">
+            <div className="h-5 bg-gray-200 dark:bg-gray-700 rounded w-32" />
+            <div className="h-4 bg-gray-100 dark:bg-gray-800 rounded w-full" />
+            <div className="h-4 bg-gray-100 dark:bg-gray-800 rounded w-3/4" />
+            <div className="h-4 bg-gray-100 dark:bg-gray-800 rounded w-1/2" />
+          </div>
+          <div className="border dark:border-gray-700 rounded-lg p-6 space-y-4">
+            <div className="h-5 bg-gray-200 dark:bg-gray-700 rounded w-40" />
+            <div className="h-4 bg-gray-100 dark:bg-gray-800 rounded w-full" />
+            <div className="h-4 bg-gray-100 dark:bg-gray-800 rounded w-3/4" />
+            <div className="h-4 bg-gray-100 dark:bg-gray-800 rounded w-1/2" />
+          </div>
+        </div>
+        <div className="border dark:border-gray-700 rounded-lg p-6 space-y-4">
+          <div className="h-5 bg-gray-200 dark:bg-gray-700 rounded w-28" />
+          <div className="h-4 bg-gray-100 dark:bg-gray-800 rounded w-full" />
+          <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded w-32" />
+        </div>
       </div>
     )
   }
@@ -187,8 +243,8 @@ export default function ScoringControlCenterPage() {
     <div className="max-w-6xl mx-auto space-y-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Scoring Control Center</h1>
-          <p className="text-gray-600">{seasonName || 'Manage scoring and calculations'}</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Scoring Control Center</h1>
+          <p className="text-gray-600 dark:text-gray-400">{seasonName || 'Manage scoring and calculations'}</p>
         </div>
         <Button variant="outline" onClick={fetchData} disabled={loading}>
           <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
@@ -209,7 +265,7 @@ export default function ScoringControlCenterPage() {
               </div>
             </div>
             <Button 
-              onClick={runScoring}
+              onClick={() => setPreflightOpen(true)}
               disabled={running}
               className="bg-amber-600 hover:bg-amber-700"
             >
@@ -221,7 +277,7 @@ export default function ScoringControlCenterPage() {
       )}
 
       {result && (
-        <Card className={result.success ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}>
+        <Card className={result.success ? 'border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/30' : 'border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/30'}>
           <CardContent className="py-4 flex items-center space-x-3">
             {result.success ? (
               <Check className="h-5 w-5 text-green-600" />
@@ -233,7 +289,7 @@ export default function ScoringControlCenterPage() {
                 {result.message}
               </p>
               {result.count !== undefined && (
-                <p className="text-sm text-gray-600">
+                <p className="text-sm text-gray-600 dark:text-gray-400">
                   {result.count} records processed
                 </p>
               )}
@@ -256,21 +312,21 @@ export default function ScoringControlCenterPage() {
           <CardContent>
             <div className="space-y-3">
               {roundStatuses.length === 0 ? (
-                <p className="text-gray-500 text-sm">No rounds configured</p>
+                <p className="text-gray-500 dark:text-gray-400 text-sm">No rounds configured</p>
               ) : (
                 roundStatuses.map((r) => (
-                  <div key={r.id} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
+                  <div key={r.id} className="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-700 last:border-0">
                     <div className="flex items-center space-x-2">
-                      <span className="font-medium text-gray-900">
+                      <span className="font-medium text-gray-900 dark:text-gray-100">
                         Round {r.number} {r.isFinal && '(Final)'}
                       </span>
                       {r.isLockedActuals && (
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs bg-gray-100 text-gray-600">
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
                           <Lock className="h-3 w-3" />
                         </span>
                       )}
                       {r.scoresStale && (
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs bg-amber-100 text-amber-700">
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300">
                           <AlertTriangle className="h-3 w-3" />
                         </span>
                       )}
@@ -282,7 +338,7 @@ export default function ScoringControlCenterPage() {
                       {r.actualsCount === r.expectedActuals ? (
                         <CheckCircle className="h-4 w-4 text-green-600" />
                       ) : (
-                        <XCircle className="h-4 w-4 text-gray-300" />
+                        <XCircle className="h-4 w-4 text-gray-300 dark:text-gray-600" />
                       )}
                     </div>
                   </div>
@@ -305,12 +361,12 @@ export default function ScoringControlCenterPage() {
           <CardContent>
             <div className="space-y-3">
               {roundStatuses.length === 0 ? (
-                <p className="text-gray-500 text-sm">No rounds configured</p>
+                <p className="text-gray-500 dark:text-gray-400 text-sm">No rounds configured</p>
               ) : (
                 roundStatuses.map((r) => (
-                  <div key={r.id} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
+                  <div key={r.id} className="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-700 last:border-0">
                     <div className="flex items-center space-x-3">
-                      <span className="font-medium text-gray-900">
+                      <span className="font-medium text-gray-900 dark:text-gray-100">
                         Round {r.number}
                       </span>
                     </div>
@@ -321,7 +377,7 @@ export default function ScoringControlCenterPage() {
                       {r.teamsWithSubmissions === r.totalActiveTeams ? (
                         <CheckCircle className="h-4 w-4 text-green-600" />
                       ) : (
-                        <XCircle className="h-4 w-4 text-gray-300" />
+                        <XCircle className="h-4 w-4 text-gray-300 dark:text-gray-600" />
                       )}
                     </div>
                   </div>
@@ -355,7 +411,7 @@ export default function ScoringControlCenterPage() {
                 onChange={() => setScopeMode('all')}
                 className="text-blue-600"
               />
-              <label htmlFor="scope-all" className="text-sm font-medium text-gray-700">
+              <label htmlFor="scope-all" className="text-sm font-medium text-gray-700 dark:text-gray-300">
                 Score All Rounds
               </label>
             </div>
@@ -369,30 +425,28 @@ export default function ScoringControlCenterPage() {
                 onChange={() => setScopeMode('round')}
                 className="text-blue-600"
               />
-              <label htmlFor="scope-round" className="text-sm font-medium text-gray-700">
+              <label htmlFor="scope-round" className="text-sm font-medium text-gray-700 dark:text-gray-300">
                 Specific Round
               </label>
             </div>
           </div>
 
           {scopeMode === 'round' && (
-            <select
-              value={selectedRound || ''}
-              onChange={(e) => setSelectedRound(e.target.value)}
-              className="w-full p-2 border border-gray-300 rounded-lg"
-            >
-              <option value="">Select a round...</option>
-              {roundStatuses.map((r) => (
-                <option key={r.id} value={r.id}>
-                  Round {r.number} {r.isFinal ? '(Final)' : ''} - {r.actualsCount}/{r.expectedActuals} actuals
-                </option>
-              ))}
-            </select>
+            <Select value={selectedRound || ''} onValueChange={setSelectedRound}>
+              <SelectTrigger><SelectValue placeholder="Select a round..." /></SelectTrigger>
+              <SelectContent>
+                {roundStatuses.map((r) => (
+                  <SelectItem key={r.id} value={r.id}>
+                    Round {r.number} {r.isFinal ? '(Final)' : ''} - {r.actualsCount}/{r.expectedActuals} actuals
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           )}
 
           <div className="flex space-x-3">
             <Button 
-              onClick={runScoring} 
+              onClick={() => setPreflightOpen(true)} 
               disabled={running || (scopeMode === 'round' && !selectedRound)}
               className="bg-emerald-600 hover:bg-emerald-700"
             >
@@ -420,7 +474,7 @@ export default function ScoringControlCenterPage() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center space-x-2">
-            <Clock className="h-5 w-5 text-gray-600" />
+            <Clock className="h-5 w-5 text-gray-600 dark:text-gray-400" />
             <span>Recent Scoring Runs</span>
           </CardTitle>
           <CardDescription>
@@ -429,12 +483,12 @@ export default function ScoringControlCenterPage() {
         </CardHeader>
         <CardContent>
           {scoringRuns.length === 0 ? (
-            <p className="text-gray-500 text-sm">No scoring runs yet</p>
+            <p className="text-gray-500 dark:text-gray-400 text-sm">No scoring runs yet</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b text-left text-gray-500">
+                  <tr className="border-b dark:border-gray-700 text-left text-gray-500 dark:text-gray-400">
                     <th className="pb-2 font-medium">When</th>
                     <th className="pb-2 font-medium">Admin</th>
                     <th className="pb-2 font-medium">Scope</th>
@@ -446,28 +500,28 @@ export default function ScoringControlCenterPage() {
                 </thead>
                 <tbody>
                   {scoringRuns.map((run) => (
-                    <tr key={run.id} className="border-b border-gray-50">
-                      <td className="py-2 text-gray-900">{formatDate(run.startedAt)}</td>
-                      <td className="py-2 text-gray-600 max-w-[120px] truncate">{run.adminEmail}</td>
+                    <tr key={run.id} className="border-b border-gray-50 dark:border-gray-700">
+                      <td className="py-2 text-gray-900 dark:text-gray-100">{formatDate(run.startedAt)}</td>
+                      <td className="py-2 text-gray-600 dark:text-gray-400 max-w-[120px] truncate">{run.adminEmail}</td>
                       <td className="py-2">
-                        <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-medium">
+                        <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded text-xs font-medium">
                           {run.scope}
                         </span>
                       </td>
                       <td className="py-2">
                         <span className={`px-2 py-1 rounded text-xs font-medium ${
                           run.status === 'SUCCESS' 
-                            ? 'bg-green-100 text-green-700'
+                            ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300'
                             : run.status === 'FAILED'
-                            ? 'bg-red-100 text-red-700'
-                            : 'bg-amber-100 text-amber-700'
+                            ? 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300'
+                            : 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300'
                         }`}>
                           {run.status}
                         </span>
                       </td>
                       <td className="py-2 text-right font-medium">{run.errorsProcessed}</td>
                       <td className="py-2 text-right font-medium">{run.aggregatesProcessed}</td>
-                      <td className="py-2 text-right text-gray-500">
+                      <td className="py-2 text-right text-gray-500 dark:text-gray-400">
                         {run.actualsVersionAtRun !== null ? `v${run.actualsVersionAtRun}` : '-'}
                       </td>
                     </tr>
@@ -478,6 +532,18 @@ export default function ScoringControlCenterPage() {
           )}
         </CardContent>
       </Card>
+
+      <AnomalyAlerts />
+
+      <PreflightCheck
+        open={preflightOpen}
+        onOpenChange={setPreflightOpen}
+        onConfirmScore={() => {
+          setPreflightOpen(false)
+          runScoring()
+        }}
+        scoring={running}
+      />
     </div>
   )
 }

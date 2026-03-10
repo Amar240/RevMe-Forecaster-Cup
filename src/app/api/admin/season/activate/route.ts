@@ -1,9 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/server/db'
+import { NextRequest } from 'next/server'
+import { prisma } from '@/lib/db'
 import { logAuditAction } from '@/server/audit'
-import { logger } from '@/server/logger'
-import { getSession } from '@/server/auth'
-import { jsonError } from '@/server/http'
+import { requireAdminOrResponse, jsonOk, jsonError } from '@/server/http'
+
+export const dynamic = 'force-dynamic'
+
 
 const VALID_ACTIONS = ['start', 'pause', 'resume', 'complete'] as const
 
@@ -18,10 +19,8 @@ async function hasExactlyThreeActiveMarkets(seasonId: string) {
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await getSession()
-    if (!user || (user.role !== 'ADMIN' && user.role !== 'SUB_ADMIN')) {
-      return NextResponse.json({ message: 'Forbidden' }, { status: 403 })
-    }
+    const { user, response } = await requireAdminOrResponse()
+    if (response) return response
 
     const body = await request.json().catch(() => ({}))
     const { action, seasonId } = body as { action?: SeasonAction; seasonId?: string }
@@ -33,14 +32,14 @@ export async function POST(request: NextRequest) {
       })
 
       if (!season) {
-        return NextResponse.json({ message: 'No draft season found' }, { status: 404 })
+        return jsonOk({ message: 'No draft season found' }, 404)
       }
 
       const validMarkets = await hasExactlyThreeActiveMarkets(season.id)
       if (!validMarkets) {
-        return NextResponse.json(
+        return jsonOk(
           { message: 'Season must have exactly 3 active markets before activation' },
-          { status: 422 }
+          422
         )
       }
 
@@ -54,13 +53,13 @@ export async function POST(request: NextRequest) {
         data: { status: 'ACTIVE' },
       })
 
-      await logAuditAction(user.id, 'SEASON_START', 'Season', season.id, {
+      await logAuditAction(user!.id, 'SEASON_START', 'Season', season.id, {
         seasonName: season.name,
         previousStatus: 'DRAFT',
         newStatus: 'ACTIVE',
       })
 
-      return NextResponse.json({ message: 'Season activated', season: updatedSeason })
+      return jsonOk({ message: 'Season activated', season: updatedSeason })
     }
 
     const season = seasonId
@@ -71,7 +70,7 @@ export async function POST(request: NextRequest) {
         })
 
     if (!season) {
-      return NextResponse.json({ message: 'Season not found' }, { status: 404 })
+      return jsonOk({ message: 'Season not found' }, 404)
     }
 
     const previousStatus = season.status
@@ -80,12 +79,12 @@ export async function POST(request: NextRequest) {
     switch (action) {
       case 'start':
         if (season.status !== 'DRAFT') {
-          return NextResponse.json({ message: 'Can only start a DRAFT season' }, { status: 422 })
+          return jsonOk({ message: 'Can only start a DRAFT season' }, 422)
         }
         if (!(await hasExactlyThreeActiveMarkets(season.id))) {
-          return NextResponse.json(
+          return jsonOk(
             { message: 'Season must have exactly 3 active markets before activation' },
-            { status: 422 }
+            422
           )
         }
         await prisma.season.updateMany({
@@ -96,30 +95,30 @@ export async function POST(request: NextRequest) {
         break
       case 'pause':
         if (season.status !== 'ACTIVE') {
-          return NextResponse.json({ message: 'Can only pause an ACTIVE season' }, { status: 422 })
+          return jsonOk({ message: 'Can only pause an ACTIVE season' }, 422)
         }
         newStatus = 'PAUSED'
         break
       case 'resume':
         if (season.status !== 'PAUSED') {
-          return NextResponse.json({ message: 'Can only resume a PAUSED season' }, { status: 422 })
+          return jsonOk({ message: 'Can only resume a PAUSED season' }, 422)
         }
         if (!(await hasExactlyThreeActiveMarkets(season.id))) {
-          return NextResponse.json(
+          return jsonOk(
             { message: 'Season must have exactly 3 active markets before activation' },
-            { status: 422 }
+            422
           )
         }
         newStatus = 'ACTIVE'
         break
       case 'complete':
         if (season.status !== 'ACTIVE' && season.status !== 'PAUSED') {
-          return NextResponse.json({ message: 'Can only complete an ACTIVE or PAUSED season' }, { status: 422 })
+          return jsonOk({ message: 'Can only complete an ACTIVE or PAUSED season' }, 422)
         }
         newStatus = 'COMPLETED'
         break
       default:
-        return NextResponse.json({ message: 'Invalid action' }, { status: 400 })
+        return jsonOk({ message: 'Invalid action' }, 400)
     }
 
     const updatedSeason = await prisma.season.update({
@@ -127,18 +126,17 @@ export async function POST(request: NextRequest) {
       data: { status: newStatus },
     })
 
-    await logAuditAction(user.id, `SEASON_${action.toUpperCase()}`, 'Season', season.id, {
+    await logAuditAction(user!.id, `SEASON_${action.toUpperCase()}`, 'Season', season.id, {
       seasonName: season.name,
       previousStatus,
       newStatus,
     })
 
-    return NextResponse.json({
+    return jsonOk({
       message: `Season ${action}ed successfully`,
       season: updatedSeason,
     })
   } catch (error) {
-    logger.error('Season lifecycle error:', error)
     return jsonError(error, 'Failed to update season')
   }
 }

@@ -1,15 +1,13 @@
-import { NextResponse } from 'next/server'
 import { destroySession } from '@/lib/auth'
+import { jsonOk, jsonError } from '@/server/http'
+
+export const dynamic = 'force-dynamic'
 
 export async function POST() {
   try {
     await destroySession()
-    return NextResponse.json({ message: 'Logged out successfully' })
+    return jsonOk({ message: 'Logged out successfully' })
   } catch (error) {
-    console.error('Logout error:', error)
-    return NextResponse.json(
-      { message: 'Logout failed' },
-      { status: 500 }
-    )
+    return jsonError(error, 'Logout failed')
   }
 }

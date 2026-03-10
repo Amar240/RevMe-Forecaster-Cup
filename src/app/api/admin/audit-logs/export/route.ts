@@ -1,18 +1,14 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/server/db'
-import { canPerformAdminAction } from '@/server/permissions'
-import { logger } from '@/server/logger'
-import { getSession } from '@/server/auth'
-import { jsonError } from '@/server/http'
+import { prisma } from '@/lib/db'
+import { requireAdminOrResponse, jsonError } from '@/server/http'
+
+export const dynamic = 'force-dynamic'
+
 
 export async function GET() {
   try {
-    const user = await getSession()
-    const canView = await canPerformAdminAction(user, 'audit:view')
-
-    if (!user || !canView) {
-      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
-    }
+    const { response } = await requireAdminOrResponse('audit:view')
+    if (response) return response
 
     const logs = await prisma.auditLog.findMany({
       orderBy: { createdAt: 'desc' },
@@ -68,7 +64,6 @@ export async function GET() {
       },
     })
   } catch (error) {
-    logger.error('Export error:', error)
     return jsonError(error, 'Failed to export audit logs')
   }
 }

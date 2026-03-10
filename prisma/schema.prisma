@@ -59,6 +59,13 @@ enum MessageVisibility {
   INTERNAL_ONLY
 }
 
+enum DemoRequestStatus {
+  NEW
+  CONTACTED
+  SCHEDULED
+  CLOSED
+}
+
 enum SeasonStatus {
   DRAFT
   ACTIVE
@@ -459,6 +466,24 @@ model Notification {
   createdAt DateTime @default(now())
 
   @@index([userId, read])
+}
+
+model DemoRequest {
+  id           String            @id @default(cuid())
+  name         String
+  email        String
+  organization String?
+  message      String?
+  status       DemoRequestStatus @default(NEW)
+  ipAddress    String?
+  userAgent    String?
+  source       String?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  @@index([email])
+  @@index([status])
+  @@index([createdAt])
 }
 
 model AuditLog {

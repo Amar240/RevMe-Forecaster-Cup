@@ -1,26 +1,21 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/db'
-import { getSession } from '@/lib/auth'
+import { requireAdminOrResponse, jsonOk, jsonError } from '@/server/http'
+
+export const dynamic = 'force-dynamic'
 
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await getSession()
-    if (!user || user.role !== 'ADMIN') {
-      return NextResponse.json({ message: 'Forbidden' }, { status: 403 })
-    }
+    const { response } = await requireAdminOrResponse()
+    if (response) return response
 
     const { id } = await params
-
-    await prisma.university.delete({
-      where: { id },
-    })
-
-    return NextResponse.json({ message: 'University deleted' })
+    await prisma.university.delete({ where: { id } })
+    return jsonOk({ message: 'University deleted' })
   } catch (error) {
-    console.error('Delete university error:', error)
-    return NextResponse.json({ message: 'Failed to delete university' }, { status: 500 })
+    return jsonError(error, 'Failed to delete university')
   }
 }

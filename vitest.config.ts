@@ -10,8 +10,10 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['src/**/*.test.ts'],
-    setupFiles: ['src/test/setup.ts'],
+    setupFiles: ['src/test/env.ts', 'src/test/setup.ts'],
     fileParallelism: false,
     sequence: { concurrent: false },
+    hookTimeout: 60000,
+    testTimeout: 60000,
   },
 })

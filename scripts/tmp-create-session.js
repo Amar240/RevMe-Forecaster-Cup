@@ -3,9 +3,14 @@ const crypto = require('crypto')
 const prisma = new PrismaClient()
 
 async function main() {
-  const user = await prisma.user.findUnique({ where: { email: 'admin@udel.edu' } })
+  const email = process.env.SESSION_USER_EMAIL
+  if (!email) {
+    throw new Error('SESSION_USER_EMAIL environment variable is required.')
+  }
+
+  const user = await prisma.user.findUnique({ where: { email } })
   if (!user) {
-    console.error('admin missing')
+    console.error(`user missing: ${email}`)
     process.exit(1)
   }
   const token = crypto.randomBytes(32).toString('hex')

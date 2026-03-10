@@ -34,8 +34,8 @@ export function CountUp({ value }: { value: number }) {
   }, [value])
 
   return (
-    <div ref={ref} className="text-3xl font-bold text-zinc-900">
-      {count}
+    <div ref={ref} className="text-3xl font-bold text-gradient-gold">
+      {count.toLocaleString()}
     </div>
   )
 }

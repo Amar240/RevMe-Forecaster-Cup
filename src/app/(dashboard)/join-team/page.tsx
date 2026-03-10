@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Loader2, Send, Clock, CheckCircle, XCircle, Users } from 'lucide-react'
+import { toast } from 'sonner'
 
 interface JoinRequest {
   id: string
@@ -43,6 +44,7 @@ export default function JoinTeamPage() {
       }
     } catch (err) {
       clientLogger.error('Failed to fetch requests:', err)
+      toast.error('Failed to load join requests')
     } finally {
       setLoading(false)
     }
@@ -89,6 +91,7 @@ export default function JoinTeamPage() {
       }
     } catch (err) {
       clientLogger.error('Failed to cancel request:', err)
+      toast.error('Failed to cancel request')
     }
   }
 

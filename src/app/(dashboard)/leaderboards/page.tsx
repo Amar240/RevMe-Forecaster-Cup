@@ -4,9 +4,35 @@ import { clientLogger } from '@/lib/client-logger'
 import { getCurrentSession } from '@/features/auth/api'
 import { getLeaderboard } from '@/features/leaderboards/api'
 import type { LeaderboardEntry, RoundInfo } from '@/features/leaderboards/types'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Trophy, Medal, Users, Building2, Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
+import { LineChart, Line, ResponsiveContainer } from 'recharts'
+
+function MiniSparkline({ scores, roundIds }: { scores: Record<string, number>; roundIds: string[] }) {
+  const data = roundIds
+    .filter((id) => scores[id] !== undefined)
+    .map((id) => ({ v: scores[id] * 100 }))
+  if (data.length < 2) return null
+  const isImproving = data[data.length - 1].v <= data[0].v
+  return (
+    <div className="inline-block align-middle ml-2" style={{ width: 48, height: 20 }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={data} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
+          <Line
+            type="monotone"
+            dataKey="v"
+            stroke={isImproving ? '#16a34a' : '#dc2626'}
+            strokeWidth={1.5}
+            dot={false}
+            isAnimationActive={false}
+          />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  )
+}
 
 export default function LeaderboardsPage() {
   const [loading, setLoading] = useState(true)
@@ -45,6 +71,7 @@ export default function LeaderboardsPage() {
       setUserRole(sessionData?.user.role || '')
     } catch (error) {
       clientLogger.error('Failed to fetch leaderboard:', error)
+      toast.error('Failed to load leaderboard')
     } finally {
       setLoading(false)
     }
@@ -61,6 +88,10 @@ export default function LeaderboardsPage() {
     const hasScores = currentLeaderboard.some((entry) => entry.cumulativeScores[r.id] !== undefined)
     return hasScores
   })
+
+  const sortedRoundIds = useMemo(() => {
+    return rounds.sort((a, b) => a.number - b.number).map(r => r.id)
+  }, [rounds])
 
   const getUniversityLeaderboard = () => {
     const universityScores = new Map<string, { university: string; totalMAPE: number; count: number; teams: number }>()
@@ -119,14 +150,14 @@ export default function LeaderboardsPage() {
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Leaderboards</h1>
-          <p className="text-gray-500">{seasonName || 'No active season'} rankings</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Leaderboards</h1>
+          <p className="text-gray-500 dark:text-gray-400">{seasonName || 'No active season'} rankings</p>
         </div>
-        <div className="flex items-center space-x-2 bg-gray-100 rounded-lg p-1">
+        <div className="flex items-center space-x-2 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
           <button
             onClick={() => setViewMode('team')}
             className={`flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              viewMode === 'team' ? 'bg-white shadow text-gray-900' : 'text-gray-600 hover:text-gray-900'
+              viewMode === 'team' ? 'bg-white dark:bg-gray-700 shadow text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
             }`}
           >
             <Users className="h-4 w-4" />
@@ -135,7 +166,7 @@ export default function LeaderboardsPage() {
           <button
             onClick={() => setViewMode('university')}
             className={`flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              viewMode === 'university' ? 'bg-white shadow text-gray-900' : 'text-gray-600 hover:text-gray-900'
+              viewMode === 'university' ? 'bg-white dark:bg-gray-700 shadow text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
             }`}
           >
             <Building2 className="h-4 w-4" />
@@ -328,7 +359,12 @@ export default function LeaderboardsPage() {
                           ))}
                           {canSeeAllMAPE && (
                             <td className="px-6 py-4 whitespace-nowrap text-right font-mono font-bold">
-                              {entry.mape !== null ? `${(entry.mape * 100).toFixed(2)}%` : '--'}
+                              <span className="inline-flex items-center">
+                                {entry.mape !== null ? `${(entry.mape * 100).toFixed(2)}%` : '--'}
+                                {entry.mape !== null && Object.keys(entry.cumulativeScores).length >= 2 && (
+                                  <MiniSparkline scores={entry.cumulativeScores} roundIds={sortedRoundIds} />
+                                )}
+                              </span>
                             </td>
                           )}
                         </tr>

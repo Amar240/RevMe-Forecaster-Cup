@@ -5,6 +5,9 @@ import { logger } from '@/server/logger'
 import { requireUserOrResponse, jsonError } from '@/server/http'
 import { sendSubmissionReceiptEmail } from '@/server/email'
 
+export const dynamic = 'force-dynamic'
+
+
 const submissionSchema = z.object({
   roundId: z.string().min(1),
   submissions: z.array(

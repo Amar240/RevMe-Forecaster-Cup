@@ -1,55 +1,51 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { getSession } from '@/lib/auth'
+import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/db'
+import { requireUserOrResponse, jsonOk, jsonError } from '@/server/http'
+
+export const dynamic = 'force-dynamic'
 
 export async function GET() {
   try {
-    const user = await getSession()
-    if (!user) {
-      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
-    }
+    const { user, response } = await requireUserOrResponse()
+    if (response) return response
 
     const notifications = await prisma.notification.findMany({
-      where: { userId: user.id },
+      where: { userId: user!.id },
       orderBy: { createdAt: 'desc' },
       take: 10,
     })
 
     const unreadCount = await prisma.notification.count({
-      where: { userId: user.id, read: false },
+      where: { userId: user!.id, read: false },
     })
 
-    return NextResponse.json({ notifications, unreadCount })
+    return jsonOk({ notifications, unreadCount })
   } catch (error) {
-    console.error('Get notifications error:', error)
-    return NextResponse.json({ message: 'Failed to get notifications' }, { status: 500 })
+    return jsonError(error, 'Failed to get notifications')
   }
 }
 
 export async function PATCH(request: NextRequest) {
   try {
-    const user = await getSession()
-    if (!user) {
-      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
-    }
+    const { user, response } = await requireUserOrResponse()
+    if (response) return response
 
     const { notificationId, markAllRead } = await request.json()
 
     if (markAllRead) {
       await prisma.notification.updateMany({
-        where: { userId: user.id, read: false },
+        where: { userId: user!.id, read: false },
         data: { read: true },
       })
     } else if (notificationId) {
       await prisma.notification.update({
-        where: { id: notificationId, userId: user.id },
+        where: { id: notificationId, userId: user!.id },
         data: { read: true },
       })
     }
 
-    return NextResponse.json({ success: true })
+    return jsonOk({ success: true })
   } catch (error) {
-    console.error('Update notification error:', error)
-    return NextResponse.json({ message: 'Failed to update notification' }, { status: 500 })
+    return jsonError(error, 'Failed to update notification')
   }
 }

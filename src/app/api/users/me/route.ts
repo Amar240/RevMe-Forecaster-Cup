@@ -1,7 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/db'
-import { getSession } from '@/lib/auth'
+import { requireUserOrResponse, jsonOk, jsonError, parseJson } from '@/server/http'
 import { z } from 'zod'
+
+export const dynamic = 'force-dynamic'
 
 const updateProfileSchema = z.object({
   firstName: z.string().min(1).optional(),
@@ -10,13 +12,11 @@ const updateProfileSchema = z.object({
 
 export async function GET() {
   try {
-    const user = await getSession()
-    if (!user) {
-      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
-    }
+    const { user, response } = await requireUserOrResponse()
+    if (response) return response
 
     const fullUser = await prisma.user.findUnique({
-      where: { id: user.id },
+      where: { id: user!.id },
       include: {
         university: true,
         teamMemberships: {
@@ -29,32 +29,28 @@ export async function GET() {
       },
     })
 
-    return NextResponse.json({ user: fullUser })
+    return jsonOk({ user: fullUser })
   } catch (error) {
-    console.error('Get user error:', error)
-    return NextResponse.json({ message: 'Failed to get user' }, { status: 500 })
+    return jsonError(error, 'Failed to get user')
   }
 }
 
 export async function PATCH(request: NextRequest) {
   try {
-    const user = await getSession()
-    if (!user) {
-      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
-    }
+    const { user, response } = await requireUserOrResponse()
+    if (response) return response
 
-    const body = await request.json()
-    const data = updateProfileSchema.parse(body)
+    const data = await parseJson(request, updateProfileSchema)
 
     const updatedUser = await prisma.user.update({
-      where: { id: user.id },
+      where: { id: user!.id },
       data: {
         ...(data.firstName && { firstName: data.firstName }),
         ...(data.lastName && { lastName: data.lastName }),
       },
     })
 
-    return NextResponse.json({
+    return jsonOk({
       message: 'Profile updated successfully',
       user: {
         id: updatedUser.id,
@@ -64,10 +60,6 @@ export async function PATCH(request: NextRequest) {
       },
     })
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json({ message: 'Invalid input' }, { status: 400 })
-    }
-    console.error('Update profile error:', error)
-    return NextResponse.json({ message: 'Failed to update profile' }, { status: 500 })
+    return jsonError(error, 'Failed to update profile')
   }
 }
