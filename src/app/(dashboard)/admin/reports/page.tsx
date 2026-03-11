@@ -134,7 +134,7 @@ export default function AdminReportsPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-gray-500">
-              Downloads the complete leaderboard with team scores, MAE, and rankings for the active season.
+              Downloads the complete leaderboard with team scores, MAPE, and rankings for the active season.
             </p>
             <Button variant="outline" className="w-full" onClick={() => {
               window.location.href = '/api/admin/submissions/export'

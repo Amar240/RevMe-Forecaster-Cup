@@ -359,20 +359,22 @@ interface Actual {
 
 #### C.5 Scoring Engine
 
+> Source of truth for live scoring and staging validation: RevME uses Mean Absolute Percentage Error (MAPE), with lower scores ranking higher.
+
 **FR-SCORE-001: Error Calculation**
-- Absolute Error (AE) = |prediction - actual|
+- Absolute Percentage Error (APE) = |prediction - actual| / actual
 - Calculated per prediction (78 total per team per season)
 - Formula: 6 rounds × 2 weeks × 3 markets × 2 metrics + 1 round × 1 week × 3 markets × 2 metrics = 72 + 6 = 78
 
 **FR-SCORE-002: Aggregation**
-- Mean Absolute Error (MAE) = Average of all AE values
-- Per-market MAE
-- Per-metric MAE (Occupancy MAE, ADR MAE)
-- Cumulative MAE across all rounds
+- Mean Absolute Percentage Error (MAPE) = Average of all APE values
+- Per-market MAPE
+- Per-metric MAPE (Occupancy MAPE, ADR MAPE)
+- Cumulative MAPE across all rounds
 
 **FR-SCORE-003: Leaderboard Calculation**
 - Separate leaderboards: Occupancy, ADR
-- Ranking by ascending MAE (lower is better)
+- Ranking by ascending MAPE (lower is better)
 - Tie-breaker: Earlier first submission timestamp
 
 **FR-SCORE-004: Scoring Job**
@@ -1059,7 +1061,7 @@ Admin:
 │  Filters: [All Markets ▼] [Cumulative ▼]      │
 │           [All Universities ▼]                │
 ├────────────────────────────────────────────────┤
-│  Rank  Team             University      MAE   │
+│  Rank  Team             University      MAPE  │
 │  ──────────────────────────────────────────── │
 │  🥇 1   DataDawgs       U of Georgia   2.34  │
 │  🥈 2   HMGT            Texas A&M      2.67  │
@@ -1068,7 +1070,7 @@ Admin:
 │     5   Forecast Fight  Christ Univ    3.22  │
 │     ...                                       │
 │  ──────────────────────────────────────────── │
-│  Your Team: Rank #12 (MAE: 4.56)             │
+│  Your Team: Rank #12 (MAPE: 4.56%)           │
 └────────────────────────────────────────────────┘
 ```
 
@@ -1116,9 +1118,9 @@ Admin:
 - [ ] 3 markets × 2 metrics × 1 week = 6 fields for R7
 
 **Scoring:**
-- [ ] AE = |prediction - actual| calculated correctly
-- [ ] MAE = mean of AE values
-- [ ] Leaderboard shows ascending MAE order
+- [ ] APE = |prediction - actual| / actual calculated correctly
+- [ ] MAPE = mean of APE values
+- [ ] Leaderboard shows ascending MAPE order
 - [ ] Scores update atomically after scoring job
 
 **Warnings:**

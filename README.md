@@ -31,6 +31,7 @@ Required values:
 
 Optional (email):
 - `SMTP_*`
+- `DEMO_REQUEST_NOTIFY_EMAIL`
 
 Test env:
 ```bash
@@ -80,10 +81,14 @@ npm run build
 - **Architecture**: see `docs/ARCHITECTURE.md` for a high-level overview of the system (frontend, backend, database, auth, scoring, and key modules).
 - **Admin & Operations Runbook**: see `docs/admin-runbook.md` for step-by-step guidance on running a season, weekly operations, support/escalations, and end-of-season workflows.
 - **Product Requirements**: see `docs/PRD_RevME_Forecaster_Cup.md` for detailed functional requirements, UX flows, and non-functional requirements.
+- **Staging Env Sheet**: see `docs/STAGING_ENV_SHEET.md` for the required staging variables, ownership, and value sources.
 - **Improvements Roadmap**: see `docs/IMPROVEMENTS.md` for a prioritized roadmap covering API normalization, UX fixes, test expansion, build hardening, and AWS deployment.
 
 ## Deployment Notes (High Level)
 - Use a managed Postgres (e.g., RDS)
-- Set env vars in your deployment environment
-- Run `prisma migrate deploy` on deploy
+- Set env vars in your deployment environment using a single canonical `NEXT_PUBLIC_APP_URL`
+- Verify migrations with `npx prisma migrate status` before deploy
+- Run `npx prisma migrate deploy` on deploy
+- Never use `prisma db push` in staging or production
+- Use `/api/health` for container or load balancer readiness checks
 - Start with `npm run build` + `npm run start`

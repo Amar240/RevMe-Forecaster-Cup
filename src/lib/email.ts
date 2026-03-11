@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer'
 import { logger } from './logger'
+import { getAppBaseUrl } from './app-url'
 
 const getTransporter = () => {
   if (process.env.NODE_ENV === 'test') {
@@ -24,11 +25,6 @@ const getTransporter = () => {
       pass: smtpPass,
     },
   })
-}
-
-const getBaseUrl = () => {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:5000'
-  return baseUrl.startsWith('http') ? baseUrl : 'https://' + baseUrl
 }
 
 const getFromEmail = () => {
@@ -66,7 +62,7 @@ export async function sendPasswordResetEmail(
   resetToken: string
 ): Promise<boolean> {
   const transporter = getTransporter()
-  const resetUrl = `${getBaseUrl()}/reset-password?token=${resetToken}`
+  const resetUrl = `${getAppBaseUrl()}/reset-password?token=${resetToken}`
 
   if (!transporter) {
     logger.info('Password reset requested but SMTP not configured', { email, resetUrl })
@@ -126,7 +122,7 @@ export async function sendRoundOpenEmail(
   teamName: string
 ): Promise<boolean> {
   const transporter = getTransporter()
-  const submitUrl = `${getBaseUrl()}/submit`
+  const submitUrl = `${getAppBaseUrl()}/submit`
 
   if (!transporter) {
     logger.info('Round open reminder skipped (SMTP not configured)', {
@@ -216,7 +212,7 @@ export async function sendSubmissionReceiptEmail(params: {
     return false
   }
   const transporter = getTransporter()
-  const submitUrl = `${getBaseUrl()}/submit`
+  const submitUrl = `${getAppBaseUrl()}/submit`
 
   if (!transporter) {
     logger.info('Submission receipt skipped (SMTP not configured)', {
@@ -308,7 +304,7 @@ export async function sendMissedSubmissionWarning(
   warningCount: number
 ): Promise<boolean> {
   const transporter = getTransporter()
-  const dashboardUrl = `${getBaseUrl()}/dashboard`
+  const dashboardUrl = `${getAppBaseUrl()}/dashboard`
 
   if (!transporter) {
     logger.info('Missed submission warning skipped (SMTP not configured)', {
@@ -417,7 +413,7 @@ export async function sendWelcomeEmail(
   role: 'STUDENT' | 'SUPERVISOR'
 ): Promise<boolean> {
   const transporter = getTransporter()
-  const loginUrl = `${getBaseUrl()}/login`
+  const loginUrl = `${getAppBaseUrl()}/login`
 
   if (!transporter) {
     logger.info('Welcome email skipped (SMTP not configured)', {

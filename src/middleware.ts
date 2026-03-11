@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { rateLimit } from '@/lib/rate-limit'
+import { getAppBaseUrl } from '@/lib/app-url'
 
 const CSRF_COOKIE = 'revme_csrf'
 const CSRF_HEADER = 'x-csrf-token'
@@ -20,6 +21,14 @@ const SENSITIVE_PATH_PREFIXES = [
   '/api/admin',
 ]
 
+function normalizeOrigin(value: string) {
+  try {
+    return new URL(value).origin
+  } catch {
+    return value
+  }
+}
+
 export function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname
   const method = request.method.toUpperCase()
@@ -28,8 +37,8 @@ export function middleware(request: NextRequest) {
   if (pathname.startsWith('/api')) {
     const origin = request.headers.get('origin')
     const referer = request.headers.get('referer')
-    const host = request.nextUrl.origin
-    const configuredOrigin = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL
+    const host = normalizeOrigin(request.nextUrl.origin)
+    const configuredOrigin = normalizeOrigin(getAppBaseUrl())
     const alternateHost =
       host.includes('localhost') ? host.replace('localhost', '127.0.0.1') : host.replace('127.0.0.1', 'localhost')
     const allowedOrigins = new Set([host, alternateHost, configuredOrigin].filter(Boolean) as string[])

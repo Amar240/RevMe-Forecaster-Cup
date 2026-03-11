@@ -141,7 +141,7 @@ Auth utilities live in `src/lib/auth.ts`.
   - `createSession(userId)`:
     - Generates a random token.
     - Creates a `Session` row with `userId`, `token`, `expiresAt`.
-    - Sets an HTTP-only cookie `revme_session` with:
+    - Sets an HTTP-only session cookie (`revme_session` locally, `__Secure-revme_session` in production) with:
       - `secure` in production.
       - `sameSite='lax'`.
       - Expiry synchronized with `expiresAt`.
@@ -312,6 +312,8 @@ Key modules:
 
 The scoring implementation follows the competition rules defined in the PRD and `docs/PRD_RevME_Forecaster_Cup.md`.
 
+> Staging validation source of truth: RevME ranks teams by Mean Absolute Percentage Error (MAPE). Lower is better.
+
 ### Per-Value Error
 
 For each `SubmissionValue` and matching `Actual`:
@@ -386,4 +388,3 @@ See `README.md` and `docs/AWS_MIGRATION.md` for details.
   - `npm run start`
 
 For a detailed AWS path (Vercel + RDS, ECS Fargate, or Elastic Beanstalk), see `docs/AWS_MIGRATION.md`.
-

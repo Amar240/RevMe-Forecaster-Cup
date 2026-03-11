@@ -1,58 +1,42 @@
-# AWS Migration Path (RevME Forecaster Cup)
+# AWS Staging Deployment Path
 
-This guide outlines a clean path from local development to AWS using PostgreSQL.
+This document defines the immediate AWS baseline for RevME staging.
 
-## Recommended Architecture
-- App: Next.js 14 (App Router)
-- Database: Amazon RDS for PostgreSQL 16
-- Secrets: AWS Secrets Manager or SSM Parameter Store
-- Files/exports: Amazon S3
-- Logs/metrics: CloudWatch
+## Target Baseline
+- Region: `us-east-2`
+- Entry point: public `ALB`
+- App host: private `EC2` instance running Docker
+- Database: private `RDS PostgreSQL 16`
+- Access: `SSM Session Manager` only, no direct SSH
+- App readiness endpoint: `GET /api/health`
 
-## Local Development (Best Practice)
-1. Use `.env.local` for secrets (never commit real credentials).
-2. Use Prisma migrations to manage schema.
-   - Local: `npx prisma migrate dev`
-3. Keep app and database credentials separate from code.
+This is the single staging deployment path for now. Do not add alternate staging flows until this one is proven.
 
-## Staging/Production Environments
-1. Create separate RDS instances or databases for staging and production.
-2. Use different `DATABASE_URL` values per environment.
-3. Apply migrations using `npx prisma migrate deploy` during CI/CD.
+## Migration Rules
+- Local development uses `npx prisma migrate dev`.
+- Staging and production use `npx prisma migrate deploy` only.
+- Staging and production must never use `npx prisma db push`.
+- Pre-deploy verification command: `npx prisma migrate status`.
+- Release migration command: `npx prisma migrate deploy`.
 
-## Deployment Options
-### Option A: Vercel + RDS (Fastest — Recommended)
-- Host Next.js on Vercel.
-- Use RDS PostgreSQL for the database.
-- Set `DATABASE_URL` and SMTP secrets in Vercel env vars.
-- Run `prisma migrate deploy` in build step.
+## Staging Deployment Sequence
+1. Build the application image from the current production `Dockerfile`.
+2. Load the staging environment values from the staging env sheet and secrets store.
+3. Run `npx prisma migrate status` against the staging RDS database before replacing the running container.
+4. Start or replace the app container; the production startup path runs `npx prisma migrate deploy` before `npm start`.
+5. Verify `GET /api/health` directly on the container and through the ALB target group.
+6. Run the must-pass staging checks in `docs/STAGING_GO_NO_GO.md`.
 
-### Option B: AWS ECS Fargate + RDS (Full AWS)
-- Containerize app (Dockerfile) and deploy on ECS Fargate.
-- Use RDS PostgreSQL for database.
-- Store secrets in Secrets Manager.
-- Use a CI/CD pipeline (GitHub Actions or CodePipeline).
+## AWS Notes
+- Configure the ALB to redirect `HTTP -> HTTPS`.
+- Set `NEXT_PUBLIC_APP_URL` to the exact staging hostname, including `https://`.
+- Production sessions use an `httpOnly`, `secure`, `sameSite=lax` cookie with a `__Secure-` prefix.
+- Keep the database private to the app security group.
+- Store application secrets in AWS Systems Manager Parameter Store or Secrets Manager.
+- Send operational access through Session Manager, not SSH keys.
 
-### Option C: Elastic Beanstalk + RDS (Simpler AWS)
-- Deploy Next.js to Elastic Beanstalk.
-- Use RDS PostgreSQL.
-- Configure environment variables in EB console.
-
-## Database Migration Steps (Local -> RDS)
-1. Create RDS PostgreSQL 16 instance.
-2. Create DB and user (least privilege).
-3. Set `DATABASE_URL` to the RDS endpoint (e.g., `postgresql://user:pass@host:5432/revme?sslmode=require`).
-4. Run `npx prisma migrate deploy`.
-5. (Optional) Seed: `npx prisma db seed`.
-
-## Security Best Practices
-- Do not use root for application access.
-- Rotate passwords if shared.
-- Restrict RDS access to app subnets/security groups.
-- Use TLS connections to RDS.
-
-## Operational Checklist
-- [ ] Backups enabled on RDS
-- [ ] Automated snapshots
-- [ ] CloudWatch alarms for CPU/storage
-- [ ] Prisma migrations run in CI/CD
+## Operational Baseline
+- Enable automated RDS backups and snapshots.
+- Forward container logs to CloudWatch.
+- Keep rollback steps documented before each deployment.
+- Do not promote a build until the staging go/no-go checklist passes.
