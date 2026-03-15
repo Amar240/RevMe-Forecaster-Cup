@@ -7,6 +7,7 @@ import { POST as loginHandler } from '@/app/api/auth/login/route'
 import { POST as registerHandler } from '@/app/api/auth/register/route'
 import { GET as meHandler } from '@/app/api/auth/me/route'
 import { POST as logoutHandler } from '@/app/api/auth/logout/route'
+import { prisma } from '@/lib/db'
 
 const BASE = 'http://localhost:5000'
 
@@ -80,6 +81,7 @@ describe('POST /api/auth/register', () => {
         lastName: 'User',
         role: 'STUDENT',
         universityName: 'Test University',
+        country: 'United States',
       },
     })
 
@@ -90,6 +92,12 @@ describe('POST /api/auth/register', () => {
     expect(data.message).toBe('Registration successful')
     expect(data.user.email).toBe('newuser@test.com')
     expect(data.user.role).toBe('STUDENT')
+
+    const university = await prisma.university.findUnique({
+      where: { name: 'Test University' },
+    })
+
+    expect(university?.country).toBe('United States')
   })
 
   it('returns 409 for duplicate email', async () => {
@@ -105,6 +113,7 @@ describe('POST /api/auth/register', () => {
         lastName: 'User',
         role: 'STUDENT',
         universityName: 'Test University',
+        country: 'United States',
       },
     })
 
@@ -125,6 +134,7 @@ describe('POST /api/auth/register', () => {
         lastName: 'Pass',
         role: 'STUDENT',
         universityName: 'Test University',
+        country: 'United States',
       },
     })
 
@@ -143,6 +153,32 @@ describe('POST /api/auth/register', () => {
 
     const res = await registerHandler(req)
     expect(res.status).toBe(400)
+  })
+
+  it('fills in university country when the university already exists without one', async () => {
+    await createUniversity('Existing University')
+
+    const req = makeRequest(`${BASE}/api/auth/register`, {
+      method: 'POST',
+      body: {
+        email: 'countryfill@test.com',
+        password: 'Password123!',
+        firstName: 'Country',
+        lastName: 'Fill',
+        role: 'SUPERVISOR',
+        universityName: 'Existing University',
+        country: 'India',
+      },
+    })
+
+    const res = await registerHandler(req)
+    expect(res.status).toBe(200)
+
+    const university = await prisma.university.findUnique({
+      where: { name: 'Existing University' },
+    })
+
+    expect(university?.country).toBe('India')
   })
 })
 

@@ -1,13 +1,13 @@
 export const MARKET_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-  'Nashville CBD': { bg: 'bg-indigo-50', text: 'text-indigo-700', border: 'border-indigo-200' },
-  'Dubai': { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200' },
-  'Hamburg': { bg: 'bg-teal-50', text: 'text-teal-700', border: 'border-teal-200' },
+  'Nashville CBD': { bg: 'bg-primary-soft', text: 'text-primary', border: 'border-primary/20' },
+  'Dubai': { bg: 'bg-accent-soft', text: 'text-accent', border: 'border-accent/20' },
+  'Hamburg': { bg: 'bg-info-background', text: 'text-info', border: 'border-info/20' },
 }
 
 export function MarketChip({ name }: { name: string }) {
-  const colors = MARKET_COLORS[name] || { bg: 'bg-gray-50', text: 'text-gray-700', border: 'border-gray-200' }
+  const colors = MARKET_COLORS[name] || { bg: 'bg-surface-secondary', text: 'text-text-secondary', border: 'border-border' }
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${colors.bg} ${colors.text} border ${colors.border}`}>
+    <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${colors.bg} ${colors.text} ${colors.border}`}>
       {name}
     </span>
   )

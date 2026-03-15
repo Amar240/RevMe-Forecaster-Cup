@@ -1,14 +1,26 @@
 'use client'
 
 import { csrfFetch } from '@/lib/csrf'
-
 import { clientLogger } from '@/lib/client-logger'
-
-
 import { useState, useEffect, useRef } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { AlertBanner } from '@/components/ui/alert-banner'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { CheckCircle, AlertTriangle, Trophy, Users, Clock, Target, Calculator, Send, HelpCircle, ChevronDown, ChevronUp, Mail } from 'lucide-react'
+import {
+  CheckCircle,
+  AlertTriangle,
+  Trophy,
+  Users,
+  Clock,
+  Target,
+  Calculator,
+  Send,
+  HelpCircle,
+  ChevronDown,
+  ChevronUp,
+  Mail,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -70,42 +82,40 @@ export default function RulesPage() {
     setExpandedSection(expandedSection === section ? null : section)
   }
 
+  const sectionIsOpen = (section: string) => expandedSection === section
+
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="mx-auto max-w-4xl space-y-6">
       {showSuccess && (
-        <div className="fixed top-6 right-6 z-50 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700 shadow-sm">
+        <div className="fixed right-6 top-6 z-50 rounded-lg border border-success/20 bg-success-background px-4 py-3 text-sm text-success shadow-card">
           Acknowledged. Redirecting to your dashboard...
         </div>
       )}
-      <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Guidelines + Help</h1>
-        <p className="text-gray-600 mt-2">RevME Forecaster Cup - Everything you need to know</p>
+
+      <div className="mb-8 text-center">
+        <h1 className="text-3xl font-bold text-foreground">Guidelines + Help</h1>
+        <p className="mt-2 text-text-secondary">RevME Forecaster Cup - everything you need to know</p>
       </div>
 
       {acknowledged === false && (
-        <Card className="border-amber-200 bg-amber-50">
-          <CardContent className="py-4">
-            <div className="flex items-center space-x-3">
-              <AlertTriangle className="h-5 w-5 text-amber-600" />
-              <p className="text-amber-800">Please read and acknowledge the rules below to participate in the competition.</p>
-            </div>
-          </CardContent>
-        </Card>
+        <AlertBanner variant="warning" title="Action required">
+          Please read and acknowledge the rules below to participate in the competition.
+        </AlertBanner>
       )}
 
-      <div className="grid md:grid-cols-2 gap-6">
+      <div className="grid gap-6 md:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center">
-              <Target className="h-5 w-5 mr-2 text-blue-600" />
+            <CardTitle className="flex items-center gap-2">
+              <Target className="h-5 w-5 text-primary" />
               Competition Overview
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3 text-sm">
+          <CardContent className="space-y-3 text-sm text-text-secondary">
             <p>The RevME Forecaster Cup is a hospitality revenue forecasting competition where teams predict hotel performance metrics.</p>
-            <ul className="list-disc list-inside space-y-2 text-gray-700">
-              <li><strong>8 Rounds</strong> of weekly forecasting</li>
-              <li>Predict <strong>2-week ahead</strong> horizon (Week+1 and Week+2)</li>
+            <ul className="list-inside list-disc space-y-2">
+              <li><strong>8 rounds</strong> of weekly forecasting</li>
+              <li>Predict a <strong>2-week ahead</strong> horizon (Week+1 and Week+2)</li>
               <li>Two metrics: <strong>Occupancy</strong> and <strong>ADR ($)</strong></li>
               <li>Three markets: <strong>Nashville CBD, Dubai, Hamburg</strong></li>
             </ul>
@@ -114,13 +124,13 @@ export default function RulesPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center">
-              <Users className="h-5 w-5 mr-2 text-blue-600" />
+            <CardTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5 text-primary" />
               Team Structure
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3 text-sm">
-            <ul className="list-disc list-inside space-y-2 text-gray-700">
+          <CardContent className="space-y-3 text-sm text-text-secondary">
+            <ul className="list-inside list-disc space-y-2">
               <li>Each team can have <strong>up to 5 students</strong></li>
               <li>Teams are created by <strong>supervisors only</strong></li>
               <li>Each team has <strong>1 designated submitter</strong></li>
@@ -132,109 +142,107 @@ export default function RulesPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center">
-              <Clock className="h-5 w-5 mr-2 text-blue-600" />
-              Submissions & Deadlines
+            <CardTitle className="flex items-center gap-2">
+              <Clock className="h-5 w-5 text-primary" />
+              Submissions + Deadlines
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3 text-sm">
-            <ul className="list-disc list-inside space-y-2 text-gray-700">
+          <CardContent className="space-y-3 text-sm text-text-secondary">
+            <ul className="list-inside list-disc space-y-2">
               <li>Submit forecasts before the <strong>round deadline</strong></li>
               <li>Submissions are <strong>permanently locked</strong> after submit</li>
-              <li>You must submit <strong>12 values per round</strong>:<br/>
-                <span className="text-gray-500 ml-4">3 markets x 2 weeks x 2 metrics</span>
+              <li>
+                You must submit <strong>12 values per round</strong>:
+                <div className="ml-6 mt-1 text-text-muted">3 markets x 2 weeks x 2 metrics</div>
               </li>
               <li>Late or missing submissions are <strong>not allowed</strong></li>
             </ul>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-warning/20 bg-warning-background/40">
           <CardHeader>
-            <CardTitle className="flex items-center text-red-600">
-              <AlertTriangle className="h-5 w-5 mr-2" />
-              Warnings & Disqualification
+            <CardTitle className="flex items-center gap-2 text-warning">
+              <AlertTriangle className="h-5 w-5" />
+              Warnings + Disqualification
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3 text-sm">
-            <ul className="list-disc list-inside space-y-2 text-gray-700">
+          <CardContent className="space-y-3 text-sm text-text-secondary">
+            <ul className="list-inside list-disc space-y-2">
               <li>Missed submission = <strong>1 warning</strong></li>
               <li>After <strong>3 warnings</strong>, team is <strong>disqualified</strong></li>
               <li>Disqualified teams cannot submit forecasts</li>
               <li>Warnings cannot be removed once issued</li>
             </ul>
-            <p className="text-red-600 font-medium mt-4">Disqualification is permanent for the season!</p>
+            <p className="font-medium text-error">Disqualification is permanent for the season.</p>
           </CardContent>
         </Card>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center">
-            <Trophy className="h-5 w-5 mr-2 text-yellow-600" />
-            Scoring & Leaderboards
+          <CardTitle className="flex items-center gap-2">
+            <Trophy className="h-5 w-5 text-accent" />
+            Scoring + Leaderboards
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3 text-sm">
-          <p>Scoring is based on <strong>Mean Absolute Percentage Error (MAPE)</strong> - lower is better!</p>
-          <div className="grid md:grid-cols-3 gap-4 mt-4">
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <h4 className="font-semibold text-blue-600">Occupancy MAPE</h4>
-              <p className="text-gray-600 text-xs mt-1">|Predicted - Actual| / Actual × 100%</p>
+        <CardContent className="space-y-4 text-sm text-text-secondary">
+          <p>Scoring is based on <strong>Mean Absolute Percentage Error (MAPE)</strong>. Lower is better.</p>
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="rounded-lg border border-info/20 bg-info-background/55 p-4">
+              <h4 className="font-semibold text-info">Occupancy MAPE</h4>
+              <p className="mt-1 text-xs text-text-secondary">|Predicted - Actual| / Actual x 100%</p>
             </div>
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <h4 className="font-semibold text-green-600">ADR MAPE</h4>
-              <p className="text-gray-600 text-xs mt-1">|Predicted - Actual| / Actual × 100%</p>
+            <div className="rounded-lg border border-success/20 bg-success-background/55 p-4">
+              <h4 className="font-semibold text-success">ADR MAPE</h4>
+              <p className="mt-1 text-xs text-text-secondary">|Predicted - Actual| / Actual x 100%</p>
             </div>
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <h4 className="font-semibold text-purple-600">Final Score</h4>
-              <p className="text-gray-600 text-xs mt-1">Average of Occupancy and ADR MAPE</p>
+            <div className="rounded-lg border border-accent/20 bg-accent-soft/60 p-4">
+              <h4 className="font-semibold text-accent">Final Score</h4>
+              <p className="mt-1 text-xs text-text-secondary">Average of Occupancy and ADR MAPE</p>
             </div>
           </div>
-          <p className="mt-4 text-gray-700">
+          <p>
             Leaderboards show rankings for <strong>Occupancy</strong>, <strong>ADR</strong>, and <strong>Combined</strong> scores.
-            Teams and Universities are ranked separately.
+            Teams and universities are ranked separately.
           </p>
         </CardContent>
       </Card>
 
-      <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
-        <CardHeader 
-          className="cursor-pointer"
-          onClick={() => toggleSection('scoring')}
-        >
+      <Card className="border-primary/20 bg-primary-soft/35">
+        <CardHeader className="cursor-pointer" onClick={() => toggleSection('scoring')}>
           <CardTitle className="flex items-center justify-between">
-            <span className="flex items-center">
-              <Calculator className="h-5 w-5 mr-2 text-blue-600" />
+            <span className="flex items-center gap-2">
+              <Calculator className="h-5 w-5 text-primary" />
               How Scoring Works
             </span>
-            {expandedSection === 'scoring' ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+            {sectionIsOpen('scoring') ? <ChevronUp className="h-5 w-5 text-primary" /> : <ChevronDown className="h-5 w-5 text-primary" />}
           </CardTitle>
         </CardHeader>
-        {expandedSection === 'scoring' && (
-          <CardContent className="space-y-4 text-sm">
-            <div className="bg-white p-4 rounded-lg shadow-sm">
-              <h4 className="font-semibold text-gray-900 mb-2">Mean Absolute Percentage Error (MAPE)</h4>
-              <p className="text-gray-600 mb-3">Your score is based on the percentage error between your predictions and actual values. Lower is better!</p>
-              <div className="bg-gray-50 p-3 rounded-lg font-mono text-center text-sm">
-                MAPE = Average of (|Predicted - Actual| / Actual) × 100%
+        {sectionIsOpen('scoring') && (
+          <CardContent className="space-y-4 text-sm text-text-secondary">
+            <div className="rounded-lg border border-border bg-card p-4">
+              <h4 className="mb-2 font-semibold text-foreground">Mean Absolute Percentage Error (MAPE)</h4>
+              <p className="mb-3">Your score is based on the percentage error between your predictions and actual values. Lower is better.</p>
+              <div className="rounded-lg border border-border bg-surface-secondary p-3 text-center font-mono text-sm">
+                MAPE = Average of (|Predicted - Actual| / Actual) x 100%
               </div>
             </div>
-            <div className="grid md:grid-cols-2 gap-4">
-              <div className="bg-white p-4 rounded-lg shadow-sm">
-                <h4 className="font-semibold text-indigo-600 mb-2">Occupancy Scoring</h4>
-                <p className="text-gray-600 text-sm">Measured as percentage error. If you predict 75 and actual is 78, your error is |75-78|/78 = 3.85%.</p>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="rounded-lg border border-border bg-card p-4">
+                <h4 className="mb-2 font-semibold text-primary">Occupancy Scoring</h4>
+                <p>If you predict 75 and actual is 78, your error is |75-78|/78 = 3.85%.</p>
               </div>
-              <div className="bg-white p-4 rounded-lg shadow-sm">
-                <h4 className="font-semibold text-green-600 mb-2">ADR Scoring</h4>
-                <p className="text-gray-600 text-sm">Measured as percentage error. If you predict $150 and actual is $155, your error is |150-155|/155 = 3.23%.</p>
+              <div className="rounded-lg border border-border bg-card p-4">
+                <h4 className="mb-2 font-semibold text-success">ADR Scoring</h4>
+                <p>If you predict $150 and actual is $155, your error is |150-155|/155 = 3.23%.</p>
               </div>
             </div>
-            <div className="bg-white p-4 rounded-lg shadow-sm">
-              <h4 className="font-semibold text-gray-900 mb-2">Round vs Season Scores</h4>
-              <ul className="text-gray-600 space-y-1">
-                <li>Round Score: MAPE across all predictions in that round</li>
-                <li>Season Score: MAPE across all predictions in the entire season</li>
+            <div className="rounded-lg border border-border bg-card p-4">
+              <h4 className="mb-2 font-semibold text-foreground">Round vs Season Scores</h4>
+              <ul className="space-y-1">
+                <li>Round score: MAPE across all predictions in that round</li>
+                <li>Season score: MAPE across all predictions in the entire season</li>
                 <li>Leaderboards show separate rankings for Occupancy and ADR</li>
               </ul>
             </div>
@@ -242,112 +250,107 @@ export default function RulesPage() {
         )}
       </Card>
 
-      <Card className="bg-gradient-to-r from-green-50 to-emerald-50 border-green-200">
-        <CardHeader 
-          className="cursor-pointer"
-          onClick={() => toggleSection('submit')}
-        >
+      <Card className="border-success/20 bg-success-background/35">
+        <CardHeader className="cursor-pointer" onClick={() => toggleSection('submit')}>
           <CardTitle className="flex items-center justify-between">
-            <span className="flex items-center">
-              <Send className="h-5 w-5 mr-2 text-green-600" />
+            <span className="flex items-center gap-2">
+              <Send className="h-5 w-5 text-success" />
               How to Submit Forecasts
             </span>
-            {expandedSection === 'submit' ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+            {sectionIsOpen('submit') ? <ChevronUp className="h-5 w-5 text-success" /> : <ChevronDown className="h-5 w-5 text-success" />}
           </CardTitle>
         </CardHeader>
-        {expandedSection === 'submit' && (
-          <CardContent className="space-y-4 text-sm">
-            <div className="bg-white p-4 rounded-lg shadow-sm">
-              <h4 className="font-semibold text-gray-900 mb-2">Step-by-Step Guide</h4>
-              <ol className="list-decimal list-inside space-y-2 text-gray-600">
+        {sectionIsOpen('submit') && (
+          <CardContent className="space-y-4 text-sm text-text-secondary">
+            <div className="rounded-lg border border-border bg-card p-4">
+              <h4 className="mb-2 font-semibold text-foreground">Step-by-Step Guide</h4>
+              <ol className="list-inside list-decimal space-y-2">
                 <li><strong>Go to Submit Forecast</strong> from your dashboard</li>
                 <li><strong>Select the current round</strong> if multiple are available</li>
-                <li><strong>Enter predictions</strong> for each market and metric:
+                <li>
+                  <strong>Enter predictions</strong> for each market and metric:
                   <ul className="ml-6 mt-1 list-disc">
-                    <li>Occupancy (value, e.g., 75.5)</li>
-                    <li>ADR (as dollar amount, e.g., 189.50)</li>
+                    <li>Occupancy (value, e.g. 75.5)</li>
+                    <li>ADR (as dollar amount, e.g. 189.50)</li>
                   </ul>
                 </li>
                 <li><strong>Review all values</strong> carefully before submitting</li>
                 <li><strong>Click Submit</strong> to lock in your forecast</li>
               </ol>
             </div>
-            <div className="bg-amber-50 p-4 rounded-lg border border-amber-200">
-              <h4 className="font-semibold text-amber-700 mb-2 flex items-center">
-                <AlertTriangle className="h-4 w-4 mr-2" />
-                Important Notes
-              </h4>
-              <ul className="text-amber-700 space-y-1">
+            <AlertBanner variant="warning" title="Important notes">
+              <ul className="list-inside list-disc space-y-1">
                 <li>Only the designated submitter can submit forecasts</li>
                 <li>Submissions are locked immediately after submitting</li>
                 <li>You cannot edit or delete a submitted forecast</li>
                 <li>Submit before the deadline shown on your dashboard</li>
               </ul>
-            </div>
+            </AlertBanner>
           </CardContent>
         )}
       </Card>
 
-      <Card className="bg-gradient-to-r from-purple-50 to-violet-50 border-purple-200">
-        <CardHeader 
-          className="cursor-pointer"
-          onClick={() => toggleSection('help')}
-        >
+      <Card className="border-accent/20 bg-accent-soft/35">
+        <CardHeader className="cursor-pointer" onClick={() => toggleSection('help')}>
           <CardTitle className="flex items-center justify-between">
-            <span className="flex items-center">
-              <HelpCircle className="h-5 w-5 mr-2 text-purple-600" />
+            <span className="flex items-center gap-2">
+              <HelpCircle className="h-5 w-5 text-accent" />
               Contact Admin / Get Help
             </span>
-            {expandedSection === 'help' ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+            {sectionIsOpen('help') ? <ChevronUp className="h-5 w-5 text-accent" /> : <ChevronDown className="h-5 w-5 text-accent" />}
           </CardTitle>
         </CardHeader>
-        {expandedSection === 'help' && (
-          <CardContent className="space-y-4 text-sm">
-            <div className="bg-white p-4 rounded-lg shadow-sm">
-              <h4 className="font-semibold text-gray-900 mb-3">Need Assistance?</h4>
+        {sectionIsOpen('help') && (
+          <CardContent className="space-y-4 text-sm text-text-secondary">
+            <div className="rounded-lg border border-border bg-card p-4">
+              <h4 className="mb-3 font-semibold text-foreground">Need assistance?</h4>
               <div className="space-y-3">
                 <div className="flex items-start gap-3">
-                  <Mail className="h-5 w-5 text-purple-600 mt-0.5" />
+                  <Mail className="mt-0.5 h-5 w-5 text-accent" />
                   <div>
-                    <p className="font-medium">Contact Your Supervisor</p>
-                    <p className="text-gray-600">For team-related questions, submission issues, or general guidance</p>
+                    <p className="font-medium text-foreground">Contact Your Supervisor</p>
+                    <p>For team-related questions, submission issues, or general guidance.</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3">
-                  <HelpCircle className="h-5 w-5 text-purple-600 mt-0.5" />
+                  <HelpCircle className="mt-0.5 h-5 w-5 text-accent" />
                   <div>
-                    <p className="font-medium">Submit a Support Ticket</p>
-                    <p className="text-gray-600">For technical issues, login problems, or competition questions</p>
-                    <Link href="/support" className="text-purple-600 hover:underline font-medium">
+                    <p className="font-medium text-foreground">Submit a Support Ticket</p>
+                    <p>For technical issues, login problems, or competition questions.</p>
+                    <Link href="/support" className="mt-1 inline-flex items-center font-medium text-primary hover:text-primary-hover">
                       Go to Support Center
                     </Link>
                   </div>
                 </div>
               </div>
             </div>
-            <div className="bg-purple-100 p-4 rounded-lg">
-              <h4 className="font-semibold text-purple-700 mb-2">Common Issues</h4>
-              <ul className="text-purple-700 space-y-1">
-                <li>Cannot submit? Check if you are the designated submitter</li>
-                <li>Missing team? Contact your supervisor to be added</li>
-                <li>Deadline passed? Contact admin for assistance</li>
+            <div className="rounded-lg border border-accent/20 bg-card p-4">
+              <div className="mb-2 flex items-center gap-2">
+                <Badge variant="medal">Common Issues</Badge>
+              </div>
+              <ul className="space-y-1 text-text-secondary">
+                <li>Cannot submit? Check if you are the designated submitter.</li>
+                <li>Missing team? Contact your supervisor to be added.</li>
+                <li>Deadline passed? Contact admin for assistance.</li>
               </ul>
             </div>
           </CardContent>
         )}
       </Card>
 
-      <Card className="border-2 border-blue-200">
+      <Card className="border-primary/20">
         <CardContent className="py-6">
           <div className="text-center">
             {acknowledged ? (
-              <div className="flex items-center justify-center space-x-3 text-green-600">
+              <div className="flex items-center justify-center gap-3 text-success">
                 <CheckCircle className="h-6 w-6" />
-                <span className="font-medium">You have acknowledged the competition guidelines</span>
+                <span className="font-medium">You have acknowledged the competition guidelines.</span>
               </div>
             ) : (
               <div className="space-y-4">
-                <p className="text-gray-700">By clicking below, you confirm that you have read and understand the competition guidelines.</p>
+                <p className="text-text-secondary">
+                  By clicking below, you confirm that you have read and understand the competition guidelines.
+                </p>
                 <Button onClick={handleAcknowledge} disabled={loading} size="lg">
                   {loading ? 'Acknowledging...' : 'I Acknowledge the Guidelines'}
                 </Button>
@@ -359,5 +362,3 @@ export default function RulesPage() {
     </div>
   )
 }
-
-

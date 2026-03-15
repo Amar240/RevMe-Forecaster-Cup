@@ -259,16 +259,16 @@ export default function AdminActualsPage() {
     finally { setActionLoading(null) }
   }
 
-  if (permLoading) return <div className="p-6 flex items-center justify-center min-h-[400px]"><Loader2 className="h-8 w-8 animate-spin text-blue-600" /></div>
+  if (permLoading) return <div className="flex min-h-[400px] items-center justify-center p-6"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
   if (!canPerform('actuals:upload')) return <AccessDenied title="Access Denied" message="You do not have permission to access the Upload Actuals page. Please contact an administrator for access." />
-  if (loading) return <div className="p-6 flex items-center justify-center min-h-[400px]"><div className="flex items-center gap-2 text-gray-500"><RefreshCw className="h-5 w-5 animate-spin" /><span>Loading actuals…</span></div></div>
+  if (loading) return <div className="flex min-h-[400px] items-center justify-center p-6"><div className="flex items-center gap-2 text-text-secondary"><RefreshCw className="h-5 w-5 animate-spin" /><span>Loading actuals...</span></div></div>
 
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Upload Actuals</h1>
-          <p className="text-gray-500 mt-1">{seasonName || 'Current Season'}</p>
+          <h1 className="text-2xl font-semibold text-foreground">Upload Actuals</h1>
+          <p className="mt-1 text-text-secondary">{seasonName || 'Current Season'}</p>
         </div>
         <Button variant="outline" onClick={fetchData} className="gap-2"><RefreshCw className="h-4 w-4" />Refresh</Button>
       </div>
@@ -283,9 +283,9 @@ export default function AdminActualsPage() {
         <div>
           <Card>
             <CardHeader className="pb-3">
-              <div className="flex gap-1 p-1 bg-gray-100 rounded-lg">
+              <div className="flex gap-1 rounded-lg bg-surface-secondary p-1">
                 {([['single', Upload, 'Single Entry'], ['bulk', FileSpreadsheet, 'Bulk Upload'], ['view', Eye, 'View Actuals']] as const).map(([key, Icon, label]) => (
-                  <button key={key} onClick={() => setActiveTab(key)} className={`flex-1 px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === key ? 'bg-white shadow text-gray-900' : 'text-gray-600 hover:text-gray-900'}`}>
+                  <button key={key} onClick={() => setActiveTab(key)} className={`flex-1 rounded-md px-4 py-2 text-sm font-medium transition-colors ${activeTab === key ? 'bg-card text-foreground shadow-card' : 'text-text-secondary hover:text-foreground'}`}>
                     <Icon className="h-4 w-4 inline mr-2" />{label}
                   </button>
                 ))}
@@ -324,7 +324,7 @@ export default function AdminActualsPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => { setShowUnlockModal(null); setUnlockReason('') }}>Cancel</Button>
-            <Button onClick={handleUnlockRound} disabled={actionLoading === showUnlockModal || unlockReason.trim().length < 5} className="bg-amber-600 hover:bg-amber-700">{actionLoading === showUnlockModal ? 'Unlocking...' : 'Unlock'}</Button>
+            <Button onClick={handleUnlockRound} disabled={actionLoading === showUnlockModal || unlockReason.trim().length < 5} className="border border-warning/20 bg-warning-background text-warning hover:bg-warning-background">{actionLoading === showUnlockModal ? 'Unlocking...' : 'Unlock'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

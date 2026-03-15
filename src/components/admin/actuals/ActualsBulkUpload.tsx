@@ -64,7 +64,7 @@ export function ActualsBulkUpload({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-gray-600">
+        <p className="text-sm text-text-secondary">
           Upload multiple actuals at once using CSV format
         </p>
         <Button variant="outline" size="sm" onClick={generateTemplate}>
@@ -84,12 +84,12 @@ export function ActualsBulkUpload({
       </div>
 
       {getBulkDataTargetsLockedRound() && (
-        <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
-          <Label className="text-amber-700 text-sm font-medium">
+        <div className="rounded-lg border border-warning/20 bg-warning-background/70 p-3">
+          <Label className="text-sm font-medium text-warning">
             Reason (required - your data targets locked/scored rounds)
           </Label>
           <Textarea
-            className="mt-1 border-amber-200"
+            className="mt-1"
             rows={2}
             placeholder="Explain why this bulk upload is needed..."
             value={bulkReason}

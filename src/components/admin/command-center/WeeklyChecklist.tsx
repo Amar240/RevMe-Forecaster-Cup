@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { useCallback, useEffect, useState } from 'react'
 import { CheckCircle2, Circle, PartyPopper } from 'lucide-react'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import type { DashboardData, RoundEntry } from './command-center-types'
 
 export interface WeeklyChecklistProps {
@@ -29,8 +29,6 @@ export function WeeklyChecklist({
   currentRound,
   submissionProgress,
   currentRoundEntry,
-  meta,
-  stats,
 }: WeeklyChecklistProps) {
   const roundId = currentRound?.id ?? currentRoundEntry?.id
   const roundNumber = currentRound?.number ?? currentRoundEntry?.number ?? '?'
@@ -43,29 +41,27 @@ export function WeeklyChecklist({
     setParticipantsNotified(localStorage.getItem(storageKey(roundId, 'participantsNotified')) === 'true')
   }, [roundId])
 
-  const toggleManual = useCallback((field: 'leaderboardReviewed' | 'participantsNotified') => {
-    const key = storageKey(roundId, field)
-    if (field === 'leaderboardReviewed') {
-      const next = !leaderboardReviewed
-      setLeaderboardReviewed(next)
-      localStorage.setItem(key, String(next))
-    } else {
-      const next = !participantsNotified
-      setParticipantsNotified(next)
-      localStorage.setItem(key, String(next))
-    }
-  }, [roundId, leaderboardReviewed, participantsNotified])
+  const toggleManual = useCallback(
+    (field: 'leaderboardReviewed' | 'participantsNotified') => {
+      const key = storageKey(roundId, field)
 
-  const roundOpen =
-    !!currentRound && (currentRound.status === 'Open' || currentRound.status === 'Closing Soon')
-  const submissionRate =
-    submissionProgress.total > 0
-      ? submissionProgress.submitted / submissionProgress.total
-      : 0
+      if (field === 'leaderboardReviewed') {
+        const next = !leaderboardReviewed
+        setLeaderboardReviewed(next)
+        localStorage.setItem(key, String(next))
+      } else {
+        const next = !participantsNotified
+        setParticipantsNotified(next)
+        localStorage.setItem(key, String(next))
+      }
+    },
+    [roundId, leaderboardReviewed, participantsNotified]
+  )
+
+  const roundOpen = !!currentRound && (currentRound.status === 'Open' || currentRound.status === 'Closing Soon')
+  const submissionRate = submissionProgress.total > 0 ? submissionProgress.submitted / submissionProgress.total : 0
   const submissionsMonitored = submissionRate >= 0.8
-  const roundClosed =
-    currentRound?.status === 'Closed' ||
-    (!currentRound && currentRoundEntry !== null)
+  const roundClosed = currentRound?.status === 'Closed' || (!currentRound && currentRoundEntry !== null)
   const actualsUploaded = currentRoundEntry?.hasActuals === true
   const scoringCompleted = currentRoundEntry?.isScored === true
 
@@ -121,24 +117,21 @@ export function WeeklyChecklist({
     },
   ]
 
-  const completedCount = items.filter((i) => i.checked).length
+  const completedCount = items.filter((item) => item.checked).length
   const allComplete = completedCount === items.length
   const progressPercent = Math.round((completedCount / items.length) * 100)
 
   return (
-    <Card className="border-gray-200">
+    <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-xl font-semibold flex items-center justify-between">
-          <span>Weekly Checklist — Round {roundNumber}</span>
-          <span className="text-sm font-medium text-gray-500">
+        <CardTitle className="flex items-center justify-between text-xl font-semibold">
+          <span>Weekly Checklist - Round {roundNumber}</span>
+          <span className="text-sm font-medium text-text-secondary">
             {completedCount}/{items.length} complete
           </span>
         </CardTitle>
-        <div className="mt-2 h-2 w-full rounded-full bg-gray-200 overflow-hidden">
-          <div
-            className="h-full rounded-full bg-emerald-500 transition-all duration-300"
-            style={{ width: `${progressPercent}%` }}
-          />
+        <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-surface-secondary">
+          <div className="h-full rounded-full bg-success transition-all duration-300" style={{ width: `${progressPercent}%` }} />
         </div>
       </CardHeader>
       <CardContent className="space-y-1">
@@ -146,20 +139,16 @@ export function WeeklyChecklist({
           <div
             key={item.key}
             className={`flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors ${
-              item.manual ? 'cursor-pointer hover:bg-gray-50' : ''
+              item.manual ? 'cursor-pointer hover:bg-surface-secondary' : ''
             }`}
-            onClick={
-              item.manual
-                ? () => toggleManual(item.key as 'leaderboardReviewed' | 'participantsNotified')
-                : undefined
-            }
+            onClick={item.manual ? () => toggleManual(item.key as 'leaderboardReviewed' | 'participantsNotified') : undefined}
             role={item.manual ? 'button' : undefined}
             tabIndex={item.manual ? 0 : undefined}
             onKeyDown={
               item.manual
-                ? (e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault()
+                ? (event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
                       toggleManual(item.key as 'leaderboardReviewed' | 'participantsNotified')
                     }
                   }
@@ -167,19 +156,17 @@ export function WeeklyChecklist({
             }
           >
             {item.checked ? (
-              <CheckCircle2 className="h-5 w-5 flex-shrink-0 text-emerald-500" />
+              <CheckCircle2 className="h-5 w-5 shrink-0 text-success" />
             ) : (
-              <Circle className={`h-5 w-5 flex-shrink-0 ${item.manual ? 'text-gray-400 hover:text-gray-600' : 'text-gray-300'}`} />
+              <Circle className={`h-5 w-5 shrink-0 ${item.manual ? 'text-text-muted hover:text-text-secondary' : 'text-border-strong'}`} />
             )}
-            <span className={`text-sm font-medium ${item.checked ? 'text-gray-900' : 'text-gray-600'}`}>
-              {item.label}
-            </span>
-            <span className="ml-auto text-xs text-gray-400">{item.status}</span>
+            <span className={`text-sm font-medium ${item.checked ? 'text-foreground' : 'text-text-secondary'}`}>{item.label}</span>
+            <span className="ml-auto text-xs text-text-muted">{item.status}</span>
           </div>
         ))}
 
         {allComplete && (
-          <div className="mt-4 flex items-center gap-2 rounded-lg bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
+          <div className="mt-4 flex items-center gap-2 rounded-lg bg-success-background px-4 py-3 text-sm font-medium text-success">
             <PartyPopper className="h-5 w-5" />
             All steps complete for Round {roundNumber}!
           </div>

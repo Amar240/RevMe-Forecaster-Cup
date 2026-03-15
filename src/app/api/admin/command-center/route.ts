@@ -38,14 +38,15 @@ export async function GET() {
       return isTimeOpen && isStatusOpen
     })
 
+    const seasonFilter = activeSeason ? { seasonId: activeSeason.id } : {}
     const [totalTeams, activeTeams, disqualifiedTeams, totalUsers, totalSubmissions, totalWarnings, pendingTeamApprovals] = await Promise.all([
-      prisma.team.count(),
-      prisma.team.count({ where: { status: 'ACTIVE' } }),
-      prisma.team.count({ where: { status: 'DISQUALIFIED' } }),
+      prisma.team.count({ where: seasonFilter }),
+      prisma.team.count({ where: { ...seasonFilter, status: 'ACTIVE' } }),
+      prisma.team.count({ where: { ...seasonFilter, status: 'DISQUALIFIED' } }),
       prisma.user.count(),
       prisma.submission.count(),
       prisma.warning.count(),
-      prisma.team.count({ where: { status: 'PENDING_APPROVAL' } }),
+      prisma.team.count({ where: { ...seasonFilter, status: 'PENDING_APPROVAL' } }),
     ])
 
     let currentRoundSubmissions = 0
@@ -83,20 +84,28 @@ export async function GET() {
         ? activeTeams * activeMarketCount * 2 * weekOffsets.length
         : null
 
-    const rounds = (activeSeason?.rounds || []).map((round) => {
-      const hasActuals = round._count.actuals > 0
-      const isScored = round._count.submissions > 0 && hasActuals
-      return {
-        id: round.id,
-        number: round.number,
-        opensAt: round.opensAt.toISOString(),
-        closesAt: round.closesAt.toISOString(),
-        status: getRoundStatus(new Date(round.opensAt), new Date(round.closesAt)),
-        submissionCount: round._count.submissions,
-        hasActuals,
-        isScored,
-      }
-    })
+    const rounds = await Promise.all(
+      (activeSeason?.rounds || []).map(async (round) => {
+        const expectedWeekOffsets = round.isFinal ? 1 : 2
+        const expectedActuals = activeMarketCount * 2 * expectedWeekOffsets
+        const [actualsCount, aggregatesExist] = await Promise.all([
+          prisma.actual.count({ where: { roundId: round.id, isVoided: false } }),
+          prisma.scoreAggregate.count({ where: { seasonId: activeSeason!.id, roundId: round.id } }),
+        ])
+        const hasActuals = actualsCount > 0
+        const isScored = aggregatesExist > 0 && actualsCount === expectedActuals
+        return {
+          id: round.id,
+          number: round.number,
+          opensAt: round.opensAt.toISOString(),
+          closesAt: round.closesAt.toISOString(),
+          status: getRoundStatus(new Date(round.opensAt), new Date(round.closesAt)),
+          submissionCount: round._count.submissions,
+          hasActuals,
+          isScored,
+        }
+      })
+    )
 
     return jsonOk({
       activeSeason: activeSeason ? { id: activeSeason.id, name: activeSeason.name, status: activeSeason.status } : null,

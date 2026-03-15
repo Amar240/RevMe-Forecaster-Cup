@@ -11,7 +11,8 @@
     "test": "vitest run",
     "db:push": "prisma db push",
     "db:generate": "prisma generate",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "db:reset-admin": "node scripts/reset-admin.js"
   },
   "dependencies": {
     "@prisma/client": "^6.19.2",

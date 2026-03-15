@@ -3,6 +3,7 @@
 import type { RoundSummary, ActualSummary } from '@/features/actuals/types'
 import { MarketChip, formatValue } from './actuals-types'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import {
@@ -43,10 +44,10 @@ export function ActualVoidDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="p-3 bg-gray-50 rounded text-sm">
+        <div className="rounded-lg border border-border bg-surface-secondary p-3 text-sm">
           <div className="flex gap-2 mb-1">
             <MarketChip name={actual.marketName} />
-            <span>{actual.metric}</span>
+            <Badge variant={actual.metric === 'OCCUPANCY' ? 'info' : 'medal'}>{actual.metric}</Badge>
           </div>
           <div className="font-medium">
             Round {actual.roundNumber}, W+{actual.weekOffset}: {formatValue(actual.value, actual.metric)}
@@ -55,7 +56,7 @@ export function ActualVoidDialog({
 
         {requiresReason && (
           <div>
-            <Label className="text-amber-600">Reason (required)</Label>
+            <Label className="text-warning">Reason (required)</Label>
             <Textarea
               className="mt-1"
               rows={2}
@@ -71,9 +72,10 @@ export function ActualVoidDialog({
             Cancel
           </Button>
           <Button
+            variant="destructive"
             onClick={onVoid}
             disabled={actionLoading === actual.id}
-            className="flex-1 bg-red-600 hover:bg-red-700"
+            className="flex-1"
           >
             {actionLoading === actual.id ? 'Voiding...' : 'Void Actual'}
           </Button>

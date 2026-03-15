@@ -1,26 +1,28 @@
 'use client'
 
-import { csrfFetch } from '@/lib/csrf'
-
-import { clientLogger } from '@/lib/client-logger'
-
-
-import { useEffect, useState, useCallback } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Crown, UserMinus, Users } from 'lucide-react'
+import { toast } from 'sonner'
+import { csrfFetch } from '@/lib/csrf'
+import { clientLogger } from '@/lib/client-logger'
+import { AlertBanner } from '@/components/ui/alert-banner'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { UserMinus, Crown } from 'lucide-react'
 import { PageLoader } from '@/components/ui/page-loader'
-import { toast } from 'sonner'
 
-const STATUS_BADGES: Record<string, { label: string; className: string }> = {
-  ACTIVE: { label: 'Active', className: 'bg-green-100 text-green-700' },
-  PENDING_APPROVAL: { label: 'Pending Approval', className: 'bg-amber-100 text-amber-700' },
-  APPROVED: { label: 'Approved', className: 'bg-emerald-100 text-emerald-700' },
-  REJECTED: { label: 'Rejected', className: 'bg-red-100 text-red-700' },
-  DISQUALIFIED: { label: 'Disqualified', className: 'bg-red-100 text-red-700' },
+const STATUS_BADGES: Record<
+  string,
+  { label: string; variant: 'success' | 'warning' | 'info' | 'error' }
+> = {
+  ACTIVE: { label: 'Active', variant: 'success' },
+  PENDING_APPROVAL: { label: 'Pending Approval', variant: 'warning' },
+  APPROVED: { label: 'Approved', variant: 'info' },
+  REJECTED: { label: 'Rejected', variant: 'error' },
+  DISQUALIFIED: { label: 'Disqualified', variant: 'error' },
 }
 
 interface TeamMember {
@@ -67,11 +69,11 @@ export default function TeamDetailPage() {
   }, [params.id])
 
   useEffect(() => {
-    fetchTeam()
+    void fetchTeam()
   }, [fetchTeam])
 
-  const handleAddMember = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleAddMember = async (event: React.FormEvent) => {
+    event.preventDefault()
     setError('')
     setAddingMember(true)
 
@@ -90,7 +92,7 @@ export default function TeamDetailPage() {
       }
 
       setEmail('')
-      fetchTeam()
+      void fetchTeam()
     } catch {
       setError('An error occurred')
     } finally {
@@ -103,7 +105,7 @@ export default function TeamDetailPage() {
       await csrfFetch(`/api/teams/${params.id}/members/${memberId}`, {
         method: 'DELETE',
       })
-      fetchTeam()
+      void fetchTeam()
     } catch {
       setError('Failed to remove member')
     }
@@ -116,33 +118,31 @@ export default function TeamDetailPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ memberId }),
       })
-      fetchTeam()
+      void fetchTeam()
     } catch {
       setError('Failed to set submitter')
     }
   }
 
   if (loading) {
-    return <PageLoader message="Loading team details…" />
+    return <PageLoader message="Loading team details..." />
   }
 
   if (!team) {
-    return <div className="text-center py-12">Team not found</div>
+    return <div className="py-12 text-center text-text-secondary">Team not found</div>
   }
 
+  const teamStatus = STATUS_BADGES[team.status]
+
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="mx-auto max-w-2xl space-y-6">
+      <div className="flex items-center justify-between gap-4">
         <div>
-          <div className="flex items-center space-x-2">
-            <h1 className="text-2xl font-bold text-gray-900">{team.name}</h1>
-            {STATUS_BADGES[team.status] && (
-              <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_BADGES[team.status].className}`}>
-                {STATUS_BADGES[team.status].label}
-              </span>
-            )}
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-semibold text-foreground">{team.name}</h1>
+            {teamStatus && <Badge variant={teamStatus.variant}>{teamStatus.label}</Badge>}
           </div>
-          <p className="text-gray-600">{team.displayId}</p>
+          <p className="text-text-secondary">{team.displayId}</p>
         </div>
         <Button variant="outline" onClick={() => router.push('/teams')}>
           Back to Teams
@@ -158,26 +158,33 @@ export default function TeamDetailPage() {
         </CardHeader>
         <CardContent>
           {team.members.length === 0 ? (
-            <p className="text-gray-500 text-center py-4">No members yet</p>
+            <div className="rounded-xl border border-dashed border-border bg-surface-secondary px-4 py-6 text-center text-text-secondary">
+              No members yet
+            </div>
           ) : (
             <div className="space-y-3">
               {team.members.map((member) => (
                 <div
                   key={member.id}
-                  className="flex items-center justify-between p-3 border rounded-lg"
+                  className="flex items-center justify-between rounded-xl border border-border bg-card p-4"
                 >
-                  <div>
-                    <p className="font-medium">
-                      {member.user.firstName} {member.user.lastName}
-                    </p>
-                    <p className="text-sm text-gray-500">{member.user.email}</p>
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary-soft text-primary">
+                      <Users className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-foreground">
+                        {member.user.firstName} {member.user.lastName}
+                      </p>
+                      <p className="text-sm text-text-secondary">{member.user.email}</p>
+                    </div>
                   </div>
-                  <div className="flex items-center space-x-2">
+                  <div className="flex items-center gap-2">
                     {member.isSubmitter ? (
-                      <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full flex items-center">
-                        <Crown className="h-3 w-3 mr-1" />
+                      <Badge variant="info" className="gap-1">
+                        <Crown className="h-3 w-3" />
                         Submitter
-                      </span>
+                      </Badge>
                     ) : (
                       <Button
                         variant="ghost"
@@ -192,7 +199,7 @@ export default function TeamDetailPage() {
                       variant="ghost"
                       size="sm"
                       onClick={() => handleRemoveMember(member.id)}
-                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                      className="text-error hover:bg-error-background hover:text-error"
                     >
                       <UserMinus className="h-4 w-4" />
                     </Button>
@@ -208,17 +215,11 @@ export default function TeamDetailPage() {
         <Card>
           <CardHeader>
             <CardTitle>Add Member</CardTitle>
-            <CardDescription>
-              Add a student by their registered email address.
-            </CardDescription>
+            <CardDescription>Add a student by their registered email address.</CardDescription>
           </CardHeader>
           <form onSubmit={handleAddMember}>
             <CardContent className="space-y-4">
-              {error && (
-                <div className="bg-red-50 text-red-600 px-4 py-2 rounded-md text-sm">
-                  {error}
-                </div>
-              )}
+              {error && <AlertBanner variant="error">{error}</AlertBanner>}
               <div className="space-y-2">
                 <Label htmlFor="email">Student Email</Label>
                 <Input
@@ -226,7 +227,7 @@ export default function TeamDetailPage() {
                   type="email"
                   placeholder="student@university.edu"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(event) => setEmail(event.target.value)}
                   required
                 />
               </div>
@@ -240,7 +241,3 @@ export default function TeamDetailPage() {
     </div>
   )
 }
-
-
-
-

@@ -52,7 +52,7 @@ export function ConfirmDialog({
             onClick={onConfirm}
             disabled={loading}
           >
-            {loading ? 'Processing…' : confirmLabel}
+            {loading ? 'Processing...' : confirmLabel}
           </Button>
         </DialogFooter>
       </DialogContent>

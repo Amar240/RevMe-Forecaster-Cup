@@ -8,12 +8,14 @@ import { clientLogger } from '@/lib/client-logger'
 import { useEffect, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { AlertBanner } from '@/components/ui/alert-banner'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Building2, Plus, Trash2 } from 'lucide-react'
 import { PageLoader } from '@/components/ui/page-loader'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { DataTable } from '@/components/ui/data-table'
+import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
 
 interface University {
@@ -90,15 +92,15 @@ export default function AdminUniversitiesPage() {
   }
 
   if (loading) {
-    return <PageLoader message="Loading universities…" />
+    return <PageLoader message="Loading universities..." />
   }
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Universities</h1>
-          <p className="text-gray-600">Manage participating universities</p>
+          <h1 className="text-2xl font-bold text-foreground">Universities</h1>
+          <p className="text-text-secondary">Manage participating universities</p>
         </div>
         <Button onClick={() => setShowForm(!showForm)}>
           <Plus className="h-4 w-4 mr-2" />
@@ -110,13 +112,14 @@ export default function AdminUniversitiesPage() {
         <Card>
           <CardHeader>
             <CardTitle>Add University</CardTitle>
+            <CardDescription>Add an institution before students or supervisors join under it.</CardDescription>
           </CardHeader>
           <form onSubmit={handleSubmit}>
             <CardContent className="space-y-4">
               {error && (
-                <div className="bg-red-50 text-red-600 px-4 py-2 rounded-md text-sm">
+                <AlertBanner variant="error">
                   {error}
-                </div>
+                </AlertBanner>
               )}
               <div className="grid md:grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -155,7 +158,32 @@ export default function AdminUniversitiesPage() {
       <DataTable
         data={universities}
         columns={[
-          { key: 'name', header: 'Name', sortable: true },
+          {
+            key: 'name',
+            header: 'University',
+            sortable: true,
+            render: (uni: University) => (
+              <div className="flex items-center gap-3">
+                <div className="rounded-lg bg-primary-soft p-2 text-primary">
+                  <Building2 className="h-4 w-4" />
+                </div>
+                <div>
+                  <p className="font-medium text-foreground">{uni.name}</p>
+                  <p className="text-xs text-text-muted">{uni.country || 'Country not set'}</p>
+                </div>
+              </div>
+            ),
+          },
+          {
+            key: 'counts',
+            header: 'Participation',
+            render: (uni: University) => (
+              <div className="flex flex-wrap gap-2">
+                <Badge variant="info">{uni._count.users} users</Badge>
+                <Badge variant="neutral">{uni._count.teams} teams</Badge>
+              </div>
+            ),
+          },
           {
             key: 'actions',
             header: 'Actions',
@@ -164,7 +192,7 @@ export default function AdminUniversitiesPage() {
                 variant="ghost"
                 size="sm"
                 onClick={() => setDeleteTarget(uni.id)}
-                className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                className="text-error hover:bg-error-background hover:text-error"
               >
                 <Trash2 className="h-4 w-4" />
               </Button>
@@ -188,4 +216,3 @@ export default function AdminUniversitiesPage() {
     </div>
   )
 }
-

@@ -1,13 +1,21 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import {
+  CheckCircle2,
+  Clock,
+  Mail,
+  RefreshCw,
+  Send,
+  XCircle,
+} from 'lucide-react'
+import { toast } from 'sonner'
 import { csrfFetch } from '@/lib/csrf'
 import { clientLogger } from '@/lib/client-logger'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { toast } from 'sonner'
-import { Clock, Send, CheckCircle2, XCircle, RefreshCw, Mail } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
 
 interface TrackerTeam {
   id: string
@@ -37,13 +45,117 @@ function getTimeRemaining(closesAt: string): { hours: number; minutes: number; p
   }
 }
 
+function TrackerTable({
+  tone,
+  teams,
+  showSupervisor,
+  showSubmittedAt,
+}: {
+  tone: 'error' | 'success' | 'neutral'
+  teams: TrackerTeam[]
+  showSupervisor?: boolean
+  showSubmittedAt?: boolean
+}) {
+  const wrapperClass =
+    tone === 'error'
+      ? 'border-error/20 bg-error-background/60'
+      : tone === 'success'
+        ? 'border-success/20 bg-success-background/60'
+        : 'border-border bg-card'
+
+  const headClass =
+    tone === 'error'
+      ? 'border-error/20 bg-error-background text-error'
+      : tone === 'success'
+        ? 'border-success/20 bg-success-background text-success'
+        : 'border-border bg-muted text-text-secondary'
+
+  const bodyClass =
+    tone === 'error'
+      ? 'divide-error/10'
+      : tone === 'success'
+        ? 'divide-success/10'
+        : 'divide-border'
+
+  return (
+    <div className={`overflow-hidden rounded-lg border ${wrapperClass}`}>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className={`border-b text-left text-xs uppercase tracking-[0.15em] ${headClass}`}>
+              <th className="px-4 py-2">Team</th>
+              <th className="px-4 py-2">University</th>
+              {showSupervisor && <th className="px-4 py-2">Supervisor</th>}
+              {showSubmittedAt && <th className="px-4 py-2">Submitted At</th>}
+              <th className="px-4 py-2">Status</th>
+            </tr>
+          </thead>
+          <tbody className={`divide-y ${bodyClass}`}>
+            {teams.map((team) => (
+              <tr key={team.id} className="transition-colors hover:bg-surface-secondary">
+                <td className="px-4 py-2 font-medium text-foreground">
+                  {team.name}
+                  <span className="ml-2 text-xs text-text-muted">{team.displayId}</span>
+                </td>
+                <td className="px-4 py-2 text-text-secondary">{team.university}</td>
+                {showSupervisor && (
+                  <td className="px-4 py-2 text-text-secondary">
+                    {team.supervisor}
+                    {team.supervisorEmail && (
+                      <a
+                        href={`mailto:${team.supervisorEmail}`}
+                        className="ml-2 text-xs text-primary hover:text-primary-hover hover:underline"
+                      >
+                        {team.supervisorEmail}
+                      </a>
+                    )}
+                  </td>
+                )}
+                {showSubmittedAt && (
+                  <td className="px-4 py-2 tabular-nums text-text-secondary">
+                    {team.submittedAt
+                      ? new Date(team.submittedAt).toLocaleString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                          hour: 'numeric',
+                          minute: '2-digit',
+                        })
+                      : '-'}
+                  </td>
+                )}
+                <td className="px-4 py-2">
+                  {team.hasSubmitted ? (
+                    <Badge variant="success" className="gap-1">
+                      <CheckCircle2 className="h-3 w-3" />
+                      Submitted
+                    </Badge>
+                  ) : (
+                    <Badge variant="error" className="gap-1">
+                      <XCircle className="h-3 w-3" />
+                      Missing
+                    </Badge>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 export function SubmissionTracker() {
   const [data, setData] = useState<TrackerData | null>(null)
   const [loading, setLoading] = useState(true)
   const [reminderSent, setReminderSent] = useState(false)
   const [sendingReminder, setSendingReminder] = useState(false)
   const [showSubmitted, setShowSubmitted] = useState(false)
-  const [countdown, setCountdown] = useState<{ hours: number; minutes: number; passed: boolean } | null>(null)
+  const [countdown, setCountdown] = useState<{
+    hours: number
+    minutes: number
+    passed: boolean
+  } | null>(null)
 
   const fetchData = useCallback(async () => {
     try {
@@ -67,21 +179,25 @@ export function SubmissionTracker() {
   }, [])
 
   useEffect(() => {
-    fetchData()
+    void fetchData()
   }, [fetchData])
 
   useEffect(() => {
     if (!data?.round) return
+
     const interval = setInterval(() => {
       setCountdown(getTimeRemaining(data.round!.closesAt))
     }, 60_000)
+
     return () => clearInterval(interval)
   }, [data?.round])
 
   const handleSendReminder = async () => {
     setSendingReminder(true)
     try {
-      const res = await csrfFetch('/api/admin/notifications/missed-submissions', { method: 'POST' })
+      const res = await csrfFetch('/api/admin/notifications/missed-submissions', {
+        method: 'POST',
+      })
       const result = await res.json()
       if (res.ok) {
         toast.success(result.message || 'Reminders sent to missing teams')
@@ -99,12 +215,16 @@ export function SubmissionTracker() {
 
   if (loading) {
     return (
-      <Card className="border-gray-200 animate-pulse">
-        <CardHeader><CardTitle className="h-6 w-48 bg-gray-200 rounded" /></CardHeader>
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            <Skeleton className="h-6 w-48" />
+          </CardTitle>
+        </CardHeader>
         <CardContent className="space-y-4">
-          <div className="h-4 w-64 bg-gray-200 rounded" />
-          <div className="h-3 w-full bg-gray-200 rounded" />
-          <div className="h-32 w-full bg-gray-100 rounded" />
+          <Skeleton className="h-4 w-64" />
+          <Skeleton className="h-3 w-full" />
+          <Skeleton className="h-32 w-full" />
         </CardContent>
       </Card>
     )
@@ -112,248 +232,144 @@ export function SubmissionTracker() {
 
   if (!data?.round) {
     return (
-      <Card className="border-gray-200">
+      <Card>
         <CardHeader>
           <CardTitle className="flex items-center text-xl font-semibold">
-            <Clock className="h-5 w-5 mr-2 text-gray-400" />
+            <Clock className="mr-2 h-5 w-5 text-text-muted" />
             Live Submission Tracker
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-gray-500">No active round. The tracker will appear when a round is open.</p>
+          <p className="text-sm text-text-secondary">
+            No active round. The tracker will appear when a round is open.
+          </p>
         </CardContent>
       </Card>
     )
   }
 
   const { summary, teams } = data
-  const progressPercent = summary.total > 0 ? Math.round((summary.submitted / summary.total) * 100) : 0
+  const progressPercent =
+    summary.total > 0 ? Math.round((summary.submitted / summary.total) * 100) : 0
   const deadlinePassed = countdown?.passed ?? false
 
   const sortedTeams = [...teams].sort((a, b) => {
     if (a.hasSubmitted === b.hasSubmitted) return a.name.localeCompare(b.name)
     return a.hasSubmitted ? 1 : -1
   })
-  const missingTeams = sortedTeams.filter((t) => !t.hasSubmitted)
-  const submittedTeams = sortedTeams.filter((t) => t.hasSubmitted)
+  const missingTeams = sortedTeams.filter((team) => !team.hasSubmitted)
+  const submittedTeams = sortedTeams.filter((team) => team.hasSubmitted)
 
   return (
-    <Card className={`border-gray-200 ${deadlinePassed ? 'border-red-200' : ''}`}>
+    <Card className={deadlinePassed ? 'border-error/20' : undefined}>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
         <CardTitle className="flex items-center text-xl font-semibold">
-          <Clock className={`h-5 w-5 mr-2 ${deadlinePassed ? 'text-red-500' : 'text-blue-600'}`} />
-          Live Submission Tracker — Round {data.round.number}
+          <Clock className={`mr-2 h-5 w-5 ${deadlinePassed ? 'text-error' : 'text-primary'}`} />
+          Live Submission Tracker - Round {data.round.number}
         </CardTitle>
         <Button variant="outline" size="sm" onClick={fetchData} disabled={loading}>
-          <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           Refresh
         </Button>
       </CardHeader>
 
       <CardContent className="space-y-6">
-        {/* Countdown + Progress banner */}
-        <div className={`rounded-xl border p-4 ${deadlinePassed ? 'border-red-200 bg-red-50' : 'border-blue-200 bg-blue-50'}`}>
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div
+          className={`rounded-xl border p-4 ${
+            deadlinePassed
+              ? 'border-error/20 bg-error-background/60'
+              : 'border-primary/15 bg-primary-soft/70'
+          }`}
+        >
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <div className={`text-sm font-medium ${deadlinePassed ? 'text-red-700' : 'text-blue-700'}`}>
+              <div className={`text-sm font-medium ${deadlinePassed ? 'text-error' : 'text-primary'}`}>
                 {deadlinePassed ? 'Deadline Passed' : 'Time Remaining'}
               </div>
-              <div className={`text-2xl font-bold tabular-nums ${deadlinePassed ? 'text-red-600' : 'text-gray-900'}`}>
+              <div className="text-2xl font-bold tabular-nums text-foreground">
                 {deadlinePassed
                   ? 'Deadline passed'
                   : `${countdown!.hours}h ${countdown!.minutes}m left`}
               </div>
-              <div className="text-xs text-gray-500 mt-1">
-                Deadline: {new Date(data.round.closesAt).toLocaleString('en-US', {
-                  month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
+              <div className="mt-1 text-xs text-text-muted">
+                Deadline:{' '}
+                {new Date(data.round.closesAt).toLocaleString('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                  hour: 'numeric',
+                  minute: '2-digit',
+                  timeZoneName: 'short',
                 })}
               </div>
             </div>
             <div className="text-right">
-              <div className="text-sm font-medium text-gray-700">
+              <div className="text-sm font-medium text-text-secondary">
                 {summary.submitted} of {summary.total} teams submitted
               </div>
-              <div className="text-3xl font-bold tabular-nums text-gray-900">{progressPercent}%</div>
+              <div className="text-3xl font-bold tabular-nums text-foreground">
+                {progressPercent}%
+              </div>
             </div>
           </div>
-          <div className="mt-3 h-3 w-full rounded-full bg-gray-200 overflow-hidden">
+          <div className="mt-3 h-3 w-full overflow-hidden rounded-full bg-surface-secondary">
             <div
-              className={`h-full rounded-full transition-all duration-500 ${deadlinePassed ? 'bg-red-500' : 'bg-blue-600'}`}
+              className={`h-full rounded-full transition-all duration-500 ${
+                deadlinePassed ? 'bg-error' : 'bg-primary'
+              }`}
               style={{ width: `${progressPercent}%` }}
             />
           </div>
         </div>
 
-        {/* Missing teams section */}
         {missingTeams.length > 0 && (
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="flex items-center text-sm font-semibold text-red-700">
-                <XCircle className="h-4 w-4 mr-2" />
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="flex items-center text-sm font-semibold text-error">
+                <XCircle className="mr-2 h-4 w-4" />
                 Missing Submissions ({summary.missing})
               </h3>
               <Button
                 size="sm"
-                variant="destructive"
+                variant="danger"
                 onClick={handleSendReminder}
                 disabled={sendingReminder || reminderSent}
               >
                 {sendingReminder ? (
-                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
                 ) : (
-                  <Mail className="h-4 w-4 mr-2" />
+                  <Mail className="mr-2 h-4 w-4" />
                 )}
-                {reminderSent ? 'Reminders Sent' : 'Send Reminder to Missing Teams'}
+                {reminderSent ? 'Reminders Sent' : 'Send Reminder'}
               </Button>
             </div>
-            <div className="rounded-lg border border-red-200 bg-red-50/50 overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-red-200 bg-red-50 text-left text-xs uppercase tracking-[0.15em] text-red-700">
-                      <th className="px-4 py-2">Team</th>
-                      <th className="px-4 py-2">University</th>
-                      <th className="px-4 py-2">Supervisor</th>
-                      <th className="px-4 py-2">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-red-100">
-                    {missingTeams.map((team) => (
-                      <tr key={team.id} className="hover:bg-red-50/80">
-                        <td className="px-4 py-2 font-medium text-gray-900">
-                          {team.name}
-                          <span className="ml-2 text-xs text-gray-400">{team.displayId}</span>
-                        </td>
-                        <td className="px-4 py-2 text-gray-600">{team.university}</td>
-                        <td className="px-4 py-2 text-gray-600">
-                          {team.supervisor}
-                          {team.supervisorEmail && (
-                            <a
-                              href={`mailto:${team.supervisorEmail}`}
-                              className="ml-2 text-blue-600 hover:underline text-xs"
-                            >
-                              {team.supervisorEmail}
-                            </a>
-                          )}
-                        </td>
-                        <td className="px-4 py-2">
-                          <Badge variant="destructive" className="text-xs">
-                            <XCircle className="h-3 w-3 mr-1" /> Missing
-                          </Badge>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+            <TrackerTable tone="error" teams={missingTeams} showSupervisor />
           </div>
         )}
 
-        {/* Submitted teams (collapsible) */}
         {submittedTeams.length > 0 && (
           <div className="space-y-3">
             <button
-              onClick={() => setShowSubmitted(!showSubmitted)}
-              className="flex items-center text-sm font-semibold text-emerald-700 hover:text-emerald-800 transition-colors"
+              onClick={() => setShowSubmitted((value) => !value)}
+              className="flex items-center text-sm font-semibold text-success transition-colors hover:opacity-80"
             >
-              <CheckCircle2 className="h-4 w-4 mr-2" />
+              <CheckCircle2 className="mr-2 h-4 w-4" />
               Submitted ({summary.submitted})
-              <span className="ml-2 text-xs text-gray-400">
+              <span className="ml-2 text-xs text-text-muted">
                 {showSubmitted ? '(click to collapse)' : '(click to expand)'}
               </span>
             </button>
             {showSubmitted && (
-              <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-emerald-200 bg-emerald-50 text-left text-xs uppercase tracking-[0.15em] text-emerald-700">
-                        <th className="px-4 py-2">Team</th>
-                        <th className="px-4 py-2">University</th>
-                        <th className="px-4 py-2">Submitted At</th>
-                        <th className="px-4 py-2">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-emerald-100">
-                      {submittedTeams.map((team) => (
-                        <tr key={team.id} className="hover:bg-emerald-50/80">
-                          <td className="px-4 py-2 font-medium text-gray-900">
-                            {team.name}
-                            <span className="ml-2 text-xs text-gray-400">{team.displayId}</span>
-                          </td>
-                          <td className="px-4 py-2 text-gray-600">{team.university}</td>
-                          <td className="px-4 py-2 text-gray-600 tabular-nums">
-                            {team.submittedAt
-                              ? new Date(team.submittedAt).toLocaleString('en-US', {
-                                  month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
-                                })
-                              : '—'}
-                          </td>
-                          <td className="px-4 py-2">
-                            <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 text-xs">
-                              <CheckCircle2 className="h-3 w-3 mr-1" /> Submitted
-                            </Badge>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+              <TrackerTable tone="success" teams={submittedTeams} showSubmittedAt />
             )}
           </div>
         )}
 
-        {/* Full grid/table */}
         <div className="space-y-3">
-          <h3 className="text-sm font-semibold text-gray-700 flex items-center">
-            <Send className="h-4 w-4 mr-2" />
+          <h3 className="flex items-center text-sm font-semibold text-foreground">
+            <Send className="mr-2 h-4 w-4 text-primary" />
             All Teams Overview
           </h3>
-          <div className="rounded-lg border border-gray-200 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-200 bg-gray-50 text-left text-xs uppercase tracking-[0.15em] text-gray-500">
-                    <th className="px-4 py-2">Team</th>
-                    <th className="px-4 py-2">University</th>
-                    <th className="px-4 py-2">Status</th>
-                    <th className="px-4 py-2">Submitted At</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {sortedTeams.map((team) => (
-                    <tr key={team.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-2 font-medium text-gray-900">
-                        {team.name}
-                        <span className="ml-2 text-xs text-gray-400">{team.displayId}</span>
-                      </td>
-                      <td className="px-4 py-2 text-gray-600">{team.university}</td>
-                      <td className="px-4 py-2">
-                        {team.hasSubmitted ? (
-                          <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 text-xs">
-                            <CheckCircle2 className="h-3 w-3 mr-1" /> Submitted
-                          </Badge>
-                        ) : (
-                          <Badge variant="destructive" className="text-xs">
-                            <XCircle className="h-3 w-3 mr-1" /> Missing
-                          </Badge>
-                        )}
-                      </td>
-                      <td className="px-4 py-2 text-gray-600 tabular-nums">
-                        {team.submittedAt
-                          ? new Date(team.submittedAt).toLocaleString('en-US', {
-                              month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
-                            })
-                          : '—'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <TrackerTable tone="neutral" teams={sortedTeams} showSubmittedAt />
         </div>
       </CardContent>
     </Card>

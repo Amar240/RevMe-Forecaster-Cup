@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { runScoring } from '@/lib/scoring'
 import { prisma } from '@/lib/db'
 import { logAuditAction } from '@/lib/audit'
+import { normalizeScoringScope } from '@/lib/scoring-admin'
 import { requireAdminOrResponse, jsonOk, jsonError, ApiError } from '@/server/http'
 
 export const dynamic = 'force-dynamic'
@@ -40,7 +41,12 @@ export async function POST(request: NextRequest) {
     if (response) return response
 
     const body = await request.json()
-    const { seasonId, scope = 'SEASON', roundId } = body
+    const { seasonId, roundId } = body
+    const scope = normalizeScoringScope(body.scope ?? 'SEASON')
+
+    if (!scope) {
+      throw new ApiError('Invalid scoring scope', 400, 'INVALID_INPUT')
+    }
 
     let targetSeasonId = seasonId
     if (!targetSeasonId) {

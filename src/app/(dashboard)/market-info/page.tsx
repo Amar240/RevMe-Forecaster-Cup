@@ -1,15 +1,25 @@
 'use client'
 
 import { csrfFetch } from '@/lib/csrf'
-
 import { clientLogger } from '@/lib/client-logger'
-
-
 import { useState, useEffect, useCallback } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Loader2, MapPin, ExternalLink, FileText, TrendingUp, TrendingDown, AlertTriangle, Lightbulb, ChevronRight, ArrowUpRight } from 'lucide-react'
+import {
+  Loader2,
+  MapPin,
+  ExternalLink,
+  FileText,
+  TrendingUp,
+  TrendingDown,
+  AlertTriangle,
+  Lightbulb,
+  ChevronRight,
+  ArrowUpRight,
+} from 'lucide-react'
 import { toast } from 'sonner'
+import { resourceTypeMeta } from '@/lib/status-metadata'
 
 interface ResourceLink {
   id: string
@@ -56,7 +66,6 @@ export default function MarketInfoPage() {
   const [loading, setLoading] = useState(true)
   const [season, setSeason] = useState<{ id: string; name: string } | null>(null)
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const fetchData = useCallback(async () => {
     try {
       const res = await csrfFetch('/api/market-info')
@@ -90,7 +99,7 @@ export default function MarketInfoPage() {
         const data = await res.json()
         if (data.marketInfo) {
           setMarketInfos((prev) => {
-            const existing = prev.findIndex((m) => m.id === data.marketInfo.id)
+            const existing = prev.findIndex((item) => item.id === data.marketInfo.id)
             if (existing >= 0) {
               const updated = [...prev]
               updated[existing] = data.marketInfo
@@ -101,7 +110,7 @@ export default function MarketInfoPage() {
         }
         if (data.currentRoundUpdate) {
           setRoundUpdates((prev) => {
-            const existing = prev.findIndex((u) => u.marketId === marketId)
+            const existing = prev.findIndex((item) => item.marketId === marketId)
             if (existing >= 0) {
               const updated = [...prev]
               updated[existing] = { ...data.currentRoundUpdate, marketId }
@@ -117,28 +126,45 @@ export default function MarketInfoPage() {
     }
   }
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-useEffect(() => {
+  useEffect(() => {
     if (selectedMarketId) {
       fetchMarketDetail(selectedMarketId)
     }
   }, [selectedMarketId])
 
-  const selectedInfo = marketInfos.find((m) => m.market?.id === selectedMarketId || m.marketId === selectedMarketId)
-  const selectedMarket = markets.find((m) => m.id === selectedMarketId)
-  const currentRoundUpdate = roundUpdates.find((u) => u.marketId === selectedMarketId)
+  const selectedInfo = marketInfos.find((item) => item.market?.id === selectedMarketId || item.marketId === selectedMarketId)
+  const selectedMarket = markets.find((market) => market.id === selectedMarketId)
+  const currentRoundUpdate = roundUpdates.find((update) => update.marketId === selectedMarketId)
 
-  const getMarketColor = (name: string) => {
-    if (name.includes('Nashville')) return { bg: 'bg-indigo-50', border: 'border-indigo-200', accent: 'text-indigo-600' }
-    if (name.includes('Dubai')) return { bg: 'bg-amber-50', border: 'border-amber-200', accent: 'text-amber-600' }
-    if (name.includes('Hamburg')) return { bg: 'bg-teal-50', border: 'border-teal-200', accent: 'text-teal-600' }
-    return { bg: 'bg-gray-50', border: 'border-gray-200', accent: 'text-gray-600' }
+  const getMarketTone = (name: string) => {
+    if (name.includes('Nashville')) {
+      return {
+        surface: 'border-primary/20 bg-primary-soft/55 text-primary',
+        title: 'text-primary',
+      }
+    }
+    if (name.includes('Dubai')) {
+      return {
+        surface: 'border-accent/20 bg-accent-soft/60 text-accent',
+        title: 'text-accent',
+      }
+    }
+    if (name.includes('Hamburg')) {
+      return {
+        surface: 'border-info/20 bg-info-background/60 text-info',
+        title: 'text-info',
+      }
+    }
+    return {
+      surface: 'border-border bg-surface-secondary text-text-secondary',
+      title: 'text-foreground',
+    }
   }
 
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     )
   }
@@ -147,14 +173,14 @@ useEffect(() => {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Market Information</h1>
-          <p className="text-gray-600">Context and insights about the markets you are forecasting</p>
+          <h1 className="text-2xl font-bold text-foreground">Market Information</h1>
+          <p className="text-text-secondary">Context and insights about the markets you are forecasting</p>
         </div>
         <Card>
           <CardContent className="py-12 text-center">
-            <MapPin className="h-12 w-12 mx-auto text-gray-400 mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No Markets Available</h3>
-            <p className="text-gray-500">Market information will be available when a season is active</p>
+            <MapPin className="mx-auto mb-4 h-12 w-12 text-text-muted" />
+            <h3 className="mb-2 text-lg font-medium text-foreground">No Markets Available</h3>
+            <p className="text-text-secondary">Market information will be available when a season is active.</p>
           </CardContent>
         </Card>
       </div>
@@ -165,49 +191,50 @@ useEffect(() => {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Market Information</h1>
-          <p className="text-gray-600">
+          <h1 className="text-2xl font-bold text-foreground">Market Information</h1>
+          <p className="text-text-secondary">
             Context and insights for {season?.name || 'current season'}
-            {currentRound && <span className="ml-2 text-blue-600">(Round {currentRound.number})</span>}
+            {currentRound && <span className="ml-2 text-primary">(Round {currentRound.number})</span>}
           </p>
         </div>
       </div>
 
-      <div className="flex gap-2 flex-wrap">
+      <div className="flex flex-wrap gap-2">
         {markets.map((market) => {
-          const colors = getMarketColor(market.name)
-          const hasInfo = marketInfos.some((m) => m.market?.id === market.id || m.marketId === market.id)
+          const tone = getMarketTone(market.name)
+          const hasInfo = marketInfos.some((item) => item.market?.id === market.id || item.marketId === market.id)
           const isSelected = selectedMarketId === market.id
+
           return (
             <Button
               key={market.id}
               variant={isSelected ? 'default' : 'outline'}
               size="sm"
               onClick={() => setSelectedMarketId(market.id)}
-              className={!isSelected && hasInfo ? `${colors.bg} ${colors.border}` : ''}
+              className={!isSelected && hasInfo ? tone.surface : ''}
             >
-              <MapPin className="h-4 w-4 mr-1" />
+              <MapPin className="mr-1 h-4 w-4" />
               {market.name}
-              {hasInfo && !isSelected && <ChevronRight className="h-3 w-3 ml-1" />}
+              {hasInfo && !isSelected && <ChevronRight className="ml-1 h-3 w-3" />}
             </Button>
           )
         })}
       </div>
 
       {selectedMarket && (
-        <div className="grid lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-6">
+        <div className="grid gap-6 lg:grid-cols-3">
+          <div className="space-y-6 lg:col-span-2">
             {currentRoundUpdate && (
-              <Card className="border-amber-200 bg-amber-50">
+              <Card className="border-warning/20 bg-warning-background/45">
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-lg flex items-center gap-2 text-amber-700">
+                  <CardTitle className="flex items-center gap-2 text-lg text-warning">
                     <TrendingUp className="h-5 w-5" />
                     What Changed This Round
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="font-medium text-amber-800 mb-1">{currentRoundUpdate.headline}</p>
-                  <p className="text-amber-700">{currentRoundUpdate.whatChanged}</p>
+                  <p className="mb-1 font-medium text-foreground">{currentRoundUpdate.headline}</p>
+                  <p className="text-text-secondary">{currentRoundUpdate.whatChanged}</p>
                 </CardContent>
               </Card>
             )}
@@ -215,28 +242,28 @@ useEffect(() => {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <MapPin className="h-5 w-5 text-blue-600" />
+                  <MapPin className={`h-5 w-5 ${getMarketTone(selectedMarket.name).title}`} />
                   {selectedMarket.name}
                 </CardTitle>
                 {selectedInfo?.title && <CardDescription className="text-base">{selectedInfo.title}</CardDescription>}
               </CardHeader>
               <CardContent className="space-y-6">
                 {selectedInfo?.summary && (
-                  <div className="p-4 bg-blue-50 rounded-lg border border-blue-100">
-                    <p className="text-blue-800">{selectedInfo.summary}</p>
+                  <div className="rounded-lg border border-info/20 bg-info-background/55 p-4 text-text-secondary">
+                    {selectedInfo.summary}
                   </div>
                 )}
 
                 {selectedInfo?.description && (
                   <div>
-                    <h4 className="font-medium text-gray-900 mb-2">Overview</h4>
-                    <p className="text-gray-600 whitespace-pre-wrap">{selectedInfo.description}</p>
+                    <h4 className="mb-2 font-medium text-foreground">Overview</h4>
+                    <p className="whitespace-pre-wrap text-text-secondary">{selectedInfo.description}</p>
                   </div>
                 )}
 
                 {!selectedInfo && (
-                  <div className="text-center py-8 text-gray-500">
-                    <MapPin className="h-8 w-8 mx-auto mb-2 text-gray-300" />
+                  <div className="py-8 text-center text-text-secondary">
+                    <MapPin className="mx-auto mb-2 h-8 w-8 text-text-muted" />
                     <p>No detailed information available for this market yet.</p>
                   </div>
                 )}
@@ -244,20 +271,20 @@ useEffect(() => {
             </Card>
 
             {selectedInfo && (selectedInfo.demandDrivers?.length > 0 || selectedInfo.supplyNotes?.length > 0) && (
-              <div className="grid md:grid-cols-2 gap-4">
+              <div className="grid gap-4 md:grid-cols-2">
                 {selectedInfo.demandDrivers?.length > 0 && (
-                  <Card>
+                  <Card className="border-success/20 bg-success-background/35">
                     <CardHeader className="pb-3">
-                      <CardTitle className="text-base flex items-center gap-2 text-green-700">
+                      <CardTitle className="flex items-center gap-2 text-base text-success">
                         <TrendingUp className="h-4 w-4" />
                         Demand Drivers
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
                       <ul className="space-y-2">
-                        {selectedInfo.demandDrivers.map((driver, i) => (
-                          <li key={i} className="flex items-start gap-2 text-sm text-gray-600">
-                            <span className="w-1.5 h-1.5 rounded-full bg-green-500 mt-1.5 flex-shrink-0" />
+                        {selectedInfo.demandDrivers.map((driver, index) => (
+                          <li key={index} className="flex items-start gap-2 text-sm text-text-secondary">
+                            <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-success" />
                             {driver}
                           </li>
                         ))}
@@ -267,18 +294,18 @@ useEffect(() => {
                 )}
 
                 {selectedInfo.supplyNotes?.length > 0 && (
-                  <Card>
+                  <Card className="border-info/20 bg-info-background/35">
                     <CardHeader className="pb-3">
-                      <CardTitle className="text-base flex items-center gap-2 text-blue-700">
+                      <CardTitle className="flex items-center gap-2 text-base text-info">
                         <TrendingDown className="h-4 w-4" />
                         Supply Notes
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
                       <ul className="space-y-2">
-                        {selectedInfo.supplyNotes.map((note, i) => (
-                          <li key={i} className="flex items-start gap-2 text-sm text-gray-600">
-                            <span className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-1.5 flex-shrink-0" />
+                        {selectedInfo.supplyNotes.map((note, index) => (
+                          <li key={index} className="flex items-start gap-2 text-sm text-text-secondary">
+                            <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-info" />
                             {note}
                           </li>
                         ))}
@@ -290,20 +317,20 @@ useEffect(() => {
             )}
 
             {selectedInfo && (selectedInfo.risks?.length > 0 || selectedInfo.strategyHints?.length > 0) && (
-              <div className="grid md:grid-cols-2 gap-4">
+              <div className="grid gap-4 md:grid-cols-2">
                 {selectedInfo.risks?.length > 0 && (
-                  <Card className="border-red-100">
+                  <Card className="border-warning/20 bg-warning-background/35">
                     <CardHeader className="pb-3">
-                      <CardTitle className="text-base flex items-center gap-2 text-red-700">
+                      <CardTitle className="flex items-center gap-2 text-base text-warning">
                         <AlertTriangle className="h-4 w-4" />
                         Risks to Consider
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
                       <ul className="space-y-2">
-                        {selectedInfo.risks.map((risk, i) => (
-                          <li key={i} className="flex items-start gap-2 text-sm text-gray-600">
-                            <span className="w-1.5 h-1.5 rounded-full bg-red-500 mt-1.5 flex-shrink-0" />
+                        {selectedInfo.risks.map((risk, index) => (
+                          <li key={index} className="flex items-start gap-2 text-sm text-text-secondary">
+                            <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-warning" />
                             {risk}
                           </li>
                         ))}
@@ -313,18 +340,18 @@ useEffect(() => {
                 )}
 
                 {selectedInfo.strategyHints?.length > 0 && (
-                  <Card className="border-purple-100">
+                  <Card className="border-accent/20 bg-accent-soft/35">
                     <CardHeader className="pb-3">
-                      <CardTitle className="text-base flex items-center gap-2 text-purple-700">
+                      <CardTitle className="flex items-center gap-2 text-base text-accent">
                         <Lightbulb className="h-4 w-4" />
                         Strategy Hints
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
                       <ul className="space-y-2">
-                        {selectedInfo.strategyHints.map((hint, i) => (
-                          <li key={i} className="flex items-start gap-2 text-sm text-gray-600">
-                            <span className="w-1.5 h-1.5 rounded-full bg-purple-500 mt-1.5 flex-shrink-0" />
+                        {selectedInfo.strategyHints.map((hint, index) => (
+                          <li key={index} className="flex items-start gap-2 text-sm text-text-secondary">
+                            <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-accent" />
                             {hint}
                           </li>
                         ))}
@@ -340,45 +367,47 @@ useEffect(() => {
             {selectedInfo?.resourceLinks && selectedInfo.resourceLinks.length > 0 && (
               <Card>
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-base flex items-center gap-2">
+                  <CardTitle className="flex items-center gap-2 text-base">
                     <FileText className="h-4 w-4" />
                     Resources
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
-                    {selectedInfo.resourceLinks.map((link) => (
-                      <a
-                        key={link.id}
-                        href={link.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="block p-3 rounded-lg border hover:bg-gray-50 transition-colors group"
-                      >
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="font-medium text-blue-600 group-hover:text-blue-700 flex items-center gap-1">
-                              {link.label}
-                              <ArrowUpRight className="h-3 w-3" />
-                            </p>
-                            <div className="flex items-center gap-2 mt-1">
-                              <span className="text-xs px-2 py-0.5 bg-gray-100 rounded text-gray-500">
-                                {link.type === 'DATA' ? 'Data' : link.type === 'DOCUMENT' ? 'Doc' : link.type === 'TUTORIAL' ? 'Tutorial' : 'Link'}
-                              </span>
-                              {link.note && <span className="text-xs text-gray-500">{link.note}</span>}
+                    {selectedInfo.resourceLinks.map((link) => {
+                      const tone = resourceTypeMeta[link.type as keyof typeof resourceTypeMeta] || resourceTypeMeta.LINK
+
+                      return (
+                        <a
+                          key={link.id}
+                          href={link.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="group block rounded-lg border border-border p-3 transition-colors hover:bg-muted"
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <p className="flex items-center gap-1 font-medium text-primary group-hover:text-primary-hover">
+                                {link.label}
+                                <ArrowUpRight className="h-3 w-3" />
+                              </p>
+                              <div className="mt-1 flex items-center gap-2">
+                                <Badge variant={tone.tone}>{tone.label}</Badge>
+                                {link.note && <span className="text-xs text-text-muted">{link.note}</span>}
+                              </div>
                             </div>
+                            <ExternalLink className="h-4 w-4 text-text-muted group-hover:text-primary" />
                           </div>
-                          <ExternalLink className="h-4 w-4 text-gray-400 group-hover:text-blue-600" />
-                        </div>
-                      </a>
-                    ))}
+                        </a>
+                      )
+                    })}
                   </div>
                 </CardContent>
               </Card>
             )}
 
             {selectedInfo && (
-              <div className="text-xs text-gray-400 text-center">
+              <div className="text-center text-xs text-text-muted">
                 Last updated {new Date(selectedInfo.updatedAt).toLocaleDateString()}
               </div>
             )}
@@ -388,7 +417,3 @@ useEffect(() => {
     </div>
   )
 }
-
-
-
-

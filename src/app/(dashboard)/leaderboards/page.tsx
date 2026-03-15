@@ -6,6 +6,8 @@ import { getLeaderboard } from '@/features/leaderboards/api'
 import type { LeaderboardEntry, RoundInfo } from '@/features/leaderboards/types'
 import { useEffect, useState, useMemo } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Trophy, Medal, Users, Building2, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { LineChart, Line, ResponsiveContainer } from 'recharts'
@@ -90,7 +92,7 @@ export default function LeaderboardsPage() {
   })
 
   const sortedRoundIds = useMemo(() => {
-    return rounds.sort((a, b) => a.number - b.number).map(r => r.id)
+    return [...rounds].sort((a, b) => a.number - b.number).map((r) => r.id)
   }, [rounds])
 
   const getUniversityLeaderboard = () => {
@@ -129,16 +131,16 @@ export default function LeaderboardsPage() {
   }
 
   const getRankIcon = (rank: number) => {
-    if (rank === 1) return <Trophy className="h-6 w-6 text-yellow-500" />
-    if (rank === 2) return <Medal className="h-6 w-6 text-gray-400" />
-    if (rank === 3) return <Medal className="h-6 w-6 text-amber-600" />
+    if (rank === 1) return <Trophy className="h-6 w-6 text-accent" />
+    if (rank === 2) return <Medal className="h-6 w-6 text-medal-silver" />
+    if (rank === 3) return <Medal className="h-6 w-6 text-medal-bronze" />
     return null
   }
 
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     )
   }
@@ -150,14 +152,14 @@ export default function LeaderboardsPage() {
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Leaderboards</h1>
-          <p className="text-gray-500 dark:text-gray-400">{seasonName || 'No active season'} rankings</p>
+          <h1 className="text-3xl font-semibold text-foreground">Leaderboards</h1>
+          <p className="text-text-secondary">{seasonName || 'No active season'} rankings</p>
         </div>
-        <div className="flex items-center space-x-2 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
+        <div className="flex items-center space-x-2 rounded-lg border border-border bg-surface-secondary p-1">
           <button
             onClick={() => setViewMode('team')}
-            className={`flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              viewMode === 'team' ? 'bg-white dark:bg-gray-700 shadow text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+            className={`flex items-center space-x-2 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+              viewMode === 'team' ? 'bg-card text-foreground shadow-sm' : 'text-text-secondary hover:text-foreground'
             }`}
           >
             <Users className="h-4 w-4" />
@@ -165,8 +167,8 @@ export default function LeaderboardsPage() {
           </button>
           <button
             onClick={() => setViewMode('university')}
-            className={`flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              viewMode === 'university' ? 'bg-white dark:bg-gray-700 shadow text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+            className={`flex items-center space-x-2 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+              viewMode === 'university' ? 'bg-card text-foreground shadow-sm' : 'text-text-secondary hover:text-foreground'
             }`}
           >
             <Building2 className="h-4 w-4" />
@@ -178,33 +180,31 @@ export default function LeaderboardsPage() {
       {currentLeaderboard.length === 0 ? (
         <Card>
           <CardContent className="py-16 text-center">
-            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Trophy className="h-8 w-8 text-gray-400" />
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-muted">
+              <Trophy className="h-8 w-8 text-muted-foreground" />
             </div>
-            <h3 className="text-xl font-bold text-gray-900 mb-2">No Scores Yet</h3>
-            <p className="text-gray-500">Leaderboards will appear after scores are calculated.</p>
+            <h3 className="mb-2 text-xl font-semibold text-foreground">No Scores Yet</h3>
+            <p className="text-text-secondary">Leaderboards will appear after scores are calculated.</p>
           </CardContent>
         </Card>
       ) : (
         <>
           {top3.length >= 3 && (
             <div className="grid grid-cols-3 gap-4">
-              <Card className="order-1 md:order-2 col-span-3 md:col-span-1 bg-gradient-to-b from-yellow-50 to-white border-yellow-200">
+              <Card className="order-1 col-span-3 border-border bg-gradient-to-b from-accent-soft via-card to-card md:order-2 md:col-span-1">
                 <CardContent className="pt-8 pb-6 text-center">
-                  <div className="w-20 h-20 bg-gradient-to-br from-yellow-400 to-amber-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
-                    <Trophy className="h-10 w-10 text-white" />
+                  <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-accent-soft shadow-sm">
+                    <Trophy className="h-10 w-10 text-accent" />
                   </div>
-                  <p className="text-2xl font-bold text-gray-900 mb-1">
+                  <p className="mb-1 text-2xl font-semibold text-foreground">
                     {viewMode === 'team' ? (top3[0] as LeaderboardEntry).teamName : (top3[0] as { university: string }).university}
                   </p>
                   {viewMode === 'team' && (
-                    <p className="text-sm text-gray-500 mb-3">{(top3[0] as LeaderboardEntry).university}</p>
+                    <p className="mb-3 text-sm text-text-secondary">{(top3[0] as LeaderboardEntry).university}</p>
                   )}
-                  <div className="inline-flex items-center space-x-1 bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full text-sm font-medium">
-                    <span>1st Place</span>
-                  </div>
+                  <Badge variant="medal" className="px-3 py-1 text-sm">1st Place</Badge>
                   {canSeeAllMAPE && (
-                    <p className="mt-3 text-2xl font-bold text-amber-600">
+                    <p className="mt-3 text-2xl font-semibold text-accent">
                       {viewMode === 'team'
                         ? ((top3[0] as LeaderboardEntry).mape !== null ? `${((top3[0] as LeaderboardEntry).mape! * 100).toFixed(2)}%` : '--')
                         : ((top3[0] as { avgMAPE: number | null }).avgMAPE !== null ? `${((top3[0] as { avgMAPE: number | null }).avgMAPE! * 100).toFixed(2)}%` : '--')}
@@ -213,22 +213,20 @@ export default function LeaderboardsPage() {
                 </CardContent>
               </Card>
 
-              <Card className="order-2 md:order-1 col-span-3 md:col-span-1 bg-gradient-to-b from-gray-50 to-white border-gray-200">
+              <Card className="order-2 col-span-3 border-border bg-gradient-to-b from-surface-secondary via-card to-card md:order-1 md:col-span-1">
                 <CardContent className="pt-6 pb-4 text-center">
-                  <div className="w-16 h-16 bg-gradient-to-br from-gray-300 to-gray-400 rounded-full flex items-center justify-center mx-auto mb-3 shadow">
-                    <Medal className="h-8 w-8 text-white" />
+                  <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-surface-secondary shadow-sm">
+                    <Medal className="h-8 w-8 text-medal-silver" />
                   </div>
-                  <p className="text-lg font-bold text-gray-900 mb-1">
+                  <p className="mb-1 text-lg font-semibold text-foreground">
                     {viewMode === 'team' ? (top3[1] as LeaderboardEntry).teamName : (top3[1] as { university: string }).university}
                   </p>
                   {viewMode === 'team' && (
-                    <p className="text-sm text-gray-500 mb-2">{(top3[1] as LeaderboardEntry).university}</p>
+                    <p className="mb-2 text-sm text-text-secondary">{(top3[1] as LeaderboardEntry).university}</p>
                   )}
-                  <div className="inline-flex items-center space-x-1 bg-gray-100 text-gray-600 px-3 py-1 rounded-full text-sm font-medium">
-                    <span>2nd Place</span>
-                  </div>
+                  <Badge variant="secondary" className="px-3 py-1 text-sm">2nd Place</Badge>
                   {canSeeAllMAPE && (
-                    <p className="mt-2 text-xl font-bold text-gray-600">
+                    <p className="mt-2 text-xl font-semibold text-text-secondary">
                       {viewMode === 'team'
                         ? ((top3[1] as LeaderboardEntry).mape !== null ? `${((top3[1] as LeaderboardEntry).mape! * 100).toFixed(2)}%` : '--')
                         : ((top3[1] as { avgMAPE: number | null }).avgMAPE !== null ? `${((top3[1] as { avgMAPE: number | null }).avgMAPE! * 100).toFixed(2)}%` : '--')}
@@ -237,22 +235,20 @@ export default function LeaderboardsPage() {
                 </CardContent>
               </Card>
 
-              <Card className="order-3 col-span-3 md:col-span-1 bg-gradient-to-b from-orange-50 to-white border-orange-200">
+              <Card className="order-3 col-span-3 border-border bg-gradient-to-b from-warning-background via-card to-card md:col-span-1">
                 <CardContent className="pt-6 pb-4 text-center">
-                  <div className="w-16 h-16 bg-gradient-to-br from-amber-500 to-orange-600 rounded-full flex items-center justify-center mx-auto mb-3 shadow">
-                    <Medal className="h-8 w-8 text-white" />
+                  <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-warning-background shadow-sm">
+                    <Medal className="h-8 w-8 text-medal-bronze" />
                   </div>
-                  <p className="text-lg font-bold text-gray-900 mb-1">
+                  <p className="mb-1 text-lg font-semibold text-foreground">
                     {viewMode === 'team' ? (top3[2] as LeaderboardEntry).teamName : (top3[2] as { university: string }).university}
                   </p>
                   {viewMode === 'team' && (
-                    <p className="text-sm text-gray-500 mb-2">{(top3[2] as LeaderboardEntry).university}</p>
+                    <p className="mb-2 text-sm text-text-secondary">{(top3[2] as LeaderboardEntry).university}</p>
                   )}
-                  <div className="inline-flex items-center space-x-1 bg-orange-100 text-orange-600 px-3 py-1 rounded-full text-sm font-medium">
-                    <span>3rd Place</span>
-                  </div>
+                  <Badge variant="warning" className="px-3 py-1 text-sm">3rd Place</Badge>
                   {canSeeAllMAPE && (
-                    <p className="mt-2 text-xl font-bold text-orange-600">
+                    <p className="mt-2 text-xl font-semibold text-warning">
                       {viewMode === 'team'
                         ? ((top3[2] as LeaderboardEntry).mape !== null ? `${((top3[2] as LeaderboardEntry).mape! * 100).toFixed(2)}%` : '--')
                         : ((top3[2] as { avgMAPE: number | null }).avgMAPE !== null ? `${((top3[2] as { avgMAPE: number | null }).avgMAPE! * 100).toFixed(2)}%` : '--')}
@@ -263,24 +259,18 @@ export default function LeaderboardsPage() {
             </div>
           )}
 
-          <div className="flex space-x-2 border-b">
+          <div className="flex space-x-2 border-b border-border">
             {[
-              { key: 'final', label: 'Final Score', color: 'amber' },
-              { key: 'occupancy', label: 'Occupancy', color: 'blue' },
-              { key: 'adr', label: 'ADR', color: 'emerald' },
+              { key: 'final', label: 'Final Score', activeClass: 'border-accent text-accent' },
+              { key: 'occupancy', label: 'Occupancy', activeClass: 'border-primary text-primary' },
+              { key: 'adr', label: 'ADR', activeClass: 'border-success text-success' },
             ].map((tab) => (
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key as 'final' | 'occupancy' | 'adr')}
-                className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors`}
-                style={{
-                  borderColor: activeTab === tab.key
-                    ? tab.color === 'amber' ? '#d97706' : tab.color === 'blue' ? '#2563eb' : '#059669'
-                    : 'transparent',
-                  color: activeTab === tab.key
-                    ? tab.color === 'amber' ? '#d97706' : tab.color === 'blue' ? '#2563eb' : '#059669'
-                    : undefined,
-                }}
+                className={`border-b-2 px-6 py-3 text-sm font-medium transition-colors ${
+                  activeTab === tab.key ? tab.activeClass : 'border-transparent text-text-muted hover:text-foreground'
+                }`}
               >
                 {tab.label}
               </button>
@@ -289,49 +279,46 @@ export default function LeaderboardsPage() {
 
           {canSeeAllMAPE && scoredRounds.length > 0 && viewMode === 'team' && activeTab !== 'final' && (
             <div className="flex justify-end">
-              <button
+              <Button
+                variant={showProgression ? 'default' : 'outline'}
+                size="sm"
                 onClick={() => setShowProgression(!showProgression)}
-                className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-                  showProgression 
-                    ? 'bg-blue-600 text-white' 
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
               >
                 {showProgression ? 'Hide' : 'Show'} Round Progression
-              </button>
+              </Button>
             </div>
           )}
 
           <Card>
             <CardContent className="p-0 overflow-x-auto">
               <table className="w-full">
-                <thead className="bg-gray-50">
+                <thead className="bg-muted">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rank</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">Rank</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
                       {viewMode === 'team' ? 'Team' : 'University'}
                     </th>
                     {viewMode === 'team' && (
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">University</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">University</th>
                     )}
           {canSeeAllMAPE && showProgression && viewMode === 'team' && activeTab !== 'final' && scoredRounds.map((round) => (
-                      <th key={round.id} className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th key={round.id} className="px-3 py-3 text-center text-xs font-medium uppercase tracking-wider text-muted-foreground">
                         R{round.number}
                       </th>
                     ))}
                     {canSeeAllMAPE && (
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground">
                         {activeTab === 'final' ? 'Final Score' : activeTab === 'occupancy' ? 'Occupancy MAPE' : 'ADR MAPE'}
                       </th>
                     )}
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="divide-y divide-border bg-card">
                   {viewMode === 'team'
                     ? currentLeaderboard.map((entry) => (
                         <tr
                           key={entry.teamId}
-                          className={entry.teamId === myTeamId ? 'bg-blue-50' : 'hover:bg-gray-50'}
+                          className={entry.teamId === myTeamId ? 'bg-primary-soft' : 'hover:bg-surface-secondary'}
                         >
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="flex items-center space-x-2">
@@ -343,15 +330,15 @@ export default function LeaderboardsPage() {
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="flex items-center">
-                              <span className="font-medium text-gray-900">{entry.teamName}</span>
+                              <span className="font-medium text-foreground">{entry.teamName}</span>
                               {entry.teamId === myTeamId && (
-                                <span className="ml-2 px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded-full">You</span>
+                                <Badge variant="info" className="ml-2 px-2 py-0.5">You</Badge>
                               )}
                             </div>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-gray-500">{entry.university}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-text-secondary">{entry.university}</td>
                           {canSeeAllMAPE && showProgression && activeTab !== 'final' && scoredRounds.map((round) => (
-                            <td key={round.id} className="px-3 py-4 whitespace-nowrap text-center font-mono text-sm">
+                            <td key={round.id} className="px-3 py-4 whitespace-nowrap text-center font-mono text-sm text-text-secondary">
                               {entry.cumulativeScores[round.id] !== undefined 
                                 ? `${(entry.cumulativeScores[round.id] * 100).toFixed(2)}%`
                                 : '--'}
@@ -370,7 +357,7 @@ export default function LeaderboardsPage() {
                         </tr>
                       ))
                     : universityLeaderboard.map((entry) => (
-                        <tr key={entry.university} className="hover:bg-gray-50">
+                        <tr key={entry.university} className="hover:bg-surface-secondary">
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="flex items-center space-x-2">
                               {getRankIcon(entry.rank)}
@@ -380,11 +367,11 @@ export default function LeaderboardsPage() {
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <span className="font-medium text-gray-900">{entry.university}</span>
-                            <span className="ml-2 text-gray-500 text-sm">({entry.teamCount} teams)</span>
+                            <span className="font-medium text-foreground">{entry.university}</span>
+                            <span className="ml-2 text-sm text-text-secondary">({entry.teamCount} teams)</span>
                           </td>
                           {canSeeAllMAPE && (
-                            <td className="px-6 py-4 whitespace-nowrap text-right font-mono">
+                            <td className="px-6 py-4 whitespace-nowrap text-right font-mono text-foreground">
                               {entry.avgMAPE !== null ? `${(entry.avgMAPE * 100).toFixed(2)}%` : '--'}
                             </td>
                           )}
@@ -399,4 +386,3 @@ export default function LeaderboardsPage() {
     </div>
   )
 }
-

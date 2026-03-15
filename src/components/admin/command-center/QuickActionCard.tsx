@@ -14,17 +14,17 @@ export interface QuickActionCardProps {
 }
 
 const VARIANT_STYLES: Record<QuickActionVariant, string> = {
-  default: 'bg-white hover:bg-gray-50 border-gray-200',
-  primary: 'bg-blue-50 hover:bg-blue-100 border-blue-200',
-  warning: 'bg-amber-50 hover:bg-amber-100 border-amber-200',
-  success: 'bg-green-50 hover:bg-green-100 border-green-200',
+  default: 'border-border bg-card hover:bg-surface-secondary',
+  primary: 'border-primary/15 bg-primary-soft/70 hover:bg-primary-soft',
+  warning: 'border-warning/20 bg-warning-background/70 hover:bg-warning-background',
+  success: 'border-success/20 bg-success-background/70 hover:bg-success-background',
 }
 
 const ICON_STYLES: Record<QuickActionVariant, string> = {
-  default: 'bg-gray-100 text-gray-600',
-  primary: 'bg-blue-100 text-blue-600',
-  warning: 'bg-amber-100 text-amber-600',
-  success: 'bg-green-100 text-green-600',
+  default: 'bg-muted text-text-secondary',
+  primary: 'bg-primary-soft text-primary',
+  warning: 'bg-warning-background text-warning',
+  success: 'bg-success-background text-success',
 }
 
 export function QuickActionCard({
@@ -38,15 +38,19 @@ export function QuickActionCard({
 }: QuickActionCardProps) {
   const content = (
     <div
-      className={`p-4 rounded-xl border transition-all cursor-pointer ${VARIANT_STYLES[variant]} ${loading ? 'opacity-50 pointer-events-none' : ''}`}
+      className={`cursor-pointer rounded-xl border p-4 transition-all ${VARIANT_STYLES[variant]} ${loading ? 'pointer-events-none opacity-50' : ''}`}
     >
       <div className="flex items-start space-x-4">
-        <div className={`p-2.5 rounded-lg ${ICON_STYLES[variant]}`}>
-          {loading ? <RefreshCw className="h-5 w-5 animate-spin" /> : <Icon className="h-5 w-5" />}
+        <div className={`rounded-lg p-2.5 ${ICON_STYLES[variant]}`}>
+          {loading ? (
+            <RefreshCw className="h-5 w-5 animate-spin" />
+          ) : (
+            <Icon className="h-5 w-5" />
+          )}
         </div>
-        <div className="flex-1 min-w-0">
-          <p className="font-semibold text-gray-900">{title}</p>
-          <p className="text-sm text-gray-500 mt-0.5">{description}</p>
+        <div className="min-w-0 flex-1">
+          <p className="font-semibold text-foreground">{title}</p>
+          <p className="mt-0.5 text-sm text-text-secondary">{description}</p>
         </div>
       </div>
     </div>

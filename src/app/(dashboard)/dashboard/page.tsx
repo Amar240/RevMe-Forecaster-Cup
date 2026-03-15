@@ -53,47 +53,47 @@ export default async function DashboardPage() {
     return (
       <div className="space-y-8">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Supervisor Dashboard</h1>
-          <p className="text-gray-500 dark:text-gray-400 mt-1">Manage your teams and monitor submissions</p>
+          <h1 className="text-3xl font-semibold text-foreground">Supervisor Dashboard</h1>
+          <p className="mt-1 text-text-secondary">Manage your teams and monitor submissions</p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Card className="bg-gradient-to-br from-blue-50 to-white dark:from-blue-950/30 dark:to-gray-900 border-blue-100 dark:border-blue-800">
+          <Card variant="metric" className="border-primary/10 bg-gradient-to-br from-primary-soft via-card to-card">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600 dark:text-gray-400">My Teams</CardTitle>
-              <div className="p-2 bg-blue-100 dark:bg-blue-900/40 rounded-lg">
-                <Users className="h-5 w-5 text-blue-600" />
+              <CardTitle className="text-sm font-medium text-text-secondary">My Teams</CardTitle>
+              <div className="rounded-lg bg-primary-soft p-2">
+                <Users className="h-5 w-5 text-primary" />
               </div>
             </CardHeader>
             <CardContent>
-              <p className="text-4xl font-bold text-gray-900 dark:text-gray-100">{supervisorTeams.length}</p>
-              <p className="text-sm text-gray-500 dark:text-gray-400">of 10 max</p>
+              <p className="text-4xl font-semibold text-foreground">{supervisorTeams.length}</p>
+              <p className="text-sm text-text-secondary">of 10 max</p>
             </CardContent>
           </Card>
 
-          <Card className="bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-950/30 dark:to-gray-900 border-emerald-100 dark:border-emerald-800">
+          <Card variant="metric" className="border-success/15 bg-gradient-to-br from-success-background via-card to-card">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Students</CardTitle>
-              <div className="p-2 bg-emerald-100 dark:bg-emerald-900/40 rounded-lg">
-                <Users className="h-5 w-5 text-emerald-600" />
+              <CardTitle className="text-sm font-medium text-text-secondary">Total Students</CardTitle>
+              <div className="rounded-lg bg-success-background p-2">
+                <Users className="h-5 w-5 text-success" />
               </div>
             </CardHeader>
             <CardContent>
-              <p className="text-4xl font-bold text-gray-900 dark:text-gray-100">
+              <p className="text-4xl font-semibold text-foreground">
                 {supervisorTeams.reduce((sum, t) => sum + t.members.length, 0)}
               </p>
             </CardContent>
           </Card>
 
-          <Card className="bg-gradient-to-br from-amber-50 to-white dark:from-amber-950/30 dark:to-gray-900 border-amber-100 dark:border-amber-800">
+          <Card variant="metric" className="border-warning/15 bg-gradient-to-br from-warning-background via-card to-card">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600 dark:text-gray-400">Warnings</CardTitle>
-              <div className="p-2 bg-amber-100 dark:bg-amber-900/40 rounded-lg">
-                <AlertTriangle className="h-5 w-5 text-amber-600" />
+              <CardTitle className="text-sm font-medium text-text-secondary">Warnings</CardTitle>
+              <div className="rounded-lg bg-warning-background p-2">
+                <AlertTriangle className="h-5 w-5 text-warning" />
               </div>
             </CardHeader>
             <CardContent>
-              <p className="text-4xl font-bold text-gray-900 dark:text-gray-100">
+              <p className="text-4xl font-semibold text-foreground">
                 {supervisorTeams.reduce((sum, t) => sum + t._count.warnings, 0)}
               </p>
             </CardContent>
@@ -114,7 +114,7 @@ export default async function DashboardPage() {
           </CardHeader>
           <CardContent>
             {supervisorTeams.length === 0 ? (
-              <p className="text-gray-500 dark:text-gray-400 text-center py-8">
+              <p className="py-8 text-center text-text-secondary">
                 You haven&apos;t created any teams yet. Create your first team to get started.
               </p>
             ) : (
@@ -122,11 +122,11 @@ export default async function DashboardPage() {
                 {supervisorTeams.map((team) => (
                   <div
                     key={team.id}
-                    className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl transition-colors"
+                    className="flex items-center justify-between rounded-xl border border-border bg-surface-secondary p-4 transition-colors hover:bg-muted"
                   >
                     <div>
-                      <p className="font-semibold text-gray-900 dark:text-gray-100">{team.name}</p>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                      <p className="font-semibold text-foreground">{team.name}</p>
+                      <p className="text-sm text-text-secondary">
                         {team.members.length} members | {team._count.submissions} submissions
                       </p>
                     </div>
@@ -177,20 +177,20 @@ export default async function DashboardPage() {
   return (
     <div className="space-y-8">
       {!rulesAcknowledged?.rulesAcknowledgedAt && (
-        <Card className="border-amber-200 dark:border-amber-800 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/30 dark:to-orange-950/30">
+        <Card className="border-warning/20 bg-gradient-to-r from-warning-background via-card to-card">
           <CardContent className="py-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3">
-                <div className="p-2 bg-amber-100 dark:bg-amber-900/40 rounded-lg">
-                  <AlertTriangle className="h-5 w-5 text-amber-600" />
+                <div className="rounded-lg bg-warning-background p-2">
+                  <AlertTriangle className="h-5 w-5 text-warning" />
                 </div>
                 <div>
-                  <p className="font-semibold text-amber-900">Please acknowledge the competition rules</p>
-                  <p className="text-sm text-amber-700">Read and accept the rules to participate in the competition.</p>
+                  <p className="font-semibold text-foreground">Please acknowledge the competition rules</p>
+                  <p className="text-sm text-text-secondary">Read and accept the rules to participate in the competition.</p>
                 </div>
               </div>
               <Link href="/rules">
-                <Button variant="outline" className="border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/40">
+                <Button variant="outline" className="border-warning/30 text-warning hover:bg-warning-background">
                   View Rules
                 </Button>
               </Link>
@@ -201,15 +201,15 @@ export default async function DashboardPage() {
 
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
+          <h1 className="text-3xl font-semibold text-foreground">
             Welcome back, {user.firstName}!
           </h1>
-          <p className="text-gray-500 dark:text-gray-400 mt-1">
+          <p className="mt-1 text-text-secondary">
             {studentTeam ? `Team: ${studentTeam.team.name}` : 'Not assigned to a team yet'}
           </p>
         </div>
         {activeSeason && (
-          <div className="hidden md:flex items-center space-x-2 text-sm text-gray-500 dark:text-gray-400">
+          <div className="hidden items-center space-x-2 text-sm text-text-secondary md:flex">
             <Calendar className="h-4 w-4" />
             <span>{activeSeason.name}</span>
           </div>
@@ -218,17 +218,17 @@ export default async function DashboardPage() {
 
       {currentRound && (
         <Card className="overflow-hidden">
-          <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-6 text-white">
+          <div className="bg-gradient-to-r from-primary to-primary-hover p-6 text-primary-foreground">
             <div className="flex items-center justify-between">
               <div>
                 <div className="flex items-center space-x-2 mb-2">
                   <Target className="h-5 w-5" />
-                  <span className="text-blue-100 text-sm font-medium uppercase tracking-wide">
+                  <span className="text-sm font-medium uppercase tracking-wide text-primary-foreground/80">
                     Current Round
                   </span>
                 </div>
-                <h2 className="text-3xl font-bold">Round {currentRound.number}</h2>
-                <p className="text-blue-100 mt-1">
+                <h2 className="text-3xl font-semibold">Round {currentRound.number}</h2>
+                <p className="mt-1 text-primary-foreground/80">
                   Deadline: {new Date(currentRound.closesAt).toLocaleString('en-US', { 
                     timeZone: 'America/New_York',
                     weekday: 'short',
@@ -240,21 +240,21 @@ export default async function DashboardPage() {
                 </p>
               </div>
               <div className="text-right">
-                <p className="text-blue-100 text-sm mb-2">Time Remaining</p>
+                <p className="mb-2 text-sm text-primary-foreground/80">Time Remaining</p>
                 <CountdownTimer closesAt={currentRound.closesAt.toISOString()} />
               </div>
             </div>
           </div>
-          <CardContent className="p-6">
+          <CardContent className="px-6 py-5">
             {hasSubmittedThisRound ? (
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-3">
-                  <div className="p-2 bg-green-100 dark:bg-green-900/40 rounded-full">
-                    <CheckCircle className="h-5 w-5 text-green-600" />
+                  <div className="rounded-full bg-success-background p-2">
+                    <CheckCircle className="h-5 w-5 text-success" />
                   </div>
                   <div>
-                    <p className="font-semibold text-green-700">Submitted</p>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Your forecast is locked</p>
+                    <p className="font-semibold text-success">Submitted</p>
+                    <p className="text-sm text-text-secondary">Your forecast is locked</p>
                   </div>
                 </div>
                 <Link href="/scores">
@@ -262,13 +262,13 @@ export default async function DashboardPage() {
                 </Link>
               </div>
             ) : studentTeam?.isSubmitter ? (
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-4">
                 <div>
-                  <p className="font-semibold text-gray-900 dark:text-gray-100">Ready to submit your forecast?</p>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">You need to submit 12 predictions (3 markets x 2 weeks x 2 metrics)</p>
+                  <p className="font-semibold text-foreground">Ready to submit your forecast?</p>
+                  <p className="text-sm text-text-secondary">You need to submit 12 predictions (3 markets x 2 weeks x 2 metrics)</p>
                 </div>
                 <Link href="/submit">
-                  <Button size="lg" className="bg-blue-600 hover:bg-blue-700">
+                  <Button size="lg" className="bg-primary hover:bg-primary-hover">
                     Submit Forecast
                     <ArrowRight className="h-4 w-4 ml-2" />
                   </Button>
@@ -276,8 +276,8 @@ export default async function DashboardPage() {
               </div>
             ) : (
               <div className="flex items-center space-x-3">
-                <Clock className="h-5 w-5 text-gray-400" />
-                <p className="text-gray-600 dark:text-gray-400">Your team&apos;s submitter will submit the forecast.</p>
+                <Clock className="h-5 w-5 text-muted-foreground" />
+                <p className="text-text-secondary">Your team&apos;s submitter will submit the forecast.</p>
               </div>
             )}
           </CardContent>
@@ -287,61 +287,61 @@ export default async function DashboardPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card className="hover:shadow-md transition-shadow">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600 dark:text-gray-400">Team Status</CardTitle>
-            <div className={`p-2 rounded-lg ${studentTeam?.team.status === 'ACTIVE' ? 'bg-green-100 dark:bg-green-900/40' : 'bg-red-100 dark:bg-red-900/40'}`}>
-              <Users className={`h-5 w-5 ${studentTeam?.team.status === 'ACTIVE' ? 'text-green-600' : 'text-red-600'}`} />
+            <CardTitle className="text-sm font-medium text-text-secondary">Team Status</CardTitle>
+            <div className={`rounded-lg p-2 ${studentTeam?.team.status === 'ACTIVE' ? 'bg-success-background' : 'bg-error-background'}`}>
+              <Users className={`h-5 w-5 ${studentTeam?.team.status === 'ACTIVE' ? 'text-success' : 'text-error'}`} />
             </div>
           </CardHeader>
           <CardContent>
-            <p className={`text-lg font-bold ${studentTeam?.team.status === 'ACTIVE' ? 'text-green-600' : 'text-red-600'}`}>
+            <p className={`text-lg font-semibold ${studentTeam?.team.status === 'ACTIVE' ? 'text-success' : 'text-error'}`}>
               {studentTeam ? studentTeam.team.status : 'Not Assigned'}
             </p>
             {studentTeam && (
-              <p className="text-sm text-gray-500 dark:text-gray-400">{studentTeam.team.members.length} members</p>
+              <p className="text-sm text-text-secondary">{studentTeam.team.members.length} members</p>
             )}
           </CardContent>
         </Card>
 
         <Card className="hover:shadow-md transition-shadow">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600 dark:text-gray-400">Submissions</CardTitle>
-            <div className="p-2 bg-blue-100 dark:bg-blue-900/40 rounded-lg">
-              <Send className="h-5 w-5 text-blue-600" />
+            <CardTitle className="text-sm font-medium text-text-secondary">Submissions</CardTitle>
+            <div className="rounded-lg bg-primary-soft p-2">
+              <Send className="h-5 w-5 text-primary" />
             </div>
           </CardHeader>
           <CardContent>
-            <p className="text-4xl font-bold text-gray-900 dark:text-gray-100">
+            <p className="text-4xl font-semibold text-foreground">
               {studentTeam?.team.submissions.length || 0}
             </p>
-            <p className="text-sm text-gray-500 dark:text-gray-400">total forecasts</p>
+            <p className="text-sm text-text-secondary">total forecasts</p>
           </CardContent>
         </Card>
 
         <Card className="hover:shadow-md transition-shadow">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600 dark:text-gray-400">Warnings</CardTitle>
-            <div className={`p-2 rounded-lg ${(studentTeam?.team.warnings.length || 0) >= 2 ? 'bg-red-100 dark:bg-red-900/40' : 'bg-amber-100 dark:bg-amber-900/40'}`}>
-              <AlertTriangle className={`h-5 w-5 ${(studentTeam?.team.warnings.length || 0) >= 2 ? 'text-red-600' : 'text-amber-600'}`} />
+            <CardTitle className="text-sm font-medium text-text-secondary">Warnings</CardTitle>
+            <div className={`rounded-lg p-2 ${(studentTeam?.team.warnings.length || 0) >= 2 ? 'bg-error-background' : 'bg-warning-background'}`}>
+              <AlertTriangle className={`h-5 w-5 ${(studentTeam?.team.warnings.length || 0) >= 2 ? 'text-error' : 'text-warning'}`} />
             </div>
           </CardHeader>
           <CardContent>
             <div className="flex items-baseline space-x-1">
-              <p className="text-4xl font-bold text-gray-900 dark:text-gray-100">
+              <p className="text-4xl font-semibold text-foreground">
                 {studentTeam?.team.warnings.length || 0}
               </p>
-              <p className="text-lg text-gray-400">/ 3</p>
+              <p className="text-lg text-muted-foreground">/ 3</p>
             </div>
-            <p className="text-sm text-gray-500 dark:text-gray-400">before disqualification</p>
+            <p className="text-sm text-text-secondary">before disqualification</p>
           </CardContent>
         </Card>
       </div>
 
       {!studentTeam && (
-        <Card className="border-dashed border-2 dark:border-gray-700">
+        <Card className="border-2 border-dashed border-border">
           <CardContent className="py-12 text-center">
-            <Users className="h-12 w-12 mx-auto text-gray-300 dark:text-gray-600 mb-4" />
-            <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">Not Assigned to a Team</h3>
-            <p className="text-gray-500 dark:text-gray-400 max-w-md mx-auto">
+            <Users className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
+            <h3 className="mb-2 text-xl font-semibold text-foreground">Not Assigned to a Team</h3>
+            <p className="mx-auto max-w-md text-text-secondary">
               Your supervisor needs to add you to a team. Make sure they have your email address: <span className="font-medium">{user.email}</span>
             </p>
           </CardContent>
@@ -352,36 +352,36 @@ export default async function DashboardPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center space-x-2">
-              <TrendingUp className="h-5 w-5 text-blue-600" />
+              <TrendingUp className="h-5 w-5 text-primary" />
               <span>Quick Actions</span>
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <Link href="/leaderboards" className="block">
-              <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl transition-colors">
+              <div className="flex items-center justify-between rounded-xl border border-border bg-surface-secondary p-4 transition-colors hover:bg-muted">
                 <div className="flex items-center space-x-3">
-                  <Trophy className="h-5 w-5 text-amber-500" />
+                  <Trophy className="h-5 w-5 text-accent" />
                   <span className="font-medium">View Leaderboards</span>
                 </div>
-                <ArrowRight className="h-4 w-4 text-gray-400" />
+                <ArrowRight className="h-4 w-4 text-muted-foreground" />
               </div>
             </Link>
             <Link href="/scores" className="block">
-              <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl transition-colors">
+              <div className="flex items-center justify-between rounded-xl border border-border bg-surface-secondary p-4 transition-colors hover:bg-muted">
                 <div className="flex items-center space-x-3">
-                  <Send className="h-5 w-5 text-blue-500" />
+                  <Send className="h-5 w-5 text-primary" />
                   <span className="font-medium">View My Scores</span>
                 </div>
-                <ArrowRight className="h-4 w-4 text-gray-400" />
+                <ArrowRight className="h-4 w-4 text-muted-foreground" />
               </div>
             </Link>
             <Link href="/rules" className="block">
-              <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl transition-colors">
+              <div className="flex items-center justify-between rounded-xl border border-border bg-surface-secondary p-4 transition-colors hover:bg-muted">
                 <div className="flex items-center space-x-3">
-                  <Target className="h-5 w-5 text-purple-500" />
+                  <Target className="h-5 w-5 text-primary" />
                   <span className="font-medium">Competition Rules</span>
                 </div>
-                <ArrowRight className="h-4 w-4 text-gray-400" />
+                <ArrowRight className="h-4 w-4 text-muted-foreground" />
               </div>
             </Link>
           </CardContent>
@@ -391,7 +391,7 @@ export default async function DashboardPage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center space-x-2">
-                <Users className="h-5 w-5 text-blue-600" />
+                <Users className="h-5 w-5 text-primary" />
                 <span>Team Members</span>
               </CardTitle>
               <CardDescription>{studentTeam.team.name}</CardDescription>
@@ -399,20 +399,20 @@ export default async function DashboardPage() {
             <CardContent>
               <div className="space-y-3">
                 {studentTeam.team.members.map((member) => (
-                  <div key={member.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                  <div key={member.id} className="flex items-center justify-between rounded-lg border border-border bg-surface-secondary p-3">
                     <div className="flex items-center space-x-3">
-                      <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-full flex items-center justify-center text-white font-semibold">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground font-semibold">
                         {member.user.firstName[0]}{member.user.lastName[0]}
                       </div>
                       <div>
-                        <p className="font-medium text-gray-900 dark:text-gray-100">
+                        <p className="font-medium text-foreground">
                           {member.user.firstName} {member.user.lastName}
                         </p>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">{member.user.email}</p>
+                        <p className="text-sm text-text-secondary">{member.user.email}</p>
                       </div>
                     </div>
                     {member.isSubmitter && (
-                      <span className="text-xs bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-3 py-1 rounded-full font-medium">
+                      <span className="rounded-full bg-primary-soft px-3 py-1 text-xs font-medium text-primary">
                         Submitter
                       </span>
                     )}
@@ -428,7 +428,7 @@ export default async function DashboardPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center space-x-2">
-              <Clock className="h-5 w-5 text-blue-600" />
+              <Clock className="h-5 w-5 text-primary" />
               <span>Recent Activity</span>
             </CardTitle>
           </CardHeader>
@@ -441,14 +441,14 @@ export default async function DashboardPage() {
                 const avgAdr = adrValues.length > 0 ? adrValues.reduce((sum, v) => sum + v.value, 0) / adrValues.length : 0
                 return (
                   <div key={sub.id} className="flex items-center space-x-4">
-                    <div className="p-2 bg-green-100 dark:bg-green-900/40 rounded-full">
-                      <CheckCircle className="h-4 w-4 text-green-600" />
+                    <div className="rounded-full bg-success-background p-2">
+                      <CheckCircle className="h-4 w-4 text-success" />
                     </div>
                     <div className="flex-1">
-                      <p className="font-medium text-gray-900 dark:text-gray-100">
+                      <p className="font-medium text-foreground">
                         Round {sub.round.number} {sub.round.isFinal ? '(Final)' : ''}
                       </p>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                      <p className="text-sm text-text-secondary">
                         Submitted {new Date(sub.submittedAt).toLocaleDateString('en-US', {
                           month: 'short',
                           day: 'numeric',
@@ -458,8 +458,8 @@ export default async function DashboardPage() {
                       </p>
                     </div>
                     <div className="text-right text-sm">
-                      <p className="text-gray-600 dark:text-gray-400">{avgOcc.toFixed(1)} | ${avgAdr.toFixed(0)}</p>
-                      <p className="text-xs text-gray-400">{sub.values.length} predictions</p>
+                      <p className="text-text-secondary">{avgOcc.toFixed(1)} | ${avgAdr.toFixed(0)}</p>
+                      <p className="text-xs text-muted-foreground">{sub.values.length} predictions</p>
                     </div>
                   </div>
                 )

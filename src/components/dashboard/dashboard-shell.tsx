@@ -19,16 +19,18 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
   const [mobileOpen, setMobileOpen] = useState(false)
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
-      <Header user={user} onToggleSidebar={() => setMobileOpen((v) => !v)} />
-      <div className="flex">
+    <div className="min-h-screen bg-background text-foreground">
+      <Header user={user} onToggleSidebar={() => setMobileOpen((value) => !value)} />
+      <div className="flex min-h-[calc(100vh-4rem)]">
         <Sidebar
           role={user.role}
           mobileOpen={mobileOpen}
           onMobileClose={() => setMobileOpen(false)}
         />
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 min-w-0">
-          {children}
+        <main className="min-w-0 flex-1 px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
+          <div className="mx-auto w-full max-w-[1520px]">
+            {children}
+          </div>
         </main>
       </div>
     </div>

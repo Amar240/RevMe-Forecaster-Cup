@@ -21,7 +21,7 @@ export async function GET() {
 
     if (!activeSeason) return jsonOk({ ready: false, reason: 'No active season', checks: [] })
 
-    const activeTeams = await prisma.team.count({ where: { status: 'ACTIVE' } })
+    const activeTeams = await prisma.team.count({ where: { seasonId: activeSeason.id, status: 'ACTIVE' } })
     const marketCount = activeSeason.markets.length
 
     const now = new Date()
@@ -53,6 +53,11 @@ export async function GET() {
         where: { roundId: round.id },
       })
 
+      const aggregatesExist = await prisma.scoreAggregate.count({
+        where: { seasonId: activeSeason.id, roundId: round.id },
+      })
+      const isScored = aggregatesExist > 0 && actualsCount === expectedActuals
+
       if (missingTeams > 0 && existingWarnings === 0) {
         totalWarningsExpected += missingTeams
       }
@@ -70,12 +75,12 @@ export async function GET() {
         totalActiveTeams: activeTeams,
         missingTeams,
         existingWarnings,
-        isScored: round._count.submissions > 0 && round._count.actuals > 0,
+        isScored,
       })
     }
 
     const teamsNearDQ = await prisma.team.findMany({
-      where: { status: 'ACTIVE' },
+      where: { seasonId: activeSeason.id, status: 'ACTIVE' },
       include: { _count: { select: { warnings: true } } },
     })
     totalDQExpected = teamsNearDQ.filter(t => t._count.warnings >= 2).length

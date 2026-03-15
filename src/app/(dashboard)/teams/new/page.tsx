@@ -6,6 +6,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { AlertBanner } from '@/components/ui/alert-banner'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
@@ -45,7 +46,7 @@ export default function NewTeamPage() {
 
   return (
     <div className="max-w-lg mx-auto">
-      <Card>
+      <Card variant="default">
         <CardHeader>
           <CardTitle>Create New Team</CardTitle>
           <CardDescription>
@@ -55,9 +56,9 @@ export default function NewTeamPage() {
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-4">
             {error && (
-              <div className="bg-red-50 text-red-600 px-4 py-2 rounded-md text-sm">
+              <AlertBanner variant="error">
                 {error}
-              </div>
+              </AlertBanner>
             )}
             <div className="space-y-2">
               <Label htmlFor="name">Team Name</Label>
@@ -72,9 +73,9 @@ export default function NewTeamPage() {
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? 'Creating...' : 'Create Team'}
             </Button>
-            <p className="text-xs text-gray-500">
+            <div className="rounded-lg border border-border bg-surface-secondary px-4 py-3 text-xs leading-5 text-text-secondary">
               After creation, your team will show as Pending Approval until an admin activates it.
-            </p>
+            </div>
           </CardContent>
         </form>
       </Card>

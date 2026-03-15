@@ -1,22 +1,15 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
+import { toast } from 'sonner'
 import { csrfFetch } from '@/lib/csrf'
 import { clientLogger } from '@/lib/client-logger'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import {
-  Users,
-  Send,
-  AlertTriangle,
-  RefreshCw,
-  FileText,
-  Trophy,
-} from 'lucide-react'
-import { toast } from 'sonner'
+import { AlertTriangle, FileText, RefreshCw, Send, Trophy, Users } from 'lucide-react'
 import type { DashboardData } from './command-center/command-center-types'
 import { CommandCenterSkeleton } from './command-center/CommandCenterSkeleton'
 import { QuickActionCard } from './command-center/QuickActionCard'
@@ -51,7 +44,7 @@ export function AdminCommandCenter() {
   }, [])
 
   useEffect(() => {
-    fetchData()
+    void fetchData()
   }, [fetchData])
 
   const handleAction = async (action: string, endpoint: string) => {
@@ -61,7 +54,7 @@ export function AdminCommandCenter() {
       const result = await res.json()
       if (res.ok) {
         toast.success(result.message || 'Action completed')
-        fetchData()
+        void fetchData()
       } else {
         toast.error(result.message || 'Action failed')
       }
@@ -77,9 +70,11 @@ export function AdminCommandCenter() {
 
   if (!data) {
     return (
-      <div className="text-center py-12">
-        <p className="text-gray-500 dark:text-gray-400">Failed to load admin dashboard data</p>
-        <Button onClick={fetchData} className="mt-4">Retry</Button>
+      <div className="py-12 text-center">
+        <p className="text-muted-foreground">Failed to load admin dashboard data</p>
+        <Button onClick={fetchData} className="mt-4">
+          Retry
+        </Button>
       </div>
     )
   }
@@ -87,41 +82,47 @@ export function AdminCommandCenter() {
   const currentRoundEntry = data.currentRound
     ? data.rounds.find((round) => round.id === data.currentRound?.id) ?? null
     : null
-  const deadlinePassed = data.currentRound
-    ? new Date(data.currentRound.closesAt).getTime() < Date.now()
-    : false
+  const deadlinePassed = data.currentRound ? new Date(data.currentRound.closesAt).getTime() < Date.now() : false
   const canSendReminders = data.submissionProgress.pending > 0
   const canUploadActuals = currentRoundEntry ? !currentRoundEntry.hasActuals : true
   const canRunScoring = currentRoundEntry ? currentRoundEntry.hasActuals && !currentRoundEntry.isScored : true
 
   return (
-    <div className="space-y-8 font-sans">
-      {/* Header */}
-      <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
+    <div className="space-y-8">
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
         <div>
-          <h1 className="text-3xl font-semibold text-gray-900 dark:text-gray-100">Admin Dashboard</h1>
-          <p className="text-gray-500 dark:text-gray-400 mt-1 text-sm">
+          <h1 className="text-3xl font-semibold tracking-tight text-foreground">Admin Dashboard</h1>
+          <p className="mt-1 text-sm text-text-secondary">
             {data.activeSeason ? `${data.activeSeason.name} - ${data.activeSeason.status}` : 'No active season'}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <div className="min-w-[240px]">
             <Input placeholder="Search teams, users, universities..." />
-            <div className="mt-1 text-xs text-gray-400 dark:text-gray-500">
-              Search not available on this page. Go to <Link href="/admin/users" className="text-blue-600">Users</Link> or <Link href="/admin/teams" className="text-blue-600">Teams</Link>.
+            <div className="mt-1 text-xs text-text-muted">
+              Search is not available on this page. Go to{' '}
+              <Link href="/admin/users" className="text-primary hover:text-primary-hover">
+                Users
+              </Link>{' '}
+              or{' '}
+              <Link href="/admin/teams" className="text-primary hover:text-primary-hover">
+                Teams
+              </Link>
+              .
             </div>
           </div>
           <Select defaultValue={data.activeSeason?.id || ''} aria-label="Season selector">
-            <SelectTrigger className="w-[200px]"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-[220px]">
+              <SelectValue />
+            </SelectTrigger>
             <SelectContent>
-              {/* TODO: populate season options from API */}
               <SelectItem value={data.activeSeason?.id || 'none'}>
                 {data.activeSeason?.name || 'No active season'}
               </SelectItem>
             </SelectContent>
           </Select>
           <Button variant="outline" onClick={fetchData}>
-            <RefreshCw className="h-4 w-4 mr-2" />
+            <RefreshCw className="mr-2 h-4 w-4" />
             Refresh
           </Button>
         </div>
@@ -149,50 +150,58 @@ export function AdminCommandCenter() {
 
       {data.currentRound && <SubmissionTracker />}
 
-      {/* Stat Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card className="bg-gradient-to-br from-blue-50 to-white dark:from-blue-950/30 dark:to-gray-900 border-blue-100 dark:border-blue-900">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+        <Card variant="metric" className="border-primary/10 bg-gradient-to-br from-primary-soft to-card">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-500 dark:text-gray-400 flex items-center">
-              <Users className="h-4 w-4 mr-2 text-blue-600" /> Active Teams
+            <CardTitle className="flex items-center text-sm font-medium text-text-secondary">
+              <Users className="mr-2 h-4 w-4 text-primary" />
+              Active Teams
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-4xl font-semibold text-blue-600 tabular-nums">{data.stats.activeTeams}</p>
-            {data.stats.disqualifiedTeams > 0 && <p className="text-xs text-gray-500 dark:text-gray-400">{data.stats.disqualifiedTeams} disqualified</p>}
+            <p className="text-4xl font-semibold tabular-nums text-primary">{data.stats.activeTeams}</p>
+            {data.stats.disqualifiedTeams > 0 && (
+              <p className="text-xs text-text-secondary">{data.stats.disqualifiedTeams} disqualified</p>
+            )}
           </CardContent>
         </Card>
-        <Card className="bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-950/30 dark:to-gray-900 border-emerald-100 dark:border-emerald-900">
+
+        <Card variant="metric" className="border-success/10 bg-gradient-to-br from-success-background to-card">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-500 dark:text-gray-400 flex items-center">
-              <Send className="h-4 w-4 mr-2 text-emerald-600" /> This Round
+            <CardTitle className="flex items-center text-sm font-medium text-text-secondary">
+              <Send className="mr-2 h-4 w-4 text-success" />
+              This Round
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-4xl font-semibold text-emerald-600 tabular-nums">{data.submissionProgress.submitted}</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400">of {data.submissionProgress.total} teams</p>
+            <p className="text-4xl font-semibold tabular-nums text-success">{data.submissionProgress.submitted}</p>
+            <p className="text-xs text-text-secondary">of {data.submissionProgress.total} teams</p>
           </CardContent>
         </Card>
-        <Card className="bg-gradient-to-br from-amber-50 to-white dark:from-amber-950/30 dark:to-gray-900 border-amber-100 dark:border-amber-900">
+
+        <Card variant="metric" className="border-warning/10 bg-gradient-to-br from-warning-background to-card">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-500 dark:text-gray-400 flex items-center">
-              <AlertTriangle className="h-4 w-4 mr-2 text-amber-600" /> Warnings
+            <CardTitle className="flex items-center text-sm font-medium text-text-secondary">
+              <AlertTriangle className="mr-2 h-4 w-4 text-warning" />
+              Warnings
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-4xl font-semibold text-amber-600 tabular-nums">{data.stats.totalWarnings}</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400">total issued</p>
+            <p className="text-4xl font-semibold tabular-nums text-warning">{data.stats.totalWarnings}</p>
+            <p className="text-xs text-text-secondary">total issued</p>
           </CardContent>
         </Card>
-        <Card className="bg-gradient-to-br from-purple-50 to-white dark:from-purple-950/30 dark:to-gray-900 border-purple-100 dark:border-purple-900">
+
+        <Card variant="metric" className="border-info/10 bg-gradient-to-br from-info-background to-card">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-500 dark:text-gray-400 flex items-center">
-              <Users className="h-4 w-4 mr-2 text-purple-600" /> Users
+            <CardTitle className="flex items-center text-sm font-medium text-text-secondary">
+              <Users className="mr-2 h-4 w-4 text-info" />
+              Users
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-4xl font-semibold text-purple-600 tabular-nums">{data.stats.totalUsers}</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400">registered</p>
+            <p className="text-4xl font-semibold tabular-nums text-info">{data.stats.totalUsers}</p>
+            <p className="text-xs text-text-secondary">registered</p>
           </CardContent>
         </Card>
       </div>
@@ -209,17 +218,9 @@ export function AdminCommandCenter() {
         actionLoading={actionLoading}
       />
 
-      <SubmissionProgress
-        stats={data.stats}
-        meta={data.meta}
-        submissionProgress={data.submissionProgress}
-      />
+      <SubmissionProgress stats={data.stats} meta={data.meta} submissionProgress={data.submissionProgress} />
 
-      <CompetitionHealthScore
-        stats={data.stats}
-        submissionProgress={data.submissionProgress}
-        meta={data.meta}
-      />
+      <CompetitionHealthScore stats={data.stats} submissionProgress={data.submissionProgress} meta={data.meta} />
 
       <OperationalQueues
         submissionProgress={data.submissionProgress}
@@ -233,7 +234,7 @@ export function AdminCommandCenter() {
 
       <ActivityFeed />
 
-      <div className="grid lg:grid-cols-3 gap-6">
+      <div className="grid gap-6 lg:grid-cols-3">
         <QuickActionCard icon={FileText} title="Submissions Explorer" description="Browse and export all submissions" href="/admin/submissions" />
         <QuickActionCard icon={Trophy} title="Rankings" description="View and publish rankings" href="/leaderboards" />
         <QuickActionCard icon={FileText} title="Audit Logs" description="View admin action history" href="/admin/audit-logs" />

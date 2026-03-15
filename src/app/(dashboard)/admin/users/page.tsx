@@ -1,47 +1,40 @@
 'use client'
 
-import { clientLogger } from '@/lib/client-logger'
+import { useCallback, useEffect, useState } from 'react'
+import { toast } from 'sonner'
 import {
-  changeUserRole,
-  deleteUser,
-  forceLogout,
-  generateResetLink,
-  listUsers,
-} from '@/features/users/api'
+  GraduationCap,
+  Key,
+  Loader2,
+  LogOut,
+  MoreVertical,
+  RefreshCw,
+  Shield,
+  Trash2,
+  UserCog,
+  Users,
+} from 'lucide-react'
+import { clientLogger } from '@/lib/client-logger'
+import { changeUserRole, deleteUser, forceLogout, generateResetLink, listUsers } from '@/features/users/api'
 import type { AdminUser } from '@/features/users/types'
-import { useEffect, useState, useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { AccessDenied } from '@/components/ui/access-denied'
 import { usePermissions } from '@/hooks/usePermissions'
-import { Users, GraduationCap, UserCog, Shield, MoreVertical, RefreshCw, Key, LogOut, Trash2, Loader2 } from 'lucide-react'
-import { toast } from 'sonner'
 import { DataTable } from '@/components/ui/data-table'
 import { CardSkeleton, TableSkeleton } from '@/components/ui/skeleton'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+
+function getRoleVariant(role: string): 'medal' | 'success' | 'info' {
+  if (role === 'ADMIN') return 'medal'
+  if (role === 'SUPERVISOR') return 'success'
+  return 'info'
+}
 
 export default function AdminUsersPage() {
   const { loading: permLoading, canPerform } = usePermissions()
@@ -52,7 +45,7 @@ export default function AdminUsersPage() {
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null)
   const [showRoleDialog, setShowRoleDialog] = useState(false)
   const [showResetDialog, setShowResetDialog] = useState(false)
-  const [newRole, setNewRole] = useState<string>('')
+  const [newRole, setNewRole] = useState('')
   const [resetLink, setResetLink] = useState('')
   const [logoutTarget, setLogoutTarget] = useState<AdminUser | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<AdminUser | null>(null)
@@ -71,28 +64,17 @@ export default function AdminUsersPage() {
 
   useEffect(() => {
     if (!permLoading && canPerform('users:manage')) {
-      fetchUsers()
+      void fetchUsers()
     }
   }, [permLoading, canPerform, fetchUsers])
 
-  if (permLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-      </div>
-    )
-  }
-
-  if (!canPerform('users:manage')) {
-    return <AccessDenied title="Access Denied" message="You do not have permission to access User Management. Please contact an administrator for access." />
-  }
-
   const handleChangeRole = async () => {
     if (!selectedUser || !newRole) return
+
     setActionLoading(selectedUser.id)
     try {
       await changeUserRole(selectedUser.id, newRole)
-      fetchUsers()
+      await fetchUsers()
       setShowRoleDialog(false)
     } catch (error) {
       clientLogger.error('Change role failed:', error)
@@ -135,7 +117,7 @@ export default function AdminUsersPage() {
     setActionLoading(user.id)
     try {
       await deleteUser(user.id)
-      fetchUsers()
+      await fetchUsers()
     } catch (error) {
       clientLogger.error('Delete user failed:', error)
       toast.error(error instanceof Error ? error.message : 'Failed to delete user')
@@ -145,14 +127,31 @@ export default function AdminUsersPage() {
     }
   }
 
+  if (permLoading) {
+    return (
+      <div className="flex min-h-[400px] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    )
+  }
+
+  if (!canPerform('users:manage')) {
+    return (
+      <AccessDenied
+        title="Access Denied"
+        message="You do not have permission to access User Management. Please contact an administrator for access."
+      />
+    )
+  }
+
   if (loading) {
     return (
       <div className="space-y-6">
         <div className="space-y-2">
-          <div className="h-8 w-32 bg-gray-200 rounded animate-pulse" />
-          <div className="h-4 w-48 bg-gray-200 rounded animate-pulse" />
+          <div className="h-8 w-32 animate-pulse rounded bg-surface-secondary" />
+          <div className="h-4 w-48 animate-pulse rounded bg-muted" />
         </div>
-        <div className="grid md:grid-cols-4 gap-6">
+        <div className="grid gap-6 md:grid-cols-4">
           <CardSkeleton />
           <CardSkeleton />
           <CardSkeleton />
@@ -160,7 +159,7 @@ export default function AdminUsersPage() {
         </div>
         <Card>
           <CardHeader>
-            <div className="h-6 w-24 bg-gray-200 rounded animate-pulse" />
+            <div className="h-6 w-24 animate-pulse rounded bg-surface-secondary" />
           </CardHeader>
           <CardContent>
             <TableSkeleton rows={5} columns={6} />
@@ -170,67 +169,45 @@ export default function AdminUsersPage() {
     )
   }
 
-  const students = users.filter((u) => u.role === 'STUDENT')
-  const supervisors = users.filter((u) => u.role === 'SUPERVISOR')
-  const admins = users.filter((u) => u.role === 'ADMIN')
+  const students = users.filter((user) => user.role === 'STUDENT')
+  const supervisors = users.filter((user) => user.role === 'SUPERVISOR')
+  const admins = users.filter((user) => user.role === 'ADMIN')
 
   const columns = [
     {
       key: 'name',
       header: 'Name',
       sortable: true,
-      render: (user: AdminUser) => (
-        <span className="font-medium">{user.firstName} {user.lastName}</span>
-      ),
+      render: (user: AdminUser) => <span className="font-medium text-foreground">{user.firstName} {user.lastName}</span>,
     },
     {
       key: 'email',
       header: 'Email',
       sortable: true,
-      render: (user: AdminUser) => (
-        <span className="text-gray-600">{user.email}</span>
-      ),
+      render: (user: AdminUser) => <span className="text-text-secondary">{user.email}</span>,
     },
     {
       key: 'role',
       header: 'Role',
       sortable: true,
-      render: (user: AdminUser) => (
-        <span
-          className={`text-xs px-2 py-1 rounded-full ${
-            user.role === 'ADMIN'
-              ? 'bg-purple-100 text-purple-700'
-              : user.role === 'SUPERVISOR'
-              ? 'bg-emerald-100 text-emerald-700'
-              : 'bg-blue-100 text-blue-700'
-          }`}
-        >
-          {user.role}
-        </span>
-      ),
+      render: (user: AdminUser) => <Badge variant={getRoleVariant(user.role)}>{user.role}</Badge>,
     },
     {
       key: 'university.name',
       header: 'University',
       sortable: true,
-      render: (user: AdminUser) => (
-        <span className="text-gray-600">{user.university?.name || '-'}</span>
-      ),
+      render: (user: AdminUser) => <span className="text-text-secondary">{user.university?.name || '-'}</span>,
     },
     {
       key: 'team',
       header: 'Team',
-      render: (user: AdminUser) => (
-        <span className="text-gray-600">{user.teamMemberships[0]?.team.name || '-'}</span>
-      ),
+      render: (user: AdminUser) => <span className="text-text-secondary">{user.teamMemberships[0]?.team.name || '-'}</span>,
     },
     {
       key: 'createdAt',
       header: 'Joined',
       sortable: true,
-      render: (user: AdminUser) => (
-        <span className="text-gray-500">{new Date(user.createdAt).toLocaleDateString()}</span>
-      ),
+      render: (user: AdminUser) => <span className="text-text-muted">{new Date(user.createdAt).toLocaleDateString()}</span>,
     },
     {
       key: 'actions',
@@ -239,11 +216,7 @@ export default function AdminUsersPage() {
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="sm" disabled={actionLoading === user.id}>
-              {actionLoading === user.id ? (
-                <RefreshCw className="h-4 w-4 animate-spin" />
-              ) : (
-                <MoreVertical className="h-4 w-4" />
-              )}
+              {actionLoading === user.id ? <RefreshCw className="h-4 w-4 animate-spin" /> : <MoreVertical className="h-4 w-4" />}
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
@@ -254,24 +227,20 @@ export default function AdminUsersPage() {
                 setShowRoleDialog(true)
               }}
             >
-              <Shield className="h-4 w-4 mr-2" />
+              <Shield className="mr-2 h-4 w-4" />
               Change Role
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleGenerateResetLink(user)}>
-              <Key className="h-4 w-4 mr-2" />
+            <DropdownMenuItem onClick={() => void handleGenerateResetLink(user)}>
+              <Key className="mr-2 h-4 w-4" />
               Generate Reset Link
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => setLogoutTarget(user)}>
-              <LogOut className="h-4 w-4 mr-2" />
+              <LogOut className="mr-2 h-4 w-4" />
               Force Logout
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem
-              className="text-red-600"
-              onClick={() => setDeleteTarget(user)}
-              disabled={user.role === 'ADMIN'}
-            >
-              <Trash2 className="h-4 w-4 mr-2" />
+            <DropdownMenuItem className="text-error" onClick={() => setDeleteTarget(user)} disabled={user.role === 'ADMIN'}>
+              <Trash2 className="mr-2 h-4 w-4" />
               Delete User
             </DropdownMenuItem>
           </DropdownMenuContent>
@@ -283,53 +252,56 @@ export default function AdminUsersPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">All Users</h1>
-        <p className="text-gray-600">{totalUsers} registered users</p>
+        <h1 className="text-3xl font-semibold tracking-tight text-foreground">All Users</h1>
+        <p className="text-text-secondary">{totalUsers} registered users</p>
       </div>
 
-      <div className="grid md:grid-cols-4 gap-6">
-        <Card className="bg-gradient-to-br from-gray-50 to-white">
+      <div className="grid gap-6 md:grid-cols-4">
+        <Card variant="metric" className="bg-gradient-to-br from-surface-secondary to-card">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600 flex items-center">
-              <Users className="h-4 w-4 mr-2" />
+            <CardTitle className="flex items-center text-sm font-medium text-text-secondary">
+              <Users className="mr-2 h-4 w-4 text-foreground" />
               Total
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold">{users.length}</p>
+            <p className="text-3xl font-semibold text-foreground">{users.length}</p>
           </CardContent>
         </Card>
-        <Card className="bg-gradient-to-br from-blue-50 to-white border-blue-100">
+
+        <Card variant="metric" className="border-primary/10 bg-gradient-to-br from-primary-soft to-card">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600 flex items-center">
-              <GraduationCap className="h-4 w-4 mr-2" />
+            <CardTitle className="flex items-center text-sm font-medium text-text-secondary">
+              <GraduationCap className="mr-2 h-4 w-4 text-primary" />
               Students
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold text-blue-600">{students.length}</p>
+            <p className="text-3xl font-semibold text-primary">{students.length}</p>
           </CardContent>
         </Card>
-        <Card className="bg-gradient-to-br from-emerald-50 to-white border-emerald-100">
+
+        <Card variant="metric" className="border-success/10 bg-gradient-to-br from-success-background to-card">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600 flex items-center">
-              <UserCog className="h-4 w-4 mr-2" />
+            <CardTitle className="flex items-center text-sm font-medium text-text-secondary">
+              <UserCog className="mr-2 h-4 w-4 text-success" />
               Supervisors
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold text-emerald-600">{supervisors.length}</p>
+            <p className="text-3xl font-semibold text-success">{supervisors.length}</p>
           </CardContent>
         </Card>
-        <Card className="bg-gradient-to-br from-purple-50 to-white border-purple-100">
+
+        <Card variant="metric" className="border-accent/10 bg-gradient-to-br from-accent-soft to-card">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600 flex items-center">
-              <Shield className="h-4 w-4 mr-2" />
+            <CardTitle className="flex items-center text-sm font-medium text-text-secondary">
+              <Shield className="mr-2 h-4 w-4 text-accent" />
               Admins
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold text-purple-600">{admins.length}</p>
+            <p className="text-3xl font-semibold text-accent">{admins.length}</p>
           </CardContent>
         </Card>
       </div>
@@ -387,10 +359,7 @@ export default function AdminUsersPage() {
             <Button variant="outline" onClick={() => setShowRoleDialog(false)}>
               Cancel
             </Button>
-            <Button
-              onClick={handleChangeRole}
-              disabled={actionLoading === selectedUser?.id || newRole === selectedUser?.role}
-            >
+            <Button onClick={handleChangeRole} disabled={actionLoading === selectedUser?.id || newRole === selectedUser?.role}>
               {actionLoading === selectedUser?.id ? 'Saving...' : 'Save'}
             </Button>
           </DialogFooter>
@@ -406,10 +375,10 @@ export default function AdminUsersPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
-            <div className="bg-gray-50 p-3 rounded-lg">
-              <p className="text-sm break-all font-mono">{resetLink}</p>
+            <div className="rounded-lg border border-border bg-surface-secondary p-3">
+              <p className="break-all font-mono text-sm text-foreground">{resetLink}</p>
             </div>
-            <p className="text-xs text-gray-500 mt-2">This link expires in 24 hours.</p>
+            <p className="mt-2 text-xs text-text-muted">This link expires in 24 hours.</p>
           </div>
           <DialogFooter>
             <Button
@@ -428,30 +397,33 @@ export default function AdminUsersPage() {
 
       <ConfirmDialog
         open={logoutTarget !== null}
-        onOpenChange={(open) => { if (!open) setLogoutTarget(null) }}
+        onOpenChange={(open) => {
+          if (!open) setLogoutTarget(null)
+        }}
         title="Force Logout"
         description={`Force logout ${logoutTarget?.firstName} ${logoutTarget?.lastName}? Their active sessions will be terminated.`}
         confirmLabel="Force Logout"
         variant="destructive"
         loading={actionLoading === logoutTarget?.id}
-        onConfirm={() => { if (logoutTarget) executeForceLogout(logoutTarget) }}
+        onConfirm={() => {
+          if (logoutTarget) void executeForceLogout(logoutTarget)
+        }}
       />
 
       <ConfirmDialog
         open={deleteTarget !== null}
-        onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null)
+        }}
         title="Delete User"
         description={`Delete ${deleteTarget?.firstName} ${deleteTarget?.lastName}? This action cannot be undone.`}
         confirmLabel="Delete"
         variant="destructive"
         loading={actionLoading === deleteTarget?.id}
-        onConfirm={() => { if (deleteTarget) executeDeleteUser(deleteTarget) }}
+        onConfirm={() => {
+          if (deleteTarget) void executeDeleteUser(deleteTarget)
+        }}
       />
     </div>
   )
 }
-
-
-
-
-

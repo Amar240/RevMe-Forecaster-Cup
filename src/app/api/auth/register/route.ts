@@ -8,12 +8,13 @@ import { z } from 'zod'
 export const dynamic = 'force-dynamic'
 
 const registerSchema = z.object({
-  email: z.string().email(),
+  email: z.string().trim().email(),
   password: z.string().min(8),
-  firstName: z.string().min(1),
-  lastName: z.string().min(1),
+  firstName: z.string().trim().min(1),
+  lastName: z.string().trim().min(1),
   role: z.enum(['STUDENT', 'SUPERVISOR']),
-  universityName: z.string().min(1),
+  universityName: z.string().trim().min(1),
+  country: z.string().trim().min(1),
 })
 
 export async function POST(request: NextRequest) {
@@ -28,13 +29,23 @@ export async function POST(request: NextRequest) {
       throw new ApiError('Email already registered', 409, 'CONFLICT')
     }
 
+    const universityName = data.universityName
+
     let university = await prisma.university.findUnique({
-      where: { name: data.universityName },
+      where: { name: universityName },
     })
 
     if (!university) {
       university = await prisma.university.create({
-        data: { name: data.universityName },
+        data: {
+          name: universityName,
+          country: data.country,
+        },
+      })
+    } else if (!university.country) {
+      university = await prisma.university.update({
+        where: { id: university.id },
+        data: { country: data.country },
       })
     }
 

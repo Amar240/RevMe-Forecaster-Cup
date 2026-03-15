@@ -131,9 +131,9 @@ export const universityFeatures = [
 ]
 
 export const scoringFormula = [
-  'APE = |Forecast - Actual| / Actual',
-  'MAPE = average of all APE values',
-  'Final = (Occupancy MAPE + ADR MAPE) / 2',
+  'MAPE is the published competition metric for each scoring release.',
+  'We average percentage error across scored forecast points for each team.',
+  'Lower MAPE means better forecasting accuracy across occupancy and ADR.',
 ]
 
 export const governanceBadges = [
@@ -145,7 +145,7 @@ export const governanceBadges = [
 export const faqItems = [
   {
     question: 'How does scoring work?',
-    answer: 'Each prediction is scored using Absolute Percentage Error (APE). Your team MAPE is the average of all APE values across markets and metrics. Lower is better.',
+    answer: 'Each scored forecast contributes to your team MAPE across the active markets and metrics. Lower MAPE is better, and zero-actual cases are handled consistently under the published scoring rules.',
   },
   {
     question: 'Why does this competition cost money?',

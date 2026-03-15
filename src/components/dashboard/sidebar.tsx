@@ -17,7 +17,6 @@ import {
   Calculator,
   Building2,
   BookOpen,
-  Zap,
   UserPlus,
   Inbox,
   CheckCircle,
@@ -202,99 +201,75 @@ export function Sidebar({ role, mobileOpen, onMobileClose }: SidebarProps) {
     ? subAdminNavGroups
     : null
 
+  const renderNavLink = (item: NavItem, onLinkClick?: () => void) => {
+    const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
+    const badgeCount =
+      item.badgeKey === 'joinRequests'
+        ? joinRequestsCount
+        : item.badgeKey === 'teamApprovals'
+        ? teamApprovalsCount
+        : 0
+
+    return (
+      <Link
+        key={item.name}
+        href={item.href}
+        onClick={onLinkClick}
+        className={cn(
+          'group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all',
+          isActive
+            ? 'bg-background text-primary shadow-sm before:absolute before:bottom-2 before:left-0 before:top-2 before:w-1 before:rounded-r-full before:bg-primary'
+            : 'text-text-secondary hover:bg-background hover:text-foreground'
+        )}
+      >
+        <item.icon className={cn('h-4.5 w-4.5 flex-shrink-0', isActive ? 'text-primary' : 'text-muted-foreground group-hover:text-foreground')} />
+        <span className="flex-1">{item.name}</span>
+        {badgeCount > 0 && (
+          <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-semibold text-primary-foreground">
+            {badgeCount > 99 ? '99+' : badgeCount}
+          </span>
+        )}
+      </Link>
+    )
+  }
+
   const renderNavContent = (onLinkClick?: () => void) => (
-    <nav className="p-4 space-y-4">
+    <nav className="space-y-6 px-3 py-4">
       {navGroups ? (
         navGroups.map((group) => (
-          <details key={group.label} open className="space-y-1">
-            <summary className="px-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 cursor-pointer list-none">
+          <details key={group.label} open className="space-y-2">
+            <summary className="list-none px-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
               {group.label}
             </summary>
-            {group.items.map((item) => {
-              const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
-              const badgeCount =
-                item.badgeKey === 'joinRequests'
-                  ? joinRequestsCount
-                  : item.badgeKey === 'teamApprovals'
-                  ? teamApprovalsCount
-                  : 0
-              return (
-                <Link
-                  key={item.name}
-                  href={item.href}
-                  onClick={onLinkClick}
-                  className={cn(
-                    'flex items-center space-x-3 px-3 py-2 rounded-md text-sm font-medium transition-colors',
-                    isActive
-                      ? 'bg-violet-500/10 text-violet-300 border-l-2 border-violet-500'
-                      : 'text-slate-400 hover:bg-white/5 hover:text-white'
-                  )}
-                >
-                  <item.icon className="h-5 w-5" />
-                  <span className="flex-1">{item.name}</span>
-                  {badgeCount > 0 && (
-                    <span className="min-w-[20px] h-5 px-1.5 text-xs font-semibold rounded-full bg-red-500 text-white flex items-center justify-center">
-                      {badgeCount > 99 ? '99+' : badgeCount}
-                    </span>
-                  )}
-                </Link>
-              )
-            })}
+            <div className="space-y-1">
+              {group.items.map((item) => renderNavLink(item, onLinkClick))}
+            </div>
           </details>
         ))
       ) : (
-        navItems.map((item) => {
-          const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
-          const badgeCount =
-            item.badgeKey === 'joinRequests'
-              ? joinRequestsCount
-              : item.badgeKey === 'teamApprovals'
-              ? teamApprovalsCount
-              : 0
-          return (
-            <Link
-              key={item.name}
-              href={item.href}
-              onClick={onLinkClick}
-              className={cn(
-                'flex items-center space-x-3 px-3 py-2 rounded-md text-sm font-medium transition-colors',
-                isActive
-                  ? 'bg-violet-500/10 text-violet-300 border-l-2 border-violet-500'
-                  : 'text-slate-400 hover:bg-white/5 hover:text-white'
-              )}
-            >
-              <item.icon className="h-5 w-5" />
-              <span className="flex-1">{item.name}</span>
-              {badgeCount > 0 && (
-                <span className="min-w-[20px] h-5 px-1.5 text-xs font-semibold rounded-full bg-red-500 text-white flex items-center justify-center">
-                  {badgeCount > 99 ? '99+' : badgeCount}
-                </span>
-              )}
-            </Link>
-          )
-        })
+        <div className="space-y-1">
+          {navItems.map((item) => renderNavLink(item, onLinkClick))}
+        </div>
       )}
     </nav>
   )
 
   return (
     <>
-      {/* Desktop sidebar */}
-      <aside className="w-64 bg-[#070B18] border-r border-white/5 min-h-[calc(100vh-4rem)] hidden lg:block">
+      <aside className="hidden min-h-[calc(100vh-4rem)] w-72 border-r border-border bg-surface-secondary lg:block">
         {renderNavContent()}
       </aside>
 
-      {/* Mobile sidebar overlay */}
       {mobileOpen && (
         <>
           <div
-            className="fixed inset-0 bg-black/40 z-40 lg:hidden"
+            className="fixed inset-0 z-40 bg-slate-900/30 lg:hidden"
             onClick={onMobileClose}
           />
-          <aside className="fixed top-0 left-0 w-72 h-full bg-[#070B18] z-50 shadow-xl lg:hidden overflow-y-auto">
-            <div className="flex items-center justify-between h-16 px-4 border-b border-white/5">
-              <span className="text-lg font-bold text-white">Menu</span>
-              <button onClick={onMobileClose} className="p-2 rounded-md text-slate-400 hover:bg-white/5 hover:text-white">
+          <aside className="fixed left-0 top-0 z-50 h-full w-72 overflow-y-auto border-r border-border bg-surface-secondary shadow-popover lg:hidden">
+            <div className="flex h-16 items-center justify-between border-b border-border px-4">
+              <span className="font-display text-lg font-semibold text-foreground">Navigation</span>
+              <button onClick={onMobileClose} className="rounded-md p-2 text-text-secondary transition-colors hover:bg-background hover:text-foreground">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                   <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
                 </svg>

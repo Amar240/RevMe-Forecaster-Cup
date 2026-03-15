@@ -3,11 +3,13 @@
 import type { RoundSummary, MarketSummary, ActualSummary } from '@/features/actuals/types'
 import { MarketChip, formatValue } from './actuals-types'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { AlertCircle, Edit2, Trash2, RotateCcw } from 'lucide-react'
+import { actualMetricMeta } from '@/lib/status-metadata'
 
 interface ActualsViewerProps {
   filteredActuals: ActualSummary[]
@@ -44,7 +46,7 @@ export function ActualsViewer({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-gray-600">
+        <p className="text-sm text-text-secondary">
           View and manage all uploaded actuals
         </p>
         <Label className="flex items-center gap-2 text-sm font-normal cursor-pointer">
@@ -120,15 +122,15 @@ export function ActualsViewer({
       </div>
 
       {filteredActuals.length === 0 ? (
-        <div className="text-center py-8 text-gray-500">
-          <AlertCircle className="h-8 w-8 mx-auto mb-2 opacity-50" />
+        <div className="py-8 text-center text-text-secondary">
+          <AlertCircle className="mx-auto mb-2 h-8 w-8 opacity-50" />
           <p>No actuals match your filters</p>
         </div>
       ) : (
         <div className="space-y-3">
-          <div className="max-h-[400px] overflow-auto border rounded-md">
+          <div className="max-h-[400px] overflow-auto rounded-lg border border-border">
             <table className="w-full text-sm">
-              <thead className="bg-gray-50 sticky top-0">
+              <thead className="sticky top-0 bg-muted">
                 <tr>
                   <th className="px-3 py-2 text-left font-medium">Round</th>
                   <th className="px-3 py-2 text-left font-medium">Market</th>
@@ -138,11 +140,11 @@ export function ActualsViewer({
                   <th className="px-3 py-2 text-center font-medium">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y">
+              <tbody className="divide-y divide-border">
                 {filteredActuals.map((actual) => (
                   <tr
                     key={actual.id}
-                    className={actual.isVoided ? 'bg-red-50 opacity-60' : 'hover:bg-gray-50'}
+                    className={actual.isVoided ? 'bg-error-background/60 opacity-70' : 'hover:bg-muted/70'}
                   >
                     <td className="px-3 py-2">R{actual.roundNumber}</td>
                     <td className="px-3 py-2">
@@ -150,13 +152,9 @@ export function ActualsViewer({
                     </td>
                     <td className="px-3 py-2">W+{actual.weekOffset}</td>
                     <td className="px-3 py-2">
-                      <span className={`px-2 py-0.5 rounded text-xs ${
-                        actual.metric === 'OCCUPANCY'
-                          ? 'bg-blue-100 text-blue-700'
-                          : 'bg-purple-100 text-purple-700'
-                      }`}>
+                      <Badge variant={actualMetricMeta[actual.metric].tone}>
                         {actual.metric}
-                      </span>
+                      </Badge>
                     </td>
                     <td className="px-3 py-2 text-right font-mono">
                       {actual.isVoided ? (
@@ -188,7 +186,7 @@ export function ActualsViewer({
                             variant="ghost"
                             size="sm"
                             onClick={() => onVoid(actual)}
-                            className="text-red-600 hover:text-red-700"
+                            className="text-error hover:text-error"
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -200,7 +198,7 @@ export function ActualsViewer({
               </tbody>
             </table>
           </div>
-          <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-gray-600">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-text-secondary">
             <span>
               Page {page} of {totalPages} &middot; {totalActuals} total
             </span>

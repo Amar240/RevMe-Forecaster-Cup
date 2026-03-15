@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import type { DashboardData } from './command-center-types'
 
@@ -36,12 +37,27 @@ export function CompetitionHealthScore({
     ((participationRate + warningRate + activeTeamRate) / 3) * 100,
   )
 
-  const color =
+  const tone =
     healthScore > 85
-      ? { ring: 'stroke-emerald-500', text: 'text-emerald-600', bg: 'bg-emerald-50' }
+      ? {
+          ring: 'stroke-success',
+          text: 'text-success',
+          surface: 'bg-success-background',
+          badge: 'success' as const,
+        }
       : healthScore >= 70
-        ? { ring: 'stroke-amber-500', text: 'text-amber-600', bg: 'bg-amber-50' }
-        : { ring: 'stroke-red-500', text: 'text-red-600', bg: 'bg-red-50' }
+        ? {
+            ring: 'stroke-warning',
+            text: 'text-warning',
+            surface: 'bg-warning-background',
+            badge: 'warning' as const,
+          }
+        : {
+            ring: 'stroke-error',
+            text: 'text-error',
+            surface: 'bg-error-background',
+            badge: 'error' as const,
+          }
 
   const circumference = 2 * Math.PI * 54
   const offset = circumference - (healthScore / 100) * circumference
@@ -54,19 +70,31 @@ export function CompetitionHealthScore({
 
   return (
     <Card
-      className="border-gray-200 cursor-pointer transition-shadow hover:shadow-md"
-      onClick={() => setExpanded((v) => !v)}
+      className="cursor-pointer transition-shadow hover:shadow-popover"
+      onClick={() => setExpanded((value) => !value)}
       role="button"
       tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault()
-          setExpanded((v) => !v)
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          setExpanded((value) => !value)
         }
       }}
     >
-      <CardContent className="flex flex-col items-center py-6 px-4">
-        <div className="relative h-32 w-32">
+      <CardContent className="flex flex-col items-center px-4 py-6">
+        <div className="flex w-full items-center justify-between">
+          <div>
+            <div className="text-xs uppercase tracking-[0.18em] text-text-muted">
+              Competition Health
+            </div>
+            <div className="mt-1 text-sm text-text-secondary">
+              Tap for the score breakdown
+            </div>
+          </div>
+          <Badge variant={tone.badge}>{healthScore}%</Badge>
+        </div>
+
+        <div className="relative mt-5 h-32 w-32">
           <svg className="h-full w-full -rotate-90" viewBox="0 0 120 120">
             <circle
               cx="60"
@@ -75,7 +103,7 @@ export function CompetitionHealthScore({
               fill="none"
               stroke="currentColor"
               strokeWidth="8"
-              className="text-gray-200"
+              className="text-border"
             />
             <circle
               cx="60"
@@ -84,28 +112,31 @@ export function CompetitionHealthScore({
               fill="none"
               strokeWidth="8"
               strokeLinecap="round"
-              className={color.ring}
+              className={tone.ring}
               strokeDasharray={circumference}
               strokeDashoffset={offset}
               style={{ transition: 'stroke-dashoffset 0.6s ease' }}
             />
           </svg>
           <div className="absolute inset-0 flex items-center justify-center">
-            <span className={`text-3xl font-bold tabular-nums ${color.text}`}>
+            <span className={`text-3xl font-bold tabular-nums ${tone.text}`}>
               {healthScore}%
             </span>
           </div>
         </div>
-        <p className="mt-3 text-sm font-medium text-gray-500">Competition Health</p>
 
         {expanded && (
-          <div className="mt-4 w-full space-y-2">
-            {subScores.map((s) => (
-              <div key={s.label} className="flex items-center justify-between text-sm">
-                <span className="text-gray-600">{s.label}</span>
-                <span className="font-semibold text-gray-900 tabular-nums">{s.value}%</span>
-              </div>
-            ))}
+          <div className={`mt-5 w-full rounded-xl border border-border p-4 ${tone.surface}`}>
+            <div className="space-y-2">
+              {subScores.map((score) => (
+                <div key={score.label} className="flex items-center justify-between text-sm">
+                  <span className="text-text-secondary">{score.label}</span>
+                  <span className="font-semibold text-foreground tabular-nums">
+                    {score.value}%
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </CardContent>

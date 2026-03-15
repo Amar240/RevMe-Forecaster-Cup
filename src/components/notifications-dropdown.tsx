@@ -85,11 +85,11 @@ export function NotificationsDropdown() {
     <div className="relative">
       <button
         onClick={() => setOpen(!open)}
-        className="relative p-2 text-gray-600 hover:text-gray-900 transition-colors"
+        className="relative rounded-md p-2 text-text-secondary transition-colors hover:bg-muted hover:text-foreground"
       >
         <Bell className="h-5 w-5" />
         {unreadCount > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-medium">
+          <span className="absolute -right-0.5 -top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[11px] font-medium text-primary-foreground">
             {unreadCount > 9 ? '9+' : unreadCount}
           </span>
         )}
@@ -97,13 +97,13 @@ export function NotificationsDropdown() {
 
       {open && (
         <>
-          <div 
-            className="fixed inset-0 z-40" 
+          <div
+            className="fixed inset-0 z-40"
             onClick={() => setOpen(false)}
           />
-          <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border z-50">
-            <div className="flex items-center justify-between p-3 border-b">
-              <h3 className="font-semibold text-gray-900">Notifications</h3>
+          <div className="absolute right-0 z-50 mt-2 w-80 rounded-xl border border-border bg-card shadow-popover">
+            <div className="flex items-center justify-between border-b border-border px-4 py-3">
+              <h3 className="font-semibold text-foreground">Notifications</h3>
               <div className="flex items-center gap-2">
                 {unreadCount > 0 && (
                   <Button
@@ -111,41 +111,41 @@ export function NotificationsDropdown() {
                     size="sm"
                     onClick={markAllRead}
                     disabled={loading}
-                    className="text-xs h-7"
+                    className="h-7 text-xs"
                   >
                     Mark all read
                   </Button>
                 )}
-                <button onClick={() => setOpen(false)}>
-                  <X className="h-4 w-4 text-gray-400" />
+                <button onClick={() => setOpen(false)} className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+                  <X className="h-4 w-4" />
                 </button>
               </div>
             </div>
 
             <div className="max-h-96 overflow-y-auto">
               {notifications.length === 0 ? (
-                <div className="p-6 text-center text-gray-500">
-                  <Bell className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                <div className="p-6 text-center text-text-secondary">
+                  <Bell className="mx-auto mb-2 h-8 w-8 opacity-50" />
                   <p className="text-sm">No notifications yet</p>
                 </div>
               ) : (
                 notifications.map((notif) => (
                   <div
                     key={notif.id}
-                    className={`p-3 border-b last:border-b-0 hover:bg-gray-50 ${
-                      !notif.read ? 'bg-blue-50' : ''
+                    className={`border-b border-border p-3 last:border-b-0 hover:bg-muted ${
+                      !notif.read ? 'bg-secondary' : ''
                     }`}
                     onClick={() => !notif.read && markRead(notif.id)}
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1 min-w-0">
-                        <p className={`text-sm font-medium ${!notif.read ? 'text-gray-900' : 'text-gray-700'}`}>
+                      <div className="min-w-0 flex-1">
+                        <p className={`text-sm font-medium ${!notif.read ? 'text-foreground' : 'text-text-secondary'}`}>
                           {notif.title}
                         </p>
-                        <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">
+                        <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
                           {notif.message}
                         </p>
-                        <p className="text-xs text-gray-400 mt-1">
+                        <p className="mt-1 text-xs text-muted-foreground">
                           {new Date(notif.createdAt).toLocaleDateString('en-US', {
                             month: 'short',
                             day: 'numeric',
@@ -155,10 +155,10 @@ export function NotificationsDropdown() {
                         </p>
                       </div>
                       {notif.link && (
-                        <Link 
+                        <Link
                           href={notif.link}
                           onClick={() => setOpen(false)}
-                          className="text-blue-600 hover:text-blue-800"
+                          className="text-primary transition-colors hover:text-primary-hover"
                         >
                           <ExternalLink className="h-4 w-4" />
                         </Link>

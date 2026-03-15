@@ -5,9 +5,10 @@ import { clientLogger } from '@/lib/client-logger'
 
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/ui/data-table'
-import { TableSkeleton } from '@/components/ui/skeleton'
+import { Skeleton, TableSkeleton } from '@/components/ui/skeleton'
 import { Download, FileText, Send, LayoutGrid, List, ArrowUpDown } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -191,7 +192,7 @@ export default function AdminSubmissionsPage() {
       header: 'Team ID',
       sortable: true,
       render: (row: Submission) => (
-        <span className="font-mono text-sm text-gray-600">{row.teamDisplayId}</span>
+        <span className="font-mono text-sm text-text-secondary">{row.teamDisplayId}</span>
       ),
     },
     {
@@ -207,9 +208,7 @@ export default function AdminSubmissionsPage() {
       header: 'Round',
       sortable: true,
       render: (row: Submission) => (
-        <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
-          R{row.roundNumber}
-        </span>
+        <Badge variant="info">R{row.roundNumber}</Badge>
       ),
     },
     {
@@ -232,7 +231,7 @@ export default function AdminSubmissionsPage() {
         <div>
           <span className="font-medium">{row.occupancy.toFixed(1)}</span>
           {row.hasScore && row.occupancyAE !== undefined && (
-            <span className="text-xs text-gray-500 ml-1">(AE: {row.occupancyAE.toFixed(2)})</span>
+            <span className="ml-1 text-xs text-text-muted">(AE: {row.occupancyAE.toFixed(2)})</span>
           )}
         </div>
       ),
@@ -245,7 +244,7 @@ export default function AdminSubmissionsPage() {
         <div>
           <span className="font-medium">${row.adr.toFixed(2)}</span>
           {row.hasScore && row.adrAE !== undefined && (
-            <span className="text-xs text-gray-500 ml-1">(AE: {row.adrAE.toFixed(2)})</span>
+            <span className="ml-1 text-xs text-text-muted">(AE: {row.adrAE.toFixed(2)})</span>
           )}
         </div>
       ),
@@ -257,7 +256,7 @@ export default function AdminSubmissionsPage() {
       render: (row: Submission) => (
         <div>
           <p className="text-sm">{new Date(row.submittedAt).toLocaleDateString()}</p>
-          <p className="text-xs text-gray-500">{new Date(row.submittedAt).toLocaleTimeString()}</p>
+          <p className="text-xs text-text-muted">{new Date(row.submittedAt).toLocaleTimeString()}</p>
         </div>
       ),
     },
@@ -268,7 +267,7 @@ export default function AdminSubmissionsPage() {
       render: (row: Submission) => (
         <div>
           <p className="text-sm font-medium">{row.submitterName}</p>
-          <p className="text-xs text-gray-500">{row.submitterEmail}</p>
+          <p className="text-xs text-text-muted">{row.submitterEmail}</p>
         </div>
       ),
     },
@@ -280,7 +279,7 @@ export default function AdminSubmissionsPage() {
       header: 'Team ID',
       sortable: true,
       render: (row: PendingTeam) => (
-        <span className="font-mono text-sm text-gray-600">{row.teamDisplayId}</span>
+        <span className="font-mono text-sm text-text-secondary">{row.teamDisplayId}</span>
       ),
     },
     {
@@ -304,7 +303,7 @@ export default function AdminSubmissionsPage() {
       render: (row: PendingTeam) => (
         <div>
           <p className="text-sm font-medium">{row.supervisorName}</p>
-          <p className="text-xs text-gray-500">{row.supervisorEmail}</p>
+          <p className="text-xs text-text-muted">{row.supervisorEmail}</p>
         </div>
       ),
     },
@@ -324,10 +323,10 @@ export default function AdminSubmissionsPage() {
         row.lastSubmissionAt ? (
           <div>
             <p className="text-sm">{new Date(row.lastSubmissionAt).toLocaleDateString()}</p>
-            <p className="text-xs text-gray-500">{new Date(row.lastSubmissionAt).toLocaleTimeString()}</p>
+            <p className="text-xs text-text-muted">{new Date(row.lastSubmissionAt).toLocaleTimeString()}</p>
           </div>
         ) : (
-          <span className="text-sm text-gray-500">Not set</span>
+          <span className="text-sm text-text-muted">Not set</span>
         )
       ),
     },
@@ -338,8 +337,8 @@ export default function AdminSubmissionsPage() {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div className="space-y-2">
-            <div className="h-8 w-48 bg-gray-200 rounded animate-pulse" />
-            <div className="h-4 w-32 bg-gray-200 rounded animate-pulse" />
+            <Skeleton className="h-8 w-48" />
+            <Skeleton className="h-4 w-32" />
           </div>
         </div>
         <Card>
@@ -358,11 +357,11 @@ export default function AdminSubmissionsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center">
-            <FileText className="h-6 w-6 mr-2 text-blue-600" />
+          <h1 className="flex items-center text-2xl font-bold text-foreground">
+            <FileText className="mr-2 h-6 w-6 text-primary" />
             Submissions Explorer
           </h1>
-          <p className="text-gray-600 dark:text-gray-400">{totalSubmissions} total submissions</p>
+          <p className="text-text-secondary">{totalSubmissions} total submissions</p>
         </div>
         <Button onClick={handleExport} disabled={exporting}>
           <Download className="h-4 w-4 mr-2" />
@@ -386,13 +385,13 @@ export default function AdminSubmissionsPage() {
           </Button>
         </div>
         {viewMode === 'all' && (
-          <div className="flex items-center bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
+          <div className="flex items-center rounded-lg bg-surface-secondary p-1">
             <button
               onClick={() => setViewStyle('flat')}
               className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
                 viewStyle === 'flat'
-                  ? 'bg-white dark:bg-gray-700 shadow text-gray-900 dark:text-gray-100'
-                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900'
+                  ? 'bg-card text-foreground shadow-card'
+                  : 'text-text-secondary hover:text-foreground'
               }`}
             >
               <List className="h-4 w-4" />
@@ -402,8 +401,8 @@ export default function AdminSubmissionsPage() {
               onClick={() => setViewStyle('comparison')}
               className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
                 viewStyle === 'comparison'
-                  ? 'bg-white dark:bg-gray-700 shadow text-gray-900 dark:text-gray-100'
-                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900'
+                  ? 'bg-card text-foreground shadow-card'
+                  : 'text-text-secondary hover:text-foreground'
               }`}
             >
               <LayoutGrid className="h-4 w-4" />
@@ -414,36 +413,36 @@ export default function AdminSubmissionsPage() {
       </div>
 
       <div className="grid md:grid-cols-3 gap-4">
-        <Card className="bg-gradient-to-br from-blue-50 to-white border-blue-100 dark:from-blue-950/30 dark:to-gray-900 dark:border-blue-900">
+        <Card variant="metric" className="border-primary/15 bg-primary-soft/60">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Total Submissions</p>
-                <p className="text-3xl font-bold text-blue-600">{totalSubmissions}</p>
+                <p className="text-sm text-text-secondary">Total Submissions</p>
+                <p className="text-3xl font-bold text-primary">{totalSubmissions}</p>
               </div>
-              <Send className="h-8 w-8 text-blue-200 dark:text-blue-800" />
+              <Send className="h-8 w-8 text-primary/35" />
             </div>
           </CardContent>
         </Card>
-        <Card className="bg-gradient-to-br from-green-50 to-white border-green-100 dark:from-green-950/30 dark:to-gray-900 dark:border-green-900">
+        <Card variant="metric" className="border-success/20 bg-success-background/60">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Unique Teams</p>
-                <p className="text-3xl font-bold text-green-600">{uniqueTeamsCount}</p>
+                <p className="text-sm text-text-secondary">Unique Teams</p>
+                <p className="text-3xl font-bold text-success">{uniqueTeamsCount}</p>
               </div>
-              <Send className="h-8 w-8 text-green-200 dark:text-green-800" />
+              <Send className="h-8 w-8 text-success/30" />
             </div>
           </CardContent>
         </Card>
-        <Card className="bg-gradient-to-br from-purple-50 to-white border-purple-100 dark:from-purple-950/30 dark:to-gray-900 dark:border-purple-900">
+        <Card variant="metric" className="border-accent/20 bg-accent-soft/70">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Scored</p>
-                <p className="text-3xl font-bold text-purple-600">{scoredSubmissionsCount}</p>
+                <p className="text-sm text-text-secondary">Scored</p>
+                <p className="text-3xl font-bold text-accent">{scoredSubmissionsCount}</p>
               </div>
-              <Send className="h-8 w-8 text-purple-200 dark:text-purple-800" />
+              <Send className="h-8 w-8 text-accent/30" />
             </div>
           </CardContent>
         </Card>
@@ -474,9 +473,9 @@ export default function AdminSubmissionsPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm border-collapse">
                 <thead>
-                  <tr className="bg-gray-50 dark:bg-gray-800 border-b dark:border-gray-700">
+                  <tr className="border-b border-border bg-muted">
                     <th
-                      className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400 sticky left-0 bg-gray-50 dark:bg-gray-800 z-10 cursor-pointer select-none whitespace-nowrap"
+                      className="sticky left-0 z-10 cursor-pointer select-none whitespace-nowrap bg-muted px-4 py-3 text-left font-medium text-text-secondary"
                       onClick={() => togglePivotSort('team')}
                     >
                       <span className="flex items-center space-x-1">
@@ -485,7 +484,7 @@ export default function AdminSubmissionsPage() {
                       </span>
                     </th>
                     <th
-                      className="px-3 py-3 text-left font-medium text-gray-500 dark:text-gray-400 cursor-pointer select-none whitespace-nowrap"
+                      className="cursor-pointer select-none whitespace-nowrap px-3 py-3 text-left font-medium text-text-secondary"
                       onClick={() => togglePivotSort('round')}
                     >
                       <span className="flex items-center space-x-1">
@@ -496,52 +495,50 @@ export default function AdminSubmissionsPage() {
                     {pivotColumnKeys.map((col) => (
                       <th
                         key={`${col.key}_occ`}
-                        className="px-2 py-3 text-center font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap min-w-[90px]"
+                        className="min-w-[90px] whitespace-nowrap px-2 py-3 text-center font-medium text-text-secondary"
                       >
                         <div className="text-xs leading-tight">
                           <div>{col.marketName}</div>
-                          <div className="text-gray-400 dark:text-gray-500">Occ W+{col.weekOffset}</div>
+                          <div className="text-text-muted">Occ W+{col.weekOffset}</div>
                         </div>
                       </th>
                     ))}
                     {pivotColumnKeys.map((col) => (
                       <th
                         key={`${col.key}_adr`}
-                        className="px-2 py-3 text-center font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap min-w-[90px]"
+                        className="min-w-[90px] whitespace-nowrap px-2 py-3 text-center font-medium text-text-secondary"
                       >
                         <div className="text-xs leading-tight">
                           <div>{col.marketName}</div>
-                          <div className="text-gray-400 dark:text-gray-500">ADR W+{col.weekOffset}</div>
+                          <div className="text-text-muted">ADR W+{col.weekOffset}</div>
                         </div>
                       </th>
                     ))}
-                    <th className="px-3 py-3 text-left font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">Submitted</th>
-                    <th className="px-3 py-3 text-left font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">Submitter</th>
+                    <th className="whitespace-nowrap px-3 py-3 text-left font-medium text-text-secondary">Submitted</th>
+                    <th className="whitespace-nowrap px-3 py-3 text-left font-medium text-text-secondary">Submitter</th>
                   </tr>
                 </thead>
                 <tbody>
                   {pivotRows.map((row) => (
-                    <tr key={`${row.teamDisplayId}-R${row.roundNumber}`} className="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                      <td className="px-4 py-2.5 font-medium text-gray-900 dark:text-gray-100 sticky left-0 bg-white dark:bg-gray-900 z-10 whitespace-nowrap">
+                    <tr key={`${row.teamDisplayId}-R${row.roundNumber}`} className="border-b border-border hover:bg-muted/60">
+                      <td className="sticky left-0 z-10 whitespace-nowrap bg-card px-4 py-2.5 font-medium text-foreground">
                         {row.teamName}
                       </td>
                       <td className="px-3 py-2.5 whitespace-nowrap">
-                        <span className="px-2 py-0.5 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded text-xs font-medium">
-                          R{row.roundNumber}
-                        </span>
+                        <Badge variant="info">R{row.roundNumber}</Badge>
                       </td>
                       {pivotColumnKeys.map((col) => {
                         const cell = row.cells[col.key]
                         if (!cell) {
                           return (
-                            <td key={`${col.key}_occ`} className="px-2 py-2.5 text-center text-gray-300 dark:text-gray-600">--</td>
+                            <td key={`${col.key}_occ`} className="px-2 py-2.5 text-center text-text-muted">--</td>
                           )
                         }
                         return (
                           <td key={`${col.key}_occ`} className="px-2 py-2.5 text-center font-mono text-xs">
                             <span className="font-medium">{cell.occupancy.toFixed(1)}</span>
                             {cell.hasScore && cell.occupancyAE !== undefined && (
-                              <span className="text-gray-400 ml-0.5">({cell.occupancyAE.toFixed(1)})</span>
+                              <span className="ml-0.5 text-text-muted">({cell.occupancyAE.toFixed(1)})</span>
                             )}
                           </td>
                         )
@@ -550,22 +547,22 @@ export default function AdminSubmissionsPage() {
                         const cell = row.cells[col.key]
                         if (!cell) {
                           return (
-                            <td key={`${col.key}_adr`} className="px-2 py-2.5 text-center text-gray-300 dark:text-gray-600">--</td>
+                            <td key={`${col.key}_adr`} className="px-2 py-2.5 text-center text-text-muted">--</td>
                           )
                         }
                         return (
                           <td key={`${col.key}_adr`} className="px-2 py-2.5 text-center font-mono text-xs">
                             <span className="font-medium">${cell.adr.toFixed(0)}</span>
                             {cell.hasScore && cell.adrAE !== undefined && (
-                              <span className="text-gray-400 ml-0.5">({cell.adrAE.toFixed(1)})</span>
+                              <span className="ml-0.5 text-text-muted">({cell.adrAE.toFixed(1)})</span>
                             )}
                           </td>
                         )
                       })}
-                      <td className="px-3 py-2.5 whitespace-nowrap text-xs text-gray-600 dark:text-gray-400">
+                      <td className="px-3 py-2.5 whitespace-nowrap text-xs text-text-secondary">
                         {new Date(row.submittedAt).toLocaleDateString()}
                       </td>
-                      <td className="px-3 py-2.5 whitespace-nowrap text-xs text-gray-600 dark:text-gray-400">
+                      <td className="px-3 py-2.5 whitespace-nowrap text-xs text-text-secondary">
                         {row.submitterName}
                       </td>
                     </tr>

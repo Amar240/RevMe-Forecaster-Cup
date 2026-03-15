@@ -8,10 +8,11 @@ import { clientLogger } from '@/lib/client-logger'
 import { useEffect, useState, useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { Users, AlertTriangle, Check, Ban, RefreshCw, MoreVertical } from 'lucide-react'
 import { toast } from 'sonner'
 import { DataTable } from '@/components/ui/data-table'
-import { CardSkeleton, TableSkeleton } from '@/components/ui/skeleton'
+import { CardSkeleton, Skeleton, TableSkeleton } from '@/components/ui/skeleton'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -29,6 +30,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { teamStatusMeta } from '@/lib/status-metadata'
 
 type TeamStatus = 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'ACTIVE' | 'REJECTED' | 'DISQUALIFIED'
 
@@ -44,13 +46,13 @@ interface Team {
   _count: { submissions: number; warnings: number }
 }
 
-const STATUS_CONFIG: Record<TeamStatus, { label: string; bgColor: string; textColor: string; icon: React.ElementType }> = {
-  DRAFT: { label: 'Draft', bgColor: 'bg-gray-100', textColor: 'text-gray-700', icon: AlertTriangle },
-  PENDING_APPROVAL: { label: 'Pending', bgColor: 'bg-amber-100', textColor: 'text-amber-700', icon: AlertTriangle },
-  APPROVED: { label: 'Approved', bgColor: 'bg-blue-100', textColor: 'text-blue-700', icon: Check },
-  ACTIVE: { label: 'Active', bgColor: 'bg-green-100', textColor: 'text-green-700', icon: Check },
-  REJECTED: { label: 'Rejected', bgColor: 'bg-red-100', textColor: 'text-red-700', icon: Ban },
-  DISQUALIFIED: { label: 'Disqualified', bgColor: 'bg-red-100', textColor: 'text-red-700', icon: AlertTriangle },
+const STATUS_CONFIG: Record<TeamStatus, { label: string; tone: 'neutral' | 'info' | 'success' | 'warning' | 'error'; icon: React.ElementType }> = {
+  DRAFT: { label: teamStatusMeta.DRAFT.label, tone: teamStatusMeta.DRAFT.tone, icon: AlertTriangle },
+  PENDING_APPROVAL: { label: 'Pending', tone: teamStatusMeta.PENDING_APPROVAL.tone, icon: AlertTriangle },
+  APPROVED: { label: teamStatusMeta.APPROVED.label, tone: teamStatusMeta.APPROVED.tone, icon: Check },
+  ACTIVE: { label: teamStatusMeta.ACTIVE.label, tone: teamStatusMeta.ACTIVE.tone, icon: Check },
+  REJECTED: { label: teamStatusMeta.REJECTED.label, tone: teamStatusMeta.REJECTED.tone, icon: Ban },
+  DISQUALIFIED: { label: teamStatusMeta.DISQUALIFIED.label, tone: teamStatusMeta.DISQUALIFIED.tone, icon: AlertTriangle },
 }
 
 export default function AdminTeamsPage() {
@@ -131,8 +133,8 @@ export default function AdminTeamsPage() {
     return (
       <div className="space-y-6 animate-pulse">
         <div className="space-y-2">
-          <div className="h-7 bg-gray-200 rounded w-32" />
-          <div className="h-4 bg-gray-100 rounded w-64" />
+          <Skeleton className="h-7 w-32" />
+          <Skeleton className="h-4 w-64" />
         </div>
         <div className="grid md:grid-cols-4 gap-6">
           <CardSkeleton />
@@ -142,12 +144,12 @@ export default function AdminTeamsPage() {
         </div>
         <Card>
           <CardHeader>
-            <div className="h-6 bg-gray-200 rounded w-24" />
+            <Skeleton className="h-6 w-24" />
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex gap-4">
-              <div className="h-10 bg-gray-100 rounded w-full max-w-sm" />
-              <div className="h-10 bg-gray-100 rounded w-32" />
+              <Skeleton className="h-10 w-full max-w-sm" />
+              <Skeleton className="h-10 w-32" />
             </div>
             <TableSkeleton rows={5} columns={7} />
           </CardContent>
@@ -168,10 +170,10 @@ export default function AdminTeamsPage() {
       render: (team: Team) => (
         <button
           onClick={() => { setSelectedTeam(team); setShowTeamDetails(true) }}
-          className="text-left hover:text-blue-600"
+          className="text-left text-foreground transition-colors hover:text-primary"
         >
           <p className="font-medium">{team.name}</p>
-          <p className="text-xs text-gray-500">{team.displayId}</p>
+          <p className="text-xs text-text-muted">{team.displayId}</p>
         </button>
       ),
     },
@@ -180,7 +182,7 @@ export default function AdminTeamsPage() {
       header: 'University',
       sortable: true,
       render: (team: Team) => (
-        <span className="text-gray-600">{team.university.name}</span>
+        <span className="text-text-secondary">{team.university.name}</span>
       ),
     },
     {
@@ -188,10 +190,10 @@ export default function AdminTeamsPage() {
       header: 'Supervisor',
       render: (team: Team) => (
         <div>
-          <span className="text-gray-700">
+          <span className="text-text-secondary">
             {team.supervisor.firstName} {team.supervisor.lastName}
           </span>
-          <p className="text-xs text-gray-500">{team.supervisor.email}</p>
+          <p className="text-xs text-text-muted">{team.supervisor.email}</p>
         </div>
       ),
     },
@@ -214,7 +216,7 @@ export default function AdminTeamsPage() {
       sortable: true,
       className: 'text-center',
       render: (team: Team) => (
-        <span className={team._count.warnings >= 2 ? 'text-amber-600 font-medium' : ''}>
+        <span className={team._count.warnings >= 2 ? 'font-medium text-warning' : 'text-text-secondary'}>
           {team._count.warnings}/3
         </span>
       ),
@@ -227,10 +229,10 @@ export default function AdminTeamsPage() {
         const config = STATUS_CONFIG[team.status] || STATUS_CONFIG.DRAFT
         const Icon = config.icon
         return (
-          <span className={`inline-flex items-center text-xs ${config.bgColor} ${config.textColor} px-2 py-1 rounded-full`}>
+          <Badge variant={config.tone} className="gap-1 px-2 py-1">
             <Icon className="h-3 w-3 mr-1" />
             {config.label}
-          </span>
+          </Badge>
         )
       },
     },
@@ -256,7 +258,7 @@ export default function AdminTeamsPage() {
             </DropdownMenuItem>
             {team.status === 'ACTIVE' ? (
               <DropdownMenuItem
-                className="text-red-600"
+                className="text-error focus:text-error"
                 onClick={() => {
                   setSelectedTeam(team)
                   setShowDisqualifyDialog(true)
@@ -267,7 +269,7 @@ export default function AdminTeamsPage() {
               </DropdownMenuItem>
             ) : (
               <DropdownMenuItem
-                className="text-green-600"
+                className="text-success focus:text-success"
                 onClick={() => setReinstateTarget(team)}
               >
                 <RefreshCw className="h-4 w-4 mr-2" />
@@ -283,43 +285,43 @@ export default function AdminTeamsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">All Teams</h1>
-        <p className="text-gray-600">
+        <h1 className="text-2xl font-bold text-foreground">All Teams</h1>
+        <p className="text-text-secondary">
           {activeTeams.length} active, {pendingTeams.length} pending, {disqualifiedTeams.length} disqualified
         </p>
       </div>
 
       <div className="grid md:grid-cols-4 gap-6">
-        <Card className="bg-gradient-to-br from-gray-50 to-white">
+        <Card variant="metric">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">Total Teams</CardTitle>
+            <CardTitle className="text-sm font-medium text-text-secondary">Total Teams</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-bold">{totalTeams}</p>
           </CardContent>
         </Card>
-        <Card className="bg-gradient-to-br from-green-50 to-white border-green-100">
+        <Card variant="metric" className="border-success/20 bg-success-background/60">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">Active</CardTitle>
+            <CardTitle className="text-sm font-medium text-text-secondary">Active</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold text-green-600">{activeTeams.length}</p>
+            <p className="text-3xl font-bold text-success">{activeTeams.length}</p>
           </CardContent>
         </Card>
-        <Card className="bg-gradient-to-br from-amber-50 to-white border-amber-100">
+        <Card variant="metric" className="border-warning/20 bg-warning-background/60">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">Pending</CardTitle>
+            <CardTitle className="text-sm font-medium text-text-secondary">Pending</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold text-amber-600">{pendingTeams.length}</p>
+            <p className="text-3xl font-bold text-warning">{pendingTeams.length}</p>
           </CardContent>
         </Card>
-        <Card className="bg-gradient-to-br from-red-50 to-white border-red-100">
+        <Card variant="metric" className="border-error/20 bg-error-background/60">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">Disqualified</CardTitle>
+            <CardTitle className="text-sm font-medium text-text-secondary">Disqualified</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold text-red-600">{disqualifiedTeams.length}</p>
+            <p className="text-3xl font-bold text-error">{disqualifiedTeams.length}</p>
           </CardContent>
         </Card>
       </div>
@@ -327,9 +329,9 @@ export default function AdminTeamsPage() {
       {teams.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center">
-            <Users className="h-12 w-12 mx-auto text-gray-400 mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No Teams Yet</h3>
-            <p className="text-gray-500">Teams will appear here once supervisors create them.</p>
+            <Users className="mx-auto mb-4 h-12 w-12 text-text-muted" />
+            <h3 className="mb-2 text-lg font-medium text-foreground">No Teams Yet</h3>
+            <p className="text-text-secondary">Teams will appear here once supervisors create them.</p>
           </CardContent>
         </Card>
       ) : (
@@ -407,55 +409,57 @@ export default function AdminTeamsPage() {
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <p className="text-gray-500">Status</p>
-                  <p className={`font-medium ${selectedTeam.status === 'ACTIVE' ? 'text-green-600' : 'text-red-600'}`}>
-                    {selectedTeam.status}
-                  </p>
+                  <p className="text-text-muted">Status</p>
+                  <div className="mt-2">
+                    <Badge variant={STATUS_CONFIG[selectedTeam.status].tone}>
+                      {STATUS_CONFIG[selectedTeam.status].label}
+                    </Badge>
+                  </div>
                   {selectedTeam.disqualifiedReason && (
-                    <p className="text-xs text-gray-500 mt-1">{selectedTeam.disqualifiedReason}</p>
+                    <p className="mt-2 text-xs text-text-muted">{selectedTeam.disqualifiedReason}</p>
                   )}
                 </div>
                 <div>
-                  <p className="text-gray-500">University</p>
+                  <p className="text-text-muted">University</p>
                   <p className="font-medium">{selectedTeam.university.name}</p>
                 </div>
                 <div>
-                  <p className="text-gray-500">Submissions</p>
+                  <p className="text-text-muted">Submissions</p>
                   <p className="font-medium">{selectedTeam._count.submissions}</p>
                 </div>
                 <div>
-                  <p className="text-gray-500">Warnings</p>
-                  <p className={`font-medium ${selectedTeam._count.warnings >= 2 ? 'text-amber-600' : ''}`}>
+                  <p className="text-text-muted">Warnings</p>
+                  <p className={`font-medium ${selectedTeam._count.warnings >= 2 ? 'text-warning' : 'text-foreground'}`}>
                     {selectedTeam._count.warnings}/3
                   </p>
                 </div>
               </div>
 
               <div>
-                <p className="text-sm text-gray-500 mb-2">Supervisor</p>
-                <div className="bg-gray-50 p-3 rounded-lg">
+                <p className="mb-2 text-sm text-text-muted">Supervisor</p>
+                <div className="rounded-lg border border-border bg-surface-secondary p-3">
                   <p className="font-medium">
                     {selectedTeam.supervisor.firstName} {selectedTeam.supervisor.lastName}
                   </p>
-                  <p className="text-sm text-gray-500">{selectedTeam.supervisor.email}</p>
+                  <p className="text-sm text-text-muted">{selectedTeam.supervisor.email}</p>
                 </div>
               </div>
 
               <div>
-                <p className="text-sm text-gray-500 mb-2">Members ({selectedTeam.members.length}/5)</p>
+                <p className="mb-2 text-sm text-text-muted">Members ({selectedTeam.members.length}/5)</p>
                 <div className="space-y-2">
                   {selectedTeam.members.map((member, idx) => (
-                    <div key={idx} className="flex items-center justify-between bg-gray-50 p-3 rounded-lg">
+                    <div key={idx} className="flex items-center justify-between rounded-lg border border-border bg-surface-secondary p-3">
                       <div>
                         <p className="font-medium">
                           {member.user.firstName} {member.user.lastName}
                         </p>
-                        <p className="text-sm text-gray-500">{member.user.email}</p>
+                        <p className="text-sm text-text-muted">{member.user.email}</p>
                       </div>
                       {member.isSubmitter && (
-                        <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
+                        <Badge variant="info">
                           Submitter
-                        </span>
+                        </Badge>
                       )}
                     </div>
                   ))}
@@ -478,4 +482,3 @@ export default function AdminTeamsPage() {
     </div>
   )
 }
-
