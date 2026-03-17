@@ -272,7 +272,10 @@ model Round {
   isFinal  Boolean     @default(false)
   status   RoundStatus @default(UPCOMING)
 
-  isLockedActuals  Boolean   @default(false)
+  isLockedActuals      Boolean   @default(false)
+  leaderboardVisible   Boolean   @default(false)
+  leaderboardReviewed  Boolean   @default(false)
+  participantsNotified Boolean   @default(false)
   lockedAt         DateTime?
   lockedById       String?
   lockedBy         User?     @relation("RoundLocker", fields: [lockedById], references: [id])

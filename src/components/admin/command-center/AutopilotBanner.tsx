@@ -1,4 +1,7 @@
+'use client'
+
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Play } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -10,9 +13,6 @@ export interface AutopilotBannerProps {
   currentRound: DashboardData['currentRound']
   currentRoundEntry: RoundEntry | null
   deadlinePassed: boolean
-  canSendReminders: boolean
-  canUploadActuals: boolean
-  canRunScoring: boolean
   onAction: (action: string, endpoint: string) => void
   actionLoading: string | null
 }
@@ -22,12 +22,11 @@ export function AutopilotBanner({
   currentRound,
   currentRoundEntry,
   deadlinePassed,
-  canSendReminders,
-  canUploadActuals,
-  canRunScoring,
   onAction,
   actionLoading,
 }: AutopilotBannerProps) {
+  const router = useRouter()
+
   const autopilotAction = (() => {
     if (submissionProgress.pending > 0) {
       return {
@@ -66,9 +65,7 @@ export function AutopilotBanner({
         label: 'Publish rankings',
         reason: 'Scoring is complete - review and publish rankings',
         emphasis: 'success' as const,
-        onClick: () => {
-          window.location.assign('/leaderboards')
-        },
+        onClick: () => router.push('/leaderboards'),
       }
     }
     return {
@@ -88,7 +85,7 @@ export function AutopilotBanner({
         </CardTitle>
         <CardDescription>Admin autopilot highlights the highest-priority task first.</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent>
         <div className="rounded-xl border border-primary/15 bg-primary-soft/70 p-5">
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant={autopilotAction.emphasis}>Primary action</Badge>
@@ -99,52 +96,19 @@ export function AutopilotBanner({
           <div className="mt-3 text-lg font-semibold text-foreground">{autopilotAction.label}</div>
           <p className="mt-1 text-sm text-text-secondary">{autopilotAction.reason}</p>
           <div className="mt-4">
-            {autopilotAction.href ? (
+            {'href' in autopilotAction ? (
               <Button asChild>
-                <Link href={autopilotAction.href}>{autopilotAction.label}</Link>
+                <Link href={autopilotAction.href as string}>{autopilotAction.label}</Link>
               </Button>
             ) : (
-              <Button onClick={autopilotAction.onClick}>{autopilotAction.label}</Button>
+              <Button
+                onClick={autopilotAction.onClick}
+                disabled={actionLoading === 'reminder' || actionLoading === 'missed'}
+              >
+                {autopilotAction.label}
+              </Button>
             )}
           </div>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => onAction('reminder', '/api/admin/notifications/round-reminder')}
-            disabled={!canSendReminders || actionLoading === 'reminder'}
-          >
-            Send reminders
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => onAction('missed', '/api/admin/notifications/missed-submissions')}
-            disabled={actionLoading === 'missed'}
-          >
-            Process missed submissions
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={!canUploadActuals}
-            onClick={() => window.location.assign('/admin/actuals')}
-          >
-            Upload actuals
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={!canRunScoring}
-            onClick={() => window.location.assign('/admin/scoring')}
-          >
-            Run scoring
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => window.location.assign('/leaderboards')}>
-            Publish rankings
-          </Button>
         </div>
       </CardContent>
     </Card>

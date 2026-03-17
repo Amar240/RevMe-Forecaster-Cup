@@ -67,7 +67,7 @@ export default async function TeamsPage() {
                       {team.displayId} | {team.university.name}
                     </CardDescription>
                   </div>
-                  <Link href={`/teams/${team.id}`}>
+                  <Link href={user.role === 'ADMIN' ? `/admin/teams/${team.id}` : `/teams/${team.id}`}>
                     <Button variant="outline" size="sm">Manage</Button>
                   </Link>
                 </div>

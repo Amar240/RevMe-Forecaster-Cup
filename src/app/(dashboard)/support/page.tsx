@@ -11,6 +11,7 @@ import {
 } from '@/features/support/api'
 import type { SupervisorInfo, TicketSummary } from '@/features/support/types'
 import { useState, useEffect } from 'react'
+import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -20,6 +21,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Loader2, MessageSquare, Send, Clock, CheckCircle, AlertCircle, User, ArrowUp, ThumbsUp, ThumbsDown, AlertTriangle } from 'lucide-react'
 import { AlertBanner } from '@/components/ui/alert-banner'
 import { toast } from 'sonner'
+import { ticketStatusMeta } from '@/lib/status-metadata'
 
 export default function SupportPage() {
   const [tickets, setTickets] = useState<TicketSummary[]>([])
@@ -111,26 +113,28 @@ export default function SupportPage() {
   }
 
   const getStatusBadge = (status: string) => {
+    const tone = ticketStatusMeta[status as keyof typeof ticketStatusMeta]?.tone ?? 'neutral'
+
     switch (status) {
       case 'OPEN':
-        return <span className="flex items-center gap-1 text-amber-600 text-sm"><Clock className="h-3 w-3" /> Open</span>
+        return <Badge variant={tone} className="gap-1"><Clock className="h-3 w-3" /> Open</Badge>
       case 'WAITING_ON_SUPERVISOR':
-        return <span className="flex items-center gap-1 text-orange-600 text-sm"><Clock className="h-3 w-3" /> Awaiting Supervisor</span>
+        return <Badge variant={tone} className="gap-1"><Clock className="h-3 w-3" /> Awaiting Supervisor</Badge>
       case 'WAITING_ON_STUDENT':
-        return <span className="flex items-center gap-1 text-blue-600 text-sm"><AlertCircle className="h-3 w-3" /> Supervisor Replied</span>
+        return <Badge variant={tone} className="gap-1"><AlertCircle className="h-3 w-3" /> Supervisor Replied</Badge>
       case 'ESCALATED':
-        return <span className="flex items-center gap-1 text-purple-600 text-sm"><ArrowUp className="h-3 w-3" /> Escalated</span>
+        return <Badge variant={tone} className="gap-1"><ArrowUp className="h-3 w-3" /> Escalated</Badge>
       case 'RESOLVED':
-        return <span className="flex items-center gap-1 text-green-600 text-sm"><CheckCircle className="h-3 w-3" /> Resolved</span>
+        return <Badge variant={tone} className="gap-1"><CheckCircle className="h-3 w-3" /> Resolved</Badge>
       default:
-        return <span className="text-gray-500 text-sm">{status}</span>
+        return <Badge variant="neutral">{status}</Badge>
     }
   }
 
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     )
   }
@@ -346,4 +350,3 @@ export default function SupportPage() {
     </div>
   )
 }
-

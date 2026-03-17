@@ -6,6 +6,7 @@ import { clientLogger } from '@/lib/client-logger'
 
 
 import { useEffect, useState, useCallback } from 'react'
+import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/ui/data-table'
@@ -80,13 +81,13 @@ export default function AdminAuditLogsPage() {
     }
   }
 
-  const getActionColor = (action: string) => {
-    if (action.includes('CREATE') || action.includes('ADD')) return 'bg-green-100 text-green-700'
-    if (action.includes('DELETE') || action.includes('REMOVE')) return 'bg-red-100 text-red-700'
-    if (action.includes('UPDATE') || action.includes('EDIT')) return 'bg-blue-100 text-blue-700'
-    if (action.includes('DISQUALIFY')) return 'bg-orange-100 text-orange-700'
-    if (action.includes('REINSTATE')) return 'bg-emerald-100 text-emerald-700'
-    return 'bg-gray-100 text-gray-700'
+  const getActionVariant = (action: string) => {
+    if (action.includes('CREATE') || action.includes('ADD')) return 'success' as const
+    if (action.includes('DELETE') || action.includes('REMOVE')) return 'error' as const
+    if (action.includes('UPDATE') || action.includes('EDIT')) return 'info' as const
+    if (action.includes('DISQUALIFY')) return 'warning' as const
+    if (action.includes('REINSTATE')) return 'success' as const
+    return 'neutral' as const
   }
 
   const columns = [
@@ -106,9 +107,9 @@ export default function AdminAuditLogsPage() {
       header: 'Action',
       sortable: true,
       render: (row: AuditLog) => (
-        <span className={`text-xs font-medium px-2 py-1 rounded-full ${getActionColor(row.action)}`}>
+        <Badge variant={getActionVariant(row.action)}>
           {row.action}
-        </span>
+        </Badge>
       ),
     },
     {
@@ -207,11 +208,11 @@ export default function AdminAuditLogsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center">
-            <Shield className="h-6 w-6 mr-2 text-purple-600" />
+          <h1 className="flex items-center text-2xl font-semibold text-foreground">
+            <Shield className="mr-2 h-6 w-6 text-primary" />
             Audit Logs
           </h1>
-          <p className="text-gray-600">{totalLogs} recorded actions</p>
+          <p className="text-text-secondary">{totalLogs} recorded actions</p>
         </div>
         <Button onClick={handleExport} disabled={exporting}>
           <Download className="h-4 w-4 mr-2" />
@@ -286,4 +287,3 @@ export default function AdminAuditLogsPage() {
     </div>
   )
 }
-

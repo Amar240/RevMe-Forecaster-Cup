@@ -1,5 +1,6 @@
 'use client'
 
+import { BarChart3 } from 'lucide-react'
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import type { TooltipContentProps } from 'recharts/types/component/Tooltip'
 
@@ -25,8 +26,14 @@ const chartTheme = {
 export function ScoreTrendChart({ data, height = 300 }: ScoreTrendChartProps) {
   if (data.length === 0) {
     return (
-      <div className="flex h-64 items-center justify-center rounded-lg border border-border bg-surface-secondary">
-        <p className="text-muted-foreground">No score data available yet</p>
+      <div className="flex h-64 flex-col items-center justify-center rounded-xl border border-border bg-surface-secondary px-6 text-center">
+        <div className="mb-3 rounded-full bg-primary-soft p-3">
+          <BarChart3 className="h-5 w-5 text-primary" />
+        </div>
+        <p className="font-medium text-foreground">No score data available yet</p>
+        <p className="mt-1 text-sm text-text-secondary">
+          Trend lines will appear once at least one round has been scored.
+        </p>
       </div>
     )
   }

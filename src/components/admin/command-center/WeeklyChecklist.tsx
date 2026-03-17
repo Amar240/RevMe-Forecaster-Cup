@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback } from 'react'
 import { CheckCircle2, Circle, PartyPopper } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import type { DashboardData, RoundEntry } from './command-center-types'
@@ -11,6 +11,9 @@ export interface WeeklyChecklistProps {
   currentRoundEntry: RoundEntry | null
   meta: DashboardData['meta']
   stats: DashboardData['stats']
+  leaderboardReviewed: boolean
+  participantsNotified: boolean
+  onChecklistUpdate: (field: 'leaderboardReviewed' | 'participantsNotified', value: boolean) => void
 }
 
 interface ChecklistItem {
@@ -21,41 +24,22 @@ interface ChecklistItem {
   manual: boolean
 }
 
-function storageKey(roundId: string | undefined, field: string): string {
-  return `checklist:${roundId ?? 'none'}:${field}`
-}
-
 export function WeeklyChecklist({
   currentRound,
   submissionProgress,
   currentRoundEntry,
+  leaderboardReviewed,
+  participantsNotified,
+  onChecklistUpdate,
 }: WeeklyChecklistProps) {
-  const roundId = currentRound?.id ?? currentRoundEntry?.id
   const roundNumber = currentRound?.number ?? currentRoundEntry?.number ?? '?'
-
-  const [leaderboardReviewed, setLeaderboardReviewed] = useState(false)
-  const [participantsNotified, setParticipantsNotified] = useState(false)
-
-  useEffect(() => {
-    setLeaderboardReviewed(localStorage.getItem(storageKey(roundId, 'leaderboardReviewed')) === 'true')
-    setParticipantsNotified(localStorage.getItem(storageKey(roundId, 'participantsNotified')) === 'true')
-  }, [roundId])
 
   const toggleManual = useCallback(
     (field: 'leaderboardReviewed' | 'participantsNotified') => {
-      const key = storageKey(roundId, field)
-
-      if (field === 'leaderboardReviewed') {
-        const next = !leaderboardReviewed
-        setLeaderboardReviewed(next)
-        localStorage.setItem(key, String(next))
-      } else {
-        const next = !participantsNotified
-        setParticipantsNotified(next)
-        localStorage.setItem(key, String(next))
-      }
+      const current = field === 'leaderboardReviewed' ? leaderboardReviewed : participantsNotified
+      onChecklistUpdate(field, !current)
     },
-    [roundId, leaderboardReviewed, participantsNotified]
+    [leaderboardReviewed, participantsNotified, onChecklistUpdate]
   )
 
   const roundOpen = !!currentRound && (currentRound.status === 'Open' || currentRound.status === 'Closing Soon')

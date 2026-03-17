@@ -1,11 +1,17 @@
 import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/db'
-import { requireUserOrResponse, jsonOk, jsonError, ApiError } from '@/server/http'
+import { requireUserOrResponse, jsonOk, jsonError, ApiError, parseJson } from '@/server/http'
+import { renameTeam } from '@/server/team-roster'
+import { z } from 'zod'
 
 export const dynamic = 'force-dynamic'
 
+const renameTeamSchema = z.object({
+  name: z.string().min(1).max(100),
+})
+
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -43,8 +49,38 @@ export async function GET(
       }
     }
 
-    return jsonOk({ team })
+    const viewerCanManage = user!.role === 'ADMIN' || team.supervisorId === user!.id
+
+    return jsonOk({ team, viewerCanManage })
   } catch (error) {
     return jsonError(error, 'Failed to get team')
+  }
+}
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { user, response } = await requireUserOrResponse()
+    if (response) return response
+
+    if (user!.role !== 'SUPERVISOR' && user!.role !== 'ADMIN') {
+      throw new ApiError('Forbidden', 403, 'FORBIDDEN')
+    }
+
+    const { id } = await params
+    const data = await parseJson(request, renameTeamSchema)
+
+    const team = await renameTeam({
+      actor: user!,
+      access: user!.role === 'ADMIN' ? 'admin' : 'supervisor',
+      teamId: id,
+      name: data.name,
+    })
+
+    return jsonOk({ team })
+  } catch (error) {
+    return jsonError(error, 'Failed to update team')
   }
 }

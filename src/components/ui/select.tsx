@@ -9,6 +9,16 @@ const Select = SelectPrimitive.Root
 const SelectGroup = SelectPrimitive.Group
 const SelectValue = SelectPrimitive.Value
 
+const lightSelectTheme: React.CSSProperties = {
+  '--bg-surface': '#ffffff',
+  '--text-primary': '#0f172a',
+  '--text-secondary': '#334155',
+  '--text-muted': '#64748b',
+  '--border-default': '#d7e0ea',
+  '--secondary': '#f1f5f9',
+  '--secondary-hover': '#e8f0fa',
+} as React.CSSProperties
+
 const SelectTrigger = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Trigger>,
   React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger>
@@ -59,8 +69,10 @@ SelectScrollDownButton.displayName = SelectPrimitive.ScrollDownButton.displayNam
 
 const SelectContent = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Content>
->(({ className, children, position = 'popper', ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Content> & {
+    theme?: 'default' | 'light'
+  }
+>(({ className, children, position = 'popper', theme = 'default', style, ...props }, ref) => (
   <SelectPrimitive.Portal>
     <SelectPrimitive.Content
       ref={ref}
@@ -71,6 +83,7 @@ const SelectContent = React.forwardRef<
         className
       )}
       position={position}
+      style={theme === 'light' ? { ...lightSelectTheme, ...style } : style}
       {...props}
     >
       <SelectScrollUpButton />

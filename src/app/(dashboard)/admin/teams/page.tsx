@@ -6,10 +6,11 @@ import { clientLogger } from '@/lib/client-logger'
 
 
 import { useEffect, useState, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Users, AlertTriangle, Check, Ban, RefreshCw, MoreVertical } from 'lucide-react'
+import { Users, AlertTriangle, Check, Ban, RefreshCw, MoreVertical, Loader2, Settings } from 'lucide-react'
 import { toast } from 'sonner'
 import { DataTable } from '@/components/ui/data-table'
 import { CardSkeleton, Skeleton, TableSkeleton } from '@/components/ui/skeleton'
@@ -19,6 +20,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { teamStatusMeta } from '@/lib/status-metadata'
+import { usePermissions } from '@/hooks/usePermissions'
+import { AccessDenied } from '@/components/ui/access-denied'
 import {
   Dialog,
   DialogContent,
@@ -27,10 +34,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { ConfirmDialog } from '@/components/ui/confirm-dialog'
-import { teamStatusMeta } from '@/lib/status-metadata'
 
 type TeamStatus = 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'ACTIVE' | 'REJECTED' | 'DISQUALIFIED'
 
@@ -56,6 +59,8 @@ const STATUS_CONFIG: Record<TeamStatus, { label: string; tone: 'neutral' | 'info
 }
 
 export default function AdminTeamsPage() {
+  const router = useRouter()
+  const { loading: permLoading, isAdmin, hasFullAccess } = usePermissions()
   const [loading, setLoading] = useState(true)
   const [teams, setTeams] = useState<Team[]>([])
   const [totalTeams, setTotalTeams] = useState(0)
@@ -63,8 +68,8 @@ export default function AdminTeamsPage() {
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null)
   const [disqualifyReason, setDisqualifyReason] = useState('')
   const [showDisqualifyDialog, setShowDisqualifyDialog] = useState(false)
-  const [showTeamDetails, setShowTeamDetails] = useState(false)
   const [reinstateTarget, setReinstateTarget] = useState<Team | null>(null)
+  const hasRosterAccess = isAdmin || hasFullAccess
 
   const fetchTeams = useCallback(async () => {
     try {
@@ -82,8 +87,10 @@ export default function AdminTeamsPage() {
   }, [])
 
   useEffect(() => {
-    fetchTeams()
-  }, [fetchTeams])
+    if (!permLoading && hasRosterAccess) {
+      void fetchTeams()
+    }
+  }, [fetchTeams, hasRosterAccess, permLoading])
 
   const handleDisqualify = async () => {
     if (!selectedTeam) return
@@ -129,6 +136,23 @@ export default function AdminTeamsPage() {
     }
   }
 
+  if (permLoading) {
+    return (
+      <div className="flex min-h-[400px] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    )
+  }
+
+  if (!hasRosterAccess) {
+    return (
+      <AccessDenied
+        title="Access Denied"
+        message="Full admin access is required to manage team rosters and structural team operations."
+      />
+    )
+  }
+
   if (loading) {
     return (
       <div className="space-y-6 animate-pulse">
@@ -169,7 +193,9 @@ export default function AdminTeamsPage() {
       sortable: true,
       render: (team: Team) => (
         <button
-          onClick={() => { setSelectedTeam(team); setShowTeamDetails(true) }}
+          onClick={() => {
+            router.push(`/admin/teams/${team.id}`)
+          }}
           className="text-left text-foreground transition-colors hover:text-primary"
         >
           <p className="font-medium">{team.name}</p>
@@ -252,9 +278,10 @@ export default function AdminTeamsPage() {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem
-              onClick={() => { setSelectedTeam(team); setShowTeamDetails(true) }}
+              onClick={() => router.push(`/admin/teams/${team.id}`)}
             >
-              View Details
+              <Settings className="mr-2 h-4 w-4" />
+              Manage Roster
             </DropdownMenuItem>
             {team.status === 'ACTIVE' ? (
               <DropdownMenuItem
@@ -396,77 +423,6 @@ export default function AdminTeamsPage() {
               {actionLoading === selectedTeam?.id ? 'Disqualifying...' : 'Disqualify'}
             </Button>
           </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={showTeamDetails} onOpenChange={setShowTeamDetails}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>{selectedTeam?.name}</DialogTitle>
-            <DialogDescription>Team ID: {selectedTeam?.displayId}</DialogDescription>
-          </DialogHeader>
-          {selectedTeam && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <p className="text-text-muted">Status</p>
-                  <div className="mt-2">
-                    <Badge variant={STATUS_CONFIG[selectedTeam.status].tone}>
-                      {STATUS_CONFIG[selectedTeam.status].label}
-                    </Badge>
-                  </div>
-                  {selectedTeam.disqualifiedReason && (
-                    <p className="mt-2 text-xs text-text-muted">{selectedTeam.disqualifiedReason}</p>
-                  )}
-                </div>
-                <div>
-                  <p className="text-text-muted">University</p>
-                  <p className="font-medium">{selectedTeam.university.name}</p>
-                </div>
-                <div>
-                  <p className="text-text-muted">Submissions</p>
-                  <p className="font-medium">{selectedTeam._count.submissions}</p>
-                </div>
-                <div>
-                  <p className="text-text-muted">Warnings</p>
-                  <p className={`font-medium ${selectedTeam._count.warnings >= 2 ? 'text-warning' : 'text-foreground'}`}>
-                    {selectedTeam._count.warnings}/3
-                  </p>
-                </div>
-              </div>
-
-              <div>
-                <p className="mb-2 text-sm text-text-muted">Supervisor</p>
-                <div className="rounded-lg border border-border bg-surface-secondary p-3">
-                  <p className="font-medium">
-                    {selectedTeam.supervisor.firstName} {selectedTeam.supervisor.lastName}
-                  </p>
-                  <p className="text-sm text-text-muted">{selectedTeam.supervisor.email}</p>
-                </div>
-              </div>
-
-              <div>
-                <p className="mb-2 text-sm text-text-muted">Members ({selectedTeam.members.length}/5)</p>
-                <div className="space-y-2">
-                  {selectedTeam.members.map((member, idx) => (
-                    <div key={idx} className="flex items-center justify-between rounded-lg border border-border bg-surface-secondary p-3">
-                      <div>
-                        <p className="font-medium">
-                          {member.user.firstName} {member.user.lastName}
-                        </p>
-                        <p className="text-sm text-text-muted">{member.user.email}</p>
-                      </div>
-                      {member.isSubmitter && (
-                        <Badge variant="info">
-                          Submitter
-                        </Badge>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
         </DialogContent>
       </Dialog>
 

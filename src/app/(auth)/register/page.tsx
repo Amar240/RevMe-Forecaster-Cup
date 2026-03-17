@@ -2,7 +2,6 @@
 
 import { csrfFetch } from '@/lib/csrf'
 
-import type { CSSProperties } from 'react'
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -16,16 +15,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { COUNTRIES } from '@/lib/countries'
 
 export const dynamic = 'force-dynamic'
-
-const authSelectTheme = {
-  '--bg-surface': '#ffffff',
-  '--text-primary': '#0f172a',
-  '--text-secondary': '#334155',
-  '--text-muted': '#64748b',
-  '--border-default': '#d7e0ea',
-  '--secondary': '#f1f5f9',
-  '--secondary-hover': '#e8f0fa',
-} as CSSProperties
 
 export default function RegisterPage() {
   const router = useRouter()
@@ -148,7 +137,7 @@ export default function RegisterPage() {
               <SelectTrigger id="country" aria-label="Country">
                 <SelectValue placeholder="Select your country" />
               </SelectTrigger>
-              <SelectContent style={authSelectTheme}>
+              <SelectContent theme="light">
                 {COUNTRIES.map((country) => (
                   <SelectItem key={country} value={country}>
                     {country}

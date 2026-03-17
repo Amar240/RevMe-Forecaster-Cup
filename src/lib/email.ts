@@ -2,6 +2,32 @@ import nodemailer from 'nodemailer'
 import { logger } from './logger'
 import { getAppBaseUrl } from './app-url'
 
+async function sendMailWithRetry(
+  transporter: nodemailer.Transporter,
+  options: nodemailer.SendMailOptions,
+  maxRetries = 3
+): Promise<void> {
+  let lastError: Error = new Error('Unknown error')
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      await transporter.sendMail(options)
+      return
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err))
+      if (attempt < maxRetries) {
+        const delayMs = Math.pow(2, attempt - 1) * 500 // 500ms → 1s → 2s
+        logger.warn(`Email send attempt ${attempt} failed, retrying in ${delayMs}ms`, {
+          to: options.to,
+          subject: options.subject,
+          error: lastError.message,
+        })
+        await new Promise((resolve) => setTimeout(resolve, delayMs))
+      }
+    }
+  }
+  throw lastError
+}
+
 const getTransporter = () => {
   if (process.env.NODE_ENV === 'test') {
     return null
@@ -70,7 +96,7 @@ export async function sendPasswordResetEmail(
   }
 
   try {
-    await transporter.sendMail({
+    await sendMailWithRetry(transporter, {
       from: `"RevME Forecaster Cup" <${getFromEmail()}>`,
       to: email,
       subject: 'Reset Your Password - RevME Forecaster Cup',
@@ -143,7 +169,7 @@ export async function sendRoundOpenEmail(
   }) + ' ET'
 
   try {
-    await transporter.sendMail({
+    await sendMailWithRetry(transporter, {
       from: `"RevME Forecaster Cup" <${getFromEmail()}>`,
       to: email,
       subject: `Round ${roundNumber} is Now Open - RevME Forecaster Cup`,
@@ -239,7 +265,7 @@ export async function sendSubmissionReceiptEmail(params: {
       : `Your submission for "${params.teamName}" has been locked.`
 
   try {
-    await transporter.sendMail({
+    await sendMailWithRetry(transporter, {
       from: `"RevME Forecaster Cup" <${getFromEmail()}>`,
       to: params.email,
       subject: `Submission Received - Round ${params.roundNumber}`,
@@ -324,7 +350,7 @@ export async function sendMissedSubmissionWarning(
   const warningColor = warningCount === 1 ? '#f59e0b' : warningCount === 2 ? '#ef4444' : '#991b1b'
 
   try {
-    await transporter.sendMail({
+    await sendMailWithRetry(transporter, {
       from: `"RevME Forecaster Cup" <${getFromEmail()}>`,
       to: email,
       subject,
@@ -427,7 +453,7 @@ export async function sendWelcomeEmail(
   const isStudent = role === 'STUDENT'
 
   try {
-    await transporter.sendMail({
+    await sendMailWithRetry(transporter, {
       from: `"RevME Forecaster Cup" <${getFromEmail()}>`,
       to: email,
       subject: `Welcome to RevME Forecaster Cup!`,
@@ -513,7 +539,7 @@ export async function sendEmail(params: {
     return false
   }
   try {
-    await transporter.sendMail({
+    await sendMailWithRetry(transporter, {
       from: `"RevME Forecaster Cup" <${getFromEmail()}>`,
       to: params.to,
       subject: params.subject,
@@ -549,7 +575,7 @@ export async function sendDemoRequestEmail(params: {
   }
 
   try {
-    await transporter.sendMail({
+    await sendMailWithRetry(transporter, {
       from: `"RevME Forecaster Cup" <${getFromEmail()}>`,
       to: notifyEmail,
       subject: `New Demo Request - ${params.organization ?? 'Organization'}`,

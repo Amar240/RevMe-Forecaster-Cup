@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
-import { Play, Pause, Square, RotateCcw, Clock, Edit2, Check, X, AlertTriangle } from 'lucide-react'
+import { Play, Pause, Square, RotateCcw, Clock, Edit2, Check, X, AlertTriangle, Eye, EyeOff } from 'lucide-react'
 import { AlertBanner } from '@/components/ui/alert-banner'
 import { PageLoader } from '@/components/ui/page-loader'
 import { csrfFetch } from '@/lib/csrf'
@@ -144,6 +144,25 @@ export default function AdminSeasonPage() {
       fetchSeason()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  const handleLeaderboardVisibility = async (roundId: string, visible: boolean) => {
+    setActionLoading(roundId)
+    try {
+      const res = await csrfFetch(`/api/admin/rounds/${roundId}/leaderboard-visibility`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ visible }),
+      })
+      const data = await res.json() as { message?: string; error?: string }
+      if (!res.ok) throw new Error(data.error ?? 'Failed to update leaderboard visibility')
+      toast.success(data.message ?? (visible ? 'Leaderboard published' : 'Leaderboard hidden'))
+      fetchSeason()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to update leaderboard visibility')
     } finally {
       setActionLoading(null)
     }
@@ -487,6 +506,21 @@ export default function AdminSeasonPage() {
                                   Reopen
                                 </Button>
                               )}
+
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className={`h-8 ${round.leaderboardVisible ? 'text-blue-600 border-blue-300 hover:bg-blue-50' : 'text-gray-500 border-gray-300 hover:bg-gray-50'}`}
+                                disabled={isLoading}
+                                title={round.leaderboardVisible ? 'Hide leaderboard from students' : 'Publish leaderboard to students'}
+                                onClick={() => handleLeaderboardVisibility(round.id, !round.leaderboardVisible)}
+                              >
+                                {round.leaderboardVisible ? (
+                                  <><Eye className="h-3 w-3 mr-1" />Leaderboard On</>
+                                ) : (
+                                  <><EyeOff className="h-3 w-3 mr-1" />Leaderboard Off</>
+                                )}
+                              </Button>
                             </>
                           )}
                         </div>

@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
-import { prisma } from '@/lib/db'
 import { requireUserOrResponse, jsonOk, jsonError, parseJson, ApiError } from '@/server/http'
+import { setTeamSubmitter } from '@/server/team-roster'
 import { z } from 'zod'
 
 export const dynamic = 'force-dynamic'
@@ -20,34 +20,16 @@ export async function PATCH(
     const { id } = await params
     const data = await parseJson(request, setSubmitterSchema)
 
-    const team = await prisma.team.findUnique({
-      where: { id },
-      include: { members: true },
-    })
-
-    if (!team) {
-      throw new ApiError('Team not found', 404, 'NOT_FOUND')
-    }
-
-    if (user!.role !== 'ADMIN' && team.supervisorId !== user!.id) {
+    if (user!.role !== 'ADMIN' && user!.role !== 'SUPERVISOR') {
       throw new ApiError('Forbidden', 403, 'FORBIDDEN')
     }
 
-    const member = team.members.find((m) => m.id === data.memberId)
-    if (!member) {
-      throw new ApiError('Member not found', 404, 'NOT_FOUND')
-    }
-
-    await prisma.$transaction([
-      prisma.teamMember.updateMany({
-        where: { teamId: team.id },
-        data: { isSubmitter: false },
-      }),
-      prisma.teamMember.update({
-        where: { id: data.memberId },
-        data: { isSubmitter: true },
-      }),
-    ])
+    await setTeamSubmitter({
+      actor: user!,
+      access: user!.role === 'ADMIN' ? 'admin' : 'supervisor',
+      teamId: id,
+      memberId: data.memberId,
+    })
 
     return jsonOk({ message: 'Submitter updated' })
   } catch (error) {

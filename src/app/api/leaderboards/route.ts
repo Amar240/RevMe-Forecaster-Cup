@@ -27,15 +27,19 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ leaderboard: [], seasonName: '', rounds: [] })
     }
 
-    const rounds = await prisma.round.findMany({
-      where: { seasonId: activeSeason.id },
-      orderBy: { number: 'asc' },
-      select: { id: true, number: true, isFinal: true, status: true },
-    })
-
     const isAdmin = user?.role === 'ADMIN' || user?.role === 'SUB_ADMIN'
     const isSupervisor = user?.role === 'SUPERVISOR'
     const canSeeAllDetails = isAdmin || isSupervisor
+
+    // Non-admin users only see rounds where leaderboard has been published
+    const rounds = await prisma.round.findMany({
+      where: {
+        seasonId: activeSeason.id,
+        ...(isAdmin ? {} : { leaderboardVisible: true }),
+      },
+      orderBy: { number: 'asc' },
+      select: { id: true, number: true, isFinal: true, status: true, leaderboardVisible: true },
+    })
 
     let leaderboard: {
       rank: number

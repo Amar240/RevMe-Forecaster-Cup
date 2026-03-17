@@ -30,16 +30,16 @@ export function AlertBanner({ variant, title, children, dismissible = false, cla
   const IconComponent = icon ? null : styles.icon
 
   return (
-    <div className={cn('flex items-start gap-3 rounded-lg border border-border border-l-4 p-4 shadow-sm', styles.container, className)} role="alert">
+    <div className={cn('flex items-start gap-3 rounded-xl border border-border border-l-4 p-4 shadow-sm', styles.container, className)} role="alert">
       {icon || (IconComponent && <IconComponent className={cn('mt-0.5 h-5 w-5 flex-shrink-0', styles.iconClass)} />)}
       <div className="min-w-0 flex-1">
         {title && <p className="font-medium text-foreground">{title}</p>}
-        <div className="text-sm text-text-secondary">{children}</div>
+        <div className={cn('text-sm text-text-secondary', title && 'mt-1')}>{children}</div>
       </div>
       {dismissible && (
         <button
           onClick={() => setDismissed(true)}
-          className="flex-shrink-0 rounded-md p-1 text-muted-foreground transition-colors hover:bg-black/5 hover:text-foreground dark:hover:bg-white/5"
+          className="flex-shrink-0 rounded-md p-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
           aria-label="Dismiss"
         >
           <X className="h-4 w-4" />

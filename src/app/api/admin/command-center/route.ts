@@ -14,7 +14,7 @@ function getRoundStatus(opensAt: Date, closesAt: Date): string {
 
 export async function GET() {
   try {
-    const { user, response } = await requireAdminOrResponse()
+    const { response } = await requireAdminOrResponse()
     if (response) return response
 
     const activeSeason = await prisma.season.findFirst({
@@ -48,6 +48,15 @@ export async function GET() {
       prisma.warning.count(),
       prisma.team.count({ where: { ...seasonFilter, status: 'PENDING_APPROVAL' } }),
     ])
+
+    // Warning breakdown for disqualification risk card
+    const teamWarningCounts = await prisma.warning.groupBy({
+      by: ['teamId'],
+      _count: { id: true },
+      where: activeSeason ? { team: { seasonId: activeSeason.id } } : {},
+    })
+    const oneWarningTeams = teamWarningCounts.filter((w) => w._count.id === 1).length
+    const twoWarningTeams = teamWarningCounts.filter((w) => w._count.id === 2).length
 
     let currentRoundSubmissions = 0
     if (currentRound) {
@@ -108,15 +117,46 @@ export async function GET() {
     )
 
     return jsonOk({
-      activeSeason: activeSeason ? { id: activeSeason.id, name: activeSeason.name, status: activeSeason.status } : null,
-      currentRound: currentRound ? {
-        id: currentRound.id, number: currentRound.number,
-        opensAt: currentRound.opensAt.toISOString(), closesAt: currentRound.closesAt.toISOString(),
-        status: getRoundStatus(new Date(currentRound.opensAt), new Date(currentRound.closesAt)),
-      } : null,
-      stats: { totalTeams, activeTeams, disqualifiedTeams, totalUsers, totalSubmissions, currentRoundSubmissions, totalWarnings, teamsWithActuals: rounds.filter((r) => r.hasActuals).length, scoredSubmissions },
-      meta: { weekOffsets, lastScoredAt: currentRound?.lastScoredAt ? currentRound.lastScoredAt.toISOString() : null, lastActualsUploadAt: null, expectedErrors, pendingTeamApprovals, activeMarketCount },
-      submissionProgress: { submitted: currentRoundSubmissions, pending: activeTeams - currentRoundSubmissions, total: activeTeams },
+      activeSeason: activeSeason
+        ? { id: activeSeason.id, name: activeSeason.name, status: activeSeason.status }
+        : null,
+      currentRound: currentRound
+        ? {
+            id: currentRound.id,
+            number: currentRound.number,
+            opensAt: currentRound.opensAt.toISOString(),
+            closesAt: currentRound.closesAt.toISOString(),
+            status: getRoundStatus(new Date(currentRound.opensAt), new Date(currentRound.closesAt)),
+            leaderboardReviewed: currentRound.leaderboardReviewed,
+            participantsNotified: currentRound.participantsNotified,
+          }
+        : null,
+      stats: {
+        totalTeams,
+        activeTeams,
+        disqualifiedTeams,
+        totalUsers,
+        totalSubmissions,
+        currentRoundSubmissions,
+        totalWarnings,
+        teamsWithActuals: rounds.filter((r) => r.hasActuals).length,
+        scoredSubmissions,
+        oneWarningTeams,
+        twoWarningTeams,
+      },
+      meta: {
+        weekOffsets,
+        lastScoredAt: currentRound?.lastScoredAt ? currentRound.lastScoredAt.toISOString() : null,
+        lastActualsUploadAt: null,
+        expectedErrors,
+        pendingTeamApprovals,
+        activeMarketCount,
+      },
+      submissionProgress: {
+        submitted: currentRoundSubmissions,
+        pending: activeTeams - currentRoundSubmissions,
+        total: activeTeams,
+      },
       rounds,
     })
   } catch (error) {

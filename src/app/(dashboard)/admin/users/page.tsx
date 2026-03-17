@@ -11,10 +11,12 @@ import {
   RefreshCw,
   Shield,
   Trash2,
+  Upload,
   UserCog,
   Users,
 } from 'lucide-react'
 import { clientLogger } from '@/lib/client-logger'
+import { csrfFetch } from '@/lib/csrf'
 import { changeUserRole, deleteUser, forceLogout, generateResetLink, listUsers } from '@/features/users/api'
 import type { AdminUser } from '@/features/users/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -28,6 +30,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 
 function getRoleVariant(role: string): 'medal' | 'success' | 'info' {
@@ -49,6 +52,10 @@ export default function AdminUsersPage() {
   const [resetLink, setResetLink] = useState('')
   const [logoutTarget, setLogoutTarget] = useState<AdminUser | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<AdminUser | null>(null)
+  const [showBulkImport, setShowBulkImport] = useState(false)
+  const [bulkCsv, setBulkCsv] = useState('')
+  const [bulkImporting, setBulkImporting] = useState(false)
+  const [bulkResults, setBulkResults] = useState<{ created: number; skipped: number; errors: number } | null>(null)
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -169,6 +176,43 @@ export default function AdminUsersPage() {
     )
   }
 
+  const handleBulkImport = async () => {
+    if (!bulkCsv.trim()) return
+    setBulkImporting(true)
+    setBulkResults(null)
+    try {
+      const lines = bulkCsv.trim().split('\n').filter((l) => l.trim())
+      const header = lines[0].toLowerCase()
+      const hasHeader = header.includes('email') || header.includes('first') || header.includes('role')
+      const dataLines = hasHeader ? lines.slice(1) : lines
+
+      const rows = dataLines.map((line) => {
+        const [email, firstName, lastName, role, universityName, password] = line.split(',').map((s) => s.trim())
+        return { email, firstName, lastName, role: (role || 'STUDENT').toUpperCase(), universityName, password: password || undefined }
+      }).filter((r) => r.email && r.firstName && r.lastName && r.universityName)
+
+      if (rows.length === 0) {
+        toast.error('No valid rows found. Check your CSV format.')
+        return
+      }
+
+      const res = await csrfFetch('/api/admin/users/bulk-import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rows, skipExisting: true }),
+      })
+      const data = await res.json() as { summary?: { created: number; skipped: number; errors: number }; error?: string }
+      if (!res.ok) throw new Error(data.error ?? 'Import failed')
+      setBulkResults(data.summary ?? null)
+      toast.success(`Import done: ${data.summary?.created ?? 0} created, ${data.summary?.skipped ?? 0} skipped`)
+      void fetchUsers()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Bulk import failed')
+    } finally {
+      setBulkImporting(false)
+    }
+  }
+
   const students = users.filter((user) => user.role === 'STUDENT')
   const supervisors = users.filter((user) => user.role === 'SUPERVISOR')
   const admins = users.filter((user) => user.role === 'ADMIN')
@@ -251,9 +295,15 @@ export default function AdminUsersPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-semibold tracking-tight text-foreground">All Users</h1>
-        <p className="text-text-secondary">{totalUsers} registered users</p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-3xl font-semibold tracking-tight text-foreground">All Users</h1>
+          <p className="text-text-secondary">{totalUsers} registered users</p>
+        </div>
+        <Button variant="outline" onClick={() => { setShowBulkImport(true); setBulkResults(null); setBulkCsv('') }}>
+          <Upload className="h-4 w-4 mr-2" />
+          Import Users
+        </Button>
       </div>
 
       <div className="grid gap-6 md:grid-cols-4">
@@ -424,6 +474,42 @@ export default function AdminUsersPage() {
           if (deleteTarget) void executeDeleteUser(deleteTarget)
         }}
       />
+
+      <Dialog open={showBulkImport} onOpenChange={setShowBulkImport}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Bulk Import Users</DialogTitle>
+            <DialogDescription>
+              Paste CSV rows below. Format: <code className="text-xs bg-muted px-1 rounded">email, firstName, lastName, role, universityName, password(optional)</code>
+              <br />
+              Role must be <strong>STUDENT</strong> or <strong>SUPERVISOR</strong>. Default password is <strong>RevMe@2025!</strong> if omitted.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <Label>CSV Data</Label>
+            <Textarea
+              className="font-mono h-52 text-xs"
+              placeholder={`email,firstName,lastName,role,universityName\njohn@uni.edu,John,Doe,STUDENT,University of Nashville\njane@uni.edu,Jane,Smith,SUPERVISOR,University of Nashville`}
+              value={bulkCsv}
+              onChange={(e) => setBulkCsv(e.target.value)}
+            />
+            {bulkResults && (
+              <div className="rounded-lg border border-border p-3 text-sm space-y-1">
+                <p className="font-medium">Import Results</p>
+                <p className="text-success">✓ {bulkResults.created} users created</p>
+                <p className="text-text-secondary">→ {bulkResults.skipped} skipped (already exist)</p>
+                {bulkResults.errors > 0 && <p className="text-error">✗ {bulkResults.errors} errors</p>}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowBulkImport(false)}>Cancel</Button>
+            <Button onClick={() => void handleBulkImport()} disabled={bulkImporting || !bulkCsv.trim()}>
+              {bulkImporting ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Importing...</> : <><Upload className="h-4 w-4 mr-2" />Import</>}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

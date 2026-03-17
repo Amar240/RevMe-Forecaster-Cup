@@ -1,6 +1,5 @@
 'use client'
 
-import { useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import type { DashboardData } from './command-center-types'
@@ -19,8 +18,6 @@ export function CompetitionHealthScore({
   stats,
   submissionProgress,
 }: CompetitionHealthScoreProps) {
-  const [expanded, setExpanded] = useState(false)
-
   const participationRate =
     submissionProgress.total > 0
       ? submissionProgress.submitted / submissionProgress.total
@@ -69,18 +66,7 @@ export function CompetitionHealthScore({
   ]
 
   return (
-    <Card
-      className="cursor-pointer transition-shadow hover:shadow-popover"
-      onClick={() => setExpanded((value) => !value)}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault()
-          setExpanded((value) => !value)
-        }
-      }}
-    >
+    <Card>
       <CardContent className="flex flex-col items-center px-4 py-6">
         <div className="flex w-full items-center justify-between">
           <div>
@@ -88,7 +74,7 @@ export function CompetitionHealthScore({
               Competition Health
             </div>
             <div className="mt-1 text-sm text-text-secondary">
-              Tap for the score breakdown
+              Composite of participation, warnings, and active team rate
             </div>
           </div>
           <Badge variant={tone.badge}>{healthScore}%</Badge>
@@ -125,20 +111,27 @@ export function CompetitionHealthScore({
           </div>
         </div>
 
-        {expanded && (
-          <div className={`mt-5 w-full rounded-xl border border-border p-4 ${tone.surface}`}>
-            <div className="space-y-2">
-              {subScores.map((score) => (
-                <div key={score.label} className="flex items-center justify-between text-sm">
-                  <span className="text-text-secondary">{score.label}</span>
-                  <span className="font-semibold text-foreground tabular-nums">
-                    {score.value}%
-                  </span>
+        <div className={`mt-5 w-full rounded-xl border border-border p-4 ${tone.surface}`}>
+          <div className="space-y-3">
+            {subScores.map((score) => {
+              const barTone =
+                score.value >= 80 ? 'bg-success' : score.value >= 60 ? 'bg-warning' : 'bg-error'
+              return (
+                <div key={score.label}>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-text-secondary">{score.label}</span>
+                    <span className="font-semibold text-foreground tabular-nums">
+                      {score.value}%
+                    </span>
+                  </div>
+                  <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-border">
+                    <div className={`h-full ${barTone}`} style={{ width: `${score.value}%` }} />
+                  </div>
                 </div>
-              ))}
-            </div>
+              )
+            })}
           </div>
-        )}
+        </div>
       </CardContent>
     </Card>
   )

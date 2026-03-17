@@ -8,6 +8,7 @@ export interface SeasonRound {
   closesAt: string
   isFinal: boolean
   status: RoundStatus
+  leaderboardVisible: boolean
 }
 
 export interface SeasonMarket {

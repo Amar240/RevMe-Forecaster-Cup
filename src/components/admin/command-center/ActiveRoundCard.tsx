@@ -13,11 +13,6 @@ export interface ActiveRoundCardProps {
   currentRoundEntry: RoundEntry | null
   submissionProgress: DashboardData['submissionProgress']
   meta: DashboardData['meta']
-  canSendReminders: boolean
-  canUploadActuals: boolean
-  canRunScoring: boolean
-  onAction: (action: string, endpoint: string) => Promise<void>
-  actionLoading: string | null
 }
 
 export function ActiveRoundCard({
@@ -25,11 +20,6 @@ export function ActiveRoundCard({
   currentRoundEntry,
   submissionProgress,
   meta,
-  canSendReminders,
-  canUploadActuals,
-  canRunScoring,
-  onAction,
-  actionLoading,
 }: ActiveRoundCardProps) {
   const submissionPercent =
     submissionProgress.total > 0 ? Math.round((submissionProgress.submitted / submissionProgress.total) * 100) : 0
@@ -133,28 +123,9 @@ export function ActiveRoundCard({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <Button asChild variant="outline" size="sm">
-              <Link href="/admin/team-approvals">View pending teams</Link>
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onAction('reminder', '/api/admin/notifications/round-reminder')}
-              disabled={!canSendReminders || actionLoading === 'reminder'}
-            >
-              Send reminders
-            </Button>
-            <Button variant="outline" size="sm" disabled={!canUploadActuals} onClick={() => window.location.assign('/admin/actuals')}>
-              Upload actuals
-            </Button>
-            <Button variant="outline" size="sm" disabled={!canRunScoring} onClick={() => window.location.assign('/admin/scoring')}>
-              Run scoring
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => window.location.assign('/leaderboards')}>
-              Publish rankings
-            </Button>
-          </div>
+          <Button asChild variant="outline" size="sm" className="w-full">
+            <Link href="/admin/team-approvals">View pending teams</Link>
+          </Button>
         </div>
       </CardContent>
     </Card>

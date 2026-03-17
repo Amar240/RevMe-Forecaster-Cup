@@ -6,6 +6,7 @@ import { clientLogger } from '@/lib/client-logger'
 
 
 import { useState, useEffect, useCallback } from 'react'
+import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
+import { ticketStatusMeta } from '@/lib/status-metadata'
 import { 
   Loader2, 
   Send, 
@@ -206,19 +208,21 @@ export default function SupervisorSupportInboxPage() {
   }
 
   const getStatusBadge = (status: string) => {
+    const tone = ticketStatusMeta[status as keyof typeof ticketStatusMeta]?.tone ?? 'neutral'
+
     switch (status) {
       case 'OPEN':
-        return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700"><Clock className="h-3 w-3" /> Open</span>
+        return <Badge variant={tone} className="gap-1"><Clock className="h-3 w-3" /> Open</Badge>
       case 'WAITING_ON_SUPERVISOR':
-        return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-700"><AlertCircle className="h-3 w-3" /> Waiting on You</span>
+        return <Badge variant={tone} className="gap-1"><AlertCircle className="h-3 w-3" /> Waiting on You</Badge>
       case 'WAITING_ON_STUDENT':
-        return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700"><Clock className="h-3 w-3" /> Waiting on Student</span>
+        return <Badge variant={tone} className="gap-1"><Clock className="h-3 w-3" /> Waiting on Student</Badge>
       case 'ESCALATED':
-        return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700"><ArrowUp className="h-3 w-3" /> Escalated</span>
+        return <Badge variant={tone} className="gap-1"><ArrowUp className="h-3 w-3" /> Escalated</Badge>
       case 'RESOLVED':
-        return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700"><CheckCircle className="h-3 w-3" /> Resolved</span>
+        return <Badge variant={tone} className="gap-1"><CheckCircle className="h-3 w-3" /> Resolved</Badge>
       default:
-        return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700">{status}</span>
+        return <Badge variant="neutral">{status}</Badge>
     }
   }
 
@@ -241,7 +245,7 @@ export default function SupervisorSupportInboxPage() {
   if (loading && tickets.length === 0) {
     return (
       <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     )
   }
@@ -540,7 +544,6 @@ export default function SupervisorSupportInboxPage() {
     </div>
   )
 }
-
 
 
 

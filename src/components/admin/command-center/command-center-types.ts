@@ -10,6 +10,8 @@ export interface DashboardData {
     opensAt: string
     closesAt: string
     status: string
+    leaderboardReviewed: boolean
+    participantsNotified: boolean
   } | null
   stats: {
     totalTeams: number
@@ -21,6 +23,8 @@ export interface DashboardData {
     totalWarnings: number
     teamsWithActuals: number
     scoredSubmissions: number
+    oneWarningTeams: number
+    twoWarningTeams: number
   }
   meta: {
     weekOffsets: number[]

@@ -11,16 +11,12 @@ export interface OperationalQueuesProps {
   submissionProgress: DashboardData['submissionProgress']
   meta: DashboardData['meta']
   stats: DashboardData['stats']
-  onAction: (action: string, endpoint: string) => Promise<void>
-  actionLoading: string | null
 }
 
 export function OperationalQueues({
   submissionProgress,
   meta,
   stats,
-  onAction,
-  actionLoading,
 }: OperationalQueuesProps) {
   return (
     <div className="grid gap-6 lg:grid-cols-2">
@@ -53,13 +49,12 @@ export function OperationalQueues({
           <details open className="rounded-xl border border-border bg-surface-secondary p-4">
             <summary className="flex cursor-pointer items-center justify-between gap-3">
               <div className="font-semibold text-foreground">
-                Team Approvals ({meta.pendingTeamApprovals ?? 'Not set'})
+                Team Approvals ({meta.pendingTeamApprovals ?? 0})
               </div>
               <Badge
                 variant={meta.pendingTeamApprovals && meta.pendingTeamApprovals > 0 ? 'warning' : 'neutral'}
-                title={meta.pendingTeamApprovals === null ? 'Data not available' : undefined}
               >
-                {meta.pendingTeamApprovals ?? 'Not set'}
+                {meta.pendingTeamApprovals ?? 0}
               </Badge>
             </summary>
             <div className="mt-2 text-sm text-text-secondary">
@@ -84,16 +79,16 @@ export function OperationalQueues({
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-3 gap-3 text-sm">
-            <div className="rounded-xl border border-border bg-surface-secondary p-3">
+            <div className="rounded-xl border border-warning/20 bg-warning-background/60 p-3">
               <div className="text-xs text-text-muted">1 Warning</div>
-              <div className="text-lg font-semibold text-foreground tabular-nums" title="Data not available">
-                Not set
+              <div className="text-lg font-semibold text-foreground tabular-nums">
+                {stats.oneWarningTeams}
               </div>
             </div>
-            <div className="rounded-xl border border-border bg-surface-secondary p-3">
+            <div className="rounded-xl border border-warning/30 bg-warning-background/80 p-3">
               <div className="text-xs text-text-muted">2 Warnings</div>
-              <div className="text-lg font-semibold text-foreground tabular-nums" title="Data not available">
-                Not set
+              <div className="text-lg font-semibold text-foreground tabular-nums">
+                {stats.twoWarningTeams}
               </div>
             </div>
             <div className="rounded-xl border border-error/20 bg-error-background/60 p-3">
@@ -109,15 +104,7 @@ export function OperationalQueues({
               {stats.totalWarnings}
             </span>
           </div>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => onAction('missed', '/api/admin/notifications/missed-submissions')}
-              disabled={actionLoading === 'missed'}
-            >
-              {actionLoading === 'missed' ? 'Processing...' : 'Process missed submissions'}
-            </Button>
+          <div className="mt-4">
             <Button size="sm" variant="outline" asChild>
               <Link href="/admin/escalations">View at-risk teams</Link>
             </Button>

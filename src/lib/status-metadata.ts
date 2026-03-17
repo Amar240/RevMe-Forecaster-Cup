@@ -15,6 +15,9 @@ export const actualMetricMeta = {
 }
 
 export const ticketStatusMeta = {
+  OPEN: { label: 'Open', tone: 'warning' as const },
+  WAITING_ON_SUPERVISOR: { label: 'Awaiting Supervisor', tone: 'warning' as const },
+  WAITING_ON_STUDENT: { label: 'Waiting on Student', tone: 'info' as const },
   ESCALATED: { label: 'Escalated', tone: 'error' as const },
   RESOLVED: { label: 'Resolved', tone: 'success' as const },
 }
