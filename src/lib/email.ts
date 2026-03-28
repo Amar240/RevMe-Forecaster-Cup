@@ -108,7 +108,7 @@ You requested to reset your password for RevME Forecaster Cup.
 Click the link below to reset your password:
 ${resetUrl}
 
-This link will expire in 1 hour.
+This link will expire in 24 hours.
 
 If you did not request this, please ignore this email.
 
@@ -125,7 +125,7 @@ The RevME Team
           </a>
         </div>
         
-        <p style="color: #64748b; font-size: 14px;">This link will expire in 1 hour.</p>
+        <p style="color: #64748b; font-size: 14px;">This link will expire in 24 hours.</p>
         <p style="color: #64748b; font-size: 14px;">If you didn't request this, you can safely ignore this email.</p>
       ${emailFooter}`,
     })

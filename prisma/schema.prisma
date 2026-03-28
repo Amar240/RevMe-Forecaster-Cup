@@ -162,11 +162,14 @@ model User {
 model University {
   id        String   @id @default(cuid())
   name      String   @unique
+  normalizedName String?
   country   String?
   createdAt DateTime @default(now())
 
   users User[]
   teams Team[]
+
+  @@index([normalizedName])
 }
 
 model Team {

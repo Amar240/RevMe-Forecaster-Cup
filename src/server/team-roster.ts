@@ -2,6 +2,7 @@ import { Prisma, TeamStatus, User } from '@prisma/client'
 import { prisma } from '@/server/db'
 import { buildAuditLogData } from '@/lib/audit'
 import { ApiError } from '@/server/http'
+import { sameUniversity } from '@/server/universities'
 
 type DbClient = Prisma.TransactionClient | typeof prisma
 type AccessMode = 'admin' | 'supervisor'
@@ -35,6 +36,13 @@ const teamRosterInclude = Prisma.validator<Prisma.TeamInclude>()({
       lastName: true,
       email: true,
       universityId: true,
+      university: {
+        select: {
+          id: true,
+          name: true,
+          normalizedName: true,
+        },
+      },
     },
   },
   members: {
@@ -47,6 +55,13 @@ const teamRosterInclude = Prisma.validator<Prisma.TeamInclude>()({
           email: true,
           role: true,
           universityId: true,
+          university: {
+            select: {
+              id: true,
+              name: true,
+              normalizedName: true,
+            },
+          },
         },
       },
     },
@@ -139,9 +154,27 @@ async function resolveStudent(
   const student = args.studentId
     ? await db.user.findUnique({
         where: { id: args.studentId },
+        include: {
+          university: {
+            select: {
+              id: true,
+              name: true,
+              normalizedName: true,
+            },
+          },
+        },
       })
     : await db.user.findUnique({
         where: { email: trimmedEmail! },
+        include: {
+          university: {
+            select: {
+              id: true,
+              name: true,
+              normalizedName: true,
+            },
+          },
+        },
       })
 
   if (!student) {
@@ -158,6 +191,15 @@ async function resolveStudent(
 async function resolveSupervisor(supervisorId: string, db: DbClient) {
   const supervisor = await db.user.findUnique({
     where: { id: supervisorId },
+    include: {
+      university: {
+        select: {
+          id: true,
+          name: true,
+          normalizedName: true,
+        },
+      },
+    },
   })
 
   if (!supervisor) {
@@ -172,7 +214,7 @@ async function resolveSupervisor(supervisorId: string, db: DbClient) {
 }
 
 async function ensureEligibleStudent(team: RosterTeam, student: Awaited<ReturnType<typeof resolveStudent>>, db: DbClient) {
-  if (!student.universityId || student.universityId !== team.universityId) {
+  if (!student.universityId || !sameUniversity(team.university, student.university)) {
     throw new ApiError('Student must belong to the same university as the team', 422, 'INVALID_INPUT')
   }
 
@@ -201,7 +243,7 @@ function ensureSameCompetitionScope(sourceTeam: RosterTeam, targetTeam: RosterTe
     throw new ApiError('Source and target teams must be different', 422, 'INVALID_INPUT')
   }
 
-  if (sourceTeam.universityId !== targetTeam.universityId) {
+  if (!sameUniversity(sourceTeam.university, targetTeam.university)) {
     throw new ApiError('Members can only be moved between teams in the same university', 422, 'INVALID_INPUT')
   }
 
@@ -435,7 +477,7 @@ export async function reassignTeamSupervisor(args: {
     const team = await getRosterTeam(args.teamId, tx)
     const supervisor = await resolveSupervisor(args.supervisorId, tx)
 
-    if (!supervisor.universityId || supervisor.universityId !== team.universityId) {
+    if (!supervisor.universityId || !sameUniversity(team.university, supervisor.university)) {
       throw new ApiError('Supervisor must belong to the same university as the team', 422, 'INVALID_INPUT')
     }
 
@@ -647,7 +689,6 @@ export async function searchEligibleStudents(args: {
   const students = await prisma.user.findMany({
     where: {
       role: 'STUDENT',
-      universityId: team.universityId,
       teamMemberships: {
         none: {},
       },
@@ -666,12 +707,21 @@ export async function searchEligibleStudents(args: {
       email: true,
       firstName: true,
       lastName: true,
+      university: {
+        select: {
+          id: true,
+          name: true,
+          normalizedName: true,
+        },
+      },
     },
     orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }, { email: 'asc' }],
-    take: 12,
   })
 
   return students
+    .filter((student) => sameUniversity(team.university, student.university))
+    .slice(0, 12)
+    .map(({ university: _university, ...student }) => student)
 }
 
 export async function searchEligibleSupervisors(args: {
@@ -685,7 +735,6 @@ export async function searchEligibleSupervisors(args: {
   const supervisors = await prisma.user.findMany({
     where: {
       role: 'SUPERVISOR',
-      universityId: team.universityId,
       ...(query
         ? {
             OR: [
@@ -701,10 +750,19 @@ export async function searchEligibleSupervisors(args: {
       email: true,
       firstName: true,
       lastName: true,
+      university: {
+        select: {
+          id: true,
+          name: true,
+          normalizedName: true,
+        },
+      },
     },
     orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }, { email: 'asc' }],
-    take: 12,
   })
 
   return supervisors
+    .filter((supervisor) => sameUniversity(team.university, supervisor.university))
+    .slice(0, 12)
+    .map(({ university: _university, ...supervisor }) => supervisor)
 }

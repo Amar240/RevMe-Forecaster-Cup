@@ -180,6 +180,38 @@ describe('POST /api/auth/register', () => {
 
     expect(university?.country).toBe('India')
   })
+
+  it('reuses an existing university when the name only differs by case and whitespace', async () => {
+    const existingUniversity = await createUniversity('Ohio State University')
+
+    const req = makeRequest(`${BASE}/api/auth/register`, {
+      method: 'POST',
+      body: {
+        email: 'normalized@test.com',
+        password: 'Password123!',
+        firstName: 'Normalized',
+        lastName: 'User',
+        role: 'STUDENT',
+        universityName: '  ohio   state   university  ',
+        country: 'United States',
+      },
+    })
+
+    const res = await registerHandler(req)
+    expect(res.status).toBe(200)
+
+    const user = await prisma.user.findUnique({
+      where: { email: 'normalized@test.com' },
+    })
+
+    expect(user?.universityId).toBe(existingUniversity.id)
+
+    const universities = await prisma.university.findMany({
+      where: { normalizedName: 'ohio state university' },
+    })
+    expect(universities).toHaveLength(1)
+    expect(universities[0].id).toBe(existingUniversity.id)
+  })
 })
 
 describe('GET /api/auth/me', () => {

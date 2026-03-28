@@ -2,9 +2,16 @@ import { prisma } from './db'
 import bcrypt from 'bcryptjs'
 import { addDays, subDays } from 'date-fns'
 import type { Role, TeamStatus } from '@prisma/client'
+import { formatUniversityDisplayName, normalizeUniversityName } from '@/server/universities'
 
 export async function createUniversity(name = 'Test University') {
-  return prisma.university.create({ data: { name } })
+  const displayName = formatUniversityDisplayName(name)
+  return prisma.university.create({
+    data: {
+      name: displayName,
+      normalizedName: normalizeUniversityName(displayName),
+    },
+  })
 }
 
 export async function createUser(params: {

@@ -32,6 +32,11 @@ coverage/
 .DS_Store
 Thumbs.db
 
+# Office temp/lock files and documents
+~$*
+*.docx
+*.pdf
+
 # Replit / template artifacts
 .replit
 replit.md

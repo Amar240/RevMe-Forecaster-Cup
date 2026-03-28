@@ -2,7 +2,7 @@
 
 import { csrfFetch } from '@/lib/csrf'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
@@ -30,6 +30,38 @@ export default function RegisterPage() {
   })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [universityOptions, setUniversityOptions] = useState<string[]>([])
+
+  useEffect(() => {
+    const query = formData.universityName.trim()
+    if (query.length < 2) {
+      setUniversityOptions([])
+      return
+    }
+
+    let cancelled = false
+
+    void (async () => {
+      try {
+        const res = await fetch(`/api/universities?query=${encodeURIComponent(query)}`, {
+          credentials: 'same-origin',
+        })
+        const data = await res.json() as { universities?: { name: string }[] }
+
+        if (!cancelled) {
+          setUniversityOptions((data.universities || []).map((university) => university.name))
+        }
+      } catch {
+        if (!cancelled) {
+          setUniversityOptions([])
+        }
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [formData.universityName])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -122,10 +154,19 @@ export default function RegisterPage() {
               <Input
                 id="universityName"
                 placeholder="Your university name"
+                list="university-suggestions"
                 value={formData.universityName}
                 onChange={(e) => setFormData({ ...formData, universityName: e.target.value })}
                 required
               />
+              <datalist id="university-suggestions">
+                {universityOptions.map((universityName) => (
+                  <option key={universityName} value={universityName} />
+                ))}
+              </datalist>
+              <p className="text-xs text-text-muted">
+                Existing universities are suggested as you type. A new one will only be created if no normalized match exists.
+              </p>
           </div>
 
           <div className="space-y-2">

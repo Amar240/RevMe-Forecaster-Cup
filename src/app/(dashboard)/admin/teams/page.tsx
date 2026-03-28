@@ -6,7 +6,7 @@ import { clientLogger } from '@/lib/client-logger'
 
 
 import { useEffect, useState, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -60,6 +60,7 @@ const STATUS_CONFIG: Record<TeamStatus, { label: string; tone: 'neutral' | 'info
 
 export default function AdminTeamsPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { loading: permLoading, isAdmin, hasFullAccess } = usePermissions()
   const [loading, setLoading] = useState(true)
   const [teams, setTeams] = useState<Team[]>([])
@@ -182,6 +183,9 @@ export default function AdminTeamsPage() {
     )
   }
 
+  const riskFilter = searchParams.get('risk')
+  const isAtRiskFilter = riskFilter === 'at-risk'
+  const visibleTeams = isAtRiskFilter ? teams.filter((team) => team._count.warnings > 0) : teams
   const activeTeams = teams.filter((t) => t.status === 'ACTIVE')
   const pendingTeams = teams.filter((t) => t.status === 'PENDING_APPROVAL' || t.status === 'APPROVED' || t.status === 'DRAFT')
   const disqualifiedTeams = teams.filter((t) => t.status === 'DISQUALIFIED' || t.status === 'REJECTED')
@@ -318,6 +322,20 @@ export default function AdminTeamsPage() {
         </p>
       </div>
 
+      {isAtRiskFilter && (
+        <Card className="border-warning/20 bg-warning-background/70">
+          <CardContent className="flex items-center justify-between gap-3 py-4">
+            <div>
+              <p className="font-medium text-foreground">At-risk teams filter active</p>
+              <p className="text-sm text-text-secondary">
+                Showing teams with one or more warnings.
+              </p>
+            </div>
+            <Badge variant="warning">{visibleTeams.length} teams</Badge>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid md:grid-cols-4 gap-6">
         <Card variant="metric">
           <CardHeader className="pb-2">
@@ -353,12 +371,18 @@ export default function AdminTeamsPage() {
         </Card>
       </div>
 
-      {teams.length === 0 ? (
+      {visibleTeams.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center">
             <Users className="mx-auto mb-4 h-12 w-12 text-text-muted" />
-            <h3 className="mb-2 text-lg font-medium text-foreground">No Teams Yet</h3>
-            <p className="text-text-secondary">Teams will appear here once supervisors create them.</p>
+            <h3 className="mb-2 text-lg font-medium text-foreground">
+              {isAtRiskFilter ? 'No At-Risk Teams' : 'No Teams Yet'}
+            </h3>
+            <p className="text-text-secondary">
+              {isAtRiskFilter
+                ? 'No teams currently have warning-based disqualification risk.'
+                : 'Teams will appear here once supervisors create them.'}
+            </p>
           </CardContent>
         </Card>
       ) : (
@@ -368,7 +392,7 @@ export default function AdminTeamsPage() {
           </CardHeader>
           <CardContent>
           <DataTable
-            data={teams}
+            data={visibleTeams}
               columns={columns}
               searchKeys={['name', 'displayId', 'university.name']}
               searchPlaceholder="Search by team name or university..."

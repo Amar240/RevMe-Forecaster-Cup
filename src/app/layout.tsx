@@ -22,11 +22,12 @@ const mono = JetBrains_Mono({
   variable: '--font-mono',
 })
 
-export const dynamic = 'force-dynamic'
-
 export const metadata: Metadata = {
-  title: 'RevME Forecaster Cup',
-  description: 'Hospitality Revenue Management Forecasting Competition Platform',
+  title: {
+    default: 'RevME Forecaster Cup',
+    template: '%s | RevME Forecaster Cup',
+  },
+  description: 'Hospitality revenue management forecasting competition platform.',
 }
 
 export default function RootLayout({

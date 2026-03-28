@@ -28,11 +28,12 @@ export async function POST(
     const emailSent = await sendPasswordResetEmail(targetUser.email, resetToken)
 
     return jsonOk({
+      emailSent,
       message: emailSent
-        ? 'Password reset email sent to the user'
-        : 'Reset token generated but email could not be sent (SMTP not configured). The user can use the "Forgot Password" flow.',
+        ? 'Password reset email sent to the user.'
+        : 'Reset token generated, but the reset email could not be sent. The user can still use the Forgot Password flow.',
     })
   } catch (error) {
-    return jsonError(error, 'Failed to generate reset link')
+    return jsonError(error, 'Failed to send password reset email')
   }
 }

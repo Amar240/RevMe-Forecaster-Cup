@@ -17,7 +17,7 @@ import {
 } from 'lucide-react'
 import { clientLogger } from '@/lib/client-logger'
 import { csrfFetch } from '@/lib/csrf'
-import { changeUserRole, deleteUser, forceLogout, generateResetLink, listUsers } from '@/features/users/api'
+import { changeUserRole, deleteUser, forceLogout, listUsers, sendResetPasswordEmail } from '@/features/users/api'
 import type { AdminUser } from '@/features/users/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -47,9 +47,7 @@ export default function AdminUsersPage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null)
   const [showRoleDialog, setShowRoleDialog] = useState(false)
-  const [showResetDialog, setShowResetDialog] = useState(false)
   const [newRole, setNewRole] = useState('')
-  const [resetLink, setResetLink] = useState('')
   const [logoutTarget, setLogoutTarget] = useState<AdminUser | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<AdminUser | null>(null)
   const [showBulkImport, setShowBulkImport] = useState(false)
@@ -91,16 +89,14 @@ export default function AdminUsersPage() {
     }
   }
 
-  const handleGenerateResetLink = async (user: AdminUser) => {
+  const handleSendResetEmail = async (user: AdminUser) => {
     setActionLoading(user.id)
     try {
-      const data = await generateResetLink(user.id)
-      setResetLink(data.resetLink)
-      setSelectedUser(user)
-      setShowResetDialog(true)
+      const data = await sendResetPasswordEmail(user.id)
+      toast.success(data.message)
     } catch (error) {
-      clientLogger.error('Reset link failed:', error)
-      toast.error(error instanceof Error ? error.message : 'Failed to generate reset link')
+      clientLogger.error('Reset email failed:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to send password reset email')
     } finally {
       setActionLoading(null)
     }
@@ -274,9 +270,9 @@ export default function AdminUsersPage() {
               <Shield className="mr-2 h-4 w-4" />
               Change Role
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => void handleGenerateResetLink(user)}>
+            <DropdownMenuItem onClick={() => void handleSendResetEmail(user)}>
               <Key className="mr-2 h-4 w-4" />
-              Generate Reset Link
+              Send Password Reset Email
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => setLogoutTarget(user)}>
               <LogOut className="mr-2 h-4 w-4" />
@@ -412,35 +408,6 @@ export default function AdminUsersPage() {
             <Button onClick={handleChangeRole} disabled={actionLoading === selectedUser?.id || newRole === selectedUser?.role}>
               {actionLoading === selectedUser?.id ? 'Saving...' : 'Save'}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={showResetDialog} onOpenChange={setShowResetDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Password Reset Link</DialogTitle>
-            <DialogDescription>
-              Share this link with {selectedUser?.firstName} {selectedUser?.lastName} to reset their password.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4">
-            <div className="rounded-lg border border-border bg-surface-secondary p-3">
-              <p className="break-all font-mono text-sm text-foreground">{resetLink}</p>
-            </div>
-            <p className="mt-2 text-xs text-text-muted">This link expires in 24 hours.</p>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                navigator.clipboard.writeText(resetLink)
-                toast.success('Link copied to clipboard')
-              }}
-            >
-              Copy Link
-            </Button>
-            <Button onClick={() => setShowResetDialog(false)}>Done</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -4,6 +4,7 @@ import { requireAdminOrResponse, jsonOk, jsonError, parseJson, ApiError } from '
 import { prisma } from '@/lib/db'
 import { hashPassword } from '@/lib/auth'
 import { logAuditAction } from '@/lib/audit'
+import { formatUniversityDisplayName, resolveOrCreateUniversity } from '@/server/universities'
 
 export const dynamic = 'force-dynamic'
 
@@ -47,17 +48,9 @@ export async function POST(request: NextRequest) {
           throw new ApiError('Email already registered', 409, 'CONFLICT')
         }
 
-        // Find or create university by case-insensitive name match
-        const universityName = row.universityName.trim().replace(/\s+/g, ' ')
-
-        let university = await prisma.university.findFirst({
-          where: { name: { equals: universityName, mode: 'insensitive' } },
+        const university = await resolveOrCreateUniversity({
+          name: formatUniversityDisplayName(row.universityName),
         })
-        if (!university) {
-          university = await prisma.university.create({
-            data: { name: universityName },
-          })
-        }
 
         const hashedPassword = await hashPassword(row.password!)
 

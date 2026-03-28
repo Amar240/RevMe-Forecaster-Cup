@@ -106,7 +106,7 @@ export function OperationalQueues({
           </div>
           <div className="mt-4">
             <Button size="sm" variant="outline" asChild>
-              <Link href="/admin/escalations">View at-risk teams</Link>
+              <Link href="/admin/teams?risk=at-risk">View at-risk teams</Link>
             </Button>
           </div>
         </CardContent>

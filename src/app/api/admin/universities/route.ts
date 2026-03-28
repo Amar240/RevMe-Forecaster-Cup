@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireAdminOrResponse, jsonOk, jsonError, parseJson, ApiError } from '@/server/http'
+import { findUniversityByNormalizedName, formatUniversityDisplayName, resolveOrCreateUniversity } from '@/server/universities'
 import { z } from 'zod'
 
 export const dynamic = 'force-dynamic'
@@ -33,10 +34,11 @@ export async function POST(request: NextRequest) {
 
     const data = await parseJson(request, universitySchema)
 
-    const existing = await prisma.university.findUnique({ where: { name: data.name } })
+    const displayName = formatUniversityDisplayName(data.name)
+    const existing = await findUniversityByNormalizedName(displayName)
     if (existing) throw new ApiError('University already exists', 409, 'DUPLICATE')
 
-    const university = await prisma.university.create({ data: { name: data.name, country: data.country || null } })
+    const university = await resolveOrCreateUniversity({ name: displayName, country: data.country || null })
     return jsonOk({ university }, 201)
   } catch (error) {
     return jsonError(error, 'Failed to create university')

@@ -16,6 +16,7 @@ export interface AdminUsersResponse {
   pageSize: number
 }
 
-export interface ResetLinkResponse {
-  resetLink: string
+export interface ResetPasswordEmailResponse {
+  emailSent: boolean
+  message: string
 }

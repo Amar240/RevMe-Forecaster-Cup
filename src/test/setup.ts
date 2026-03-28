@@ -1,5 +1,5 @@
 import { beforeAll, beforeEach, afterAll, vi } from 'vitest'
-import { resetDatabase, prisma } from './db'
+import { ensureTestSchema, resetDatabase, prisma } from './db'
 
 declare global {
   // eslint-disable-next-line no-var
@@ -22,6 +22,7 @@ vi.mock('next/headers', () => ({
 }))
 
 beforeAll(async () => {
+  await ensureTestSchema()
   await resetDatabase()
 })
 

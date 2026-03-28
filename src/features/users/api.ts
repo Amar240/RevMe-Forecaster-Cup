@@ -1,5 +1,5 @@
 import { csrfFetch } from '@/lib/csrf'
-import type { AdminUsersResponse, ResetLinkResponse } from '@/features/users/types'
+import type { AdminUsersResponse, ResetPasswordEmailResponse } from '@/features/users/types'
 
 async function parseJson<T>(res: Response): Promise<T> {
   const data = await res.json()
@@ -26,9 +26,9 @@ export async function changeUserRole(userId: string, role: string) {
   return parseJson<{ message: string }>(res)
 }
 
-export async function generateResetLink(userId: string) {
+export async function sendResetPasswordEmail(userId: string) {
   const res = await csrfFetch(`/api/admin/users/${userId}/reset-password`, { method: 'POST' })
-  return parseJson<ResetLinkResponse>(res)
+  return parseJson<ResetPasswordEmailResponse>(res)
 }
 
 export async function forceLogout(userId: string) {

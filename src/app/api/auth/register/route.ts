@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { hashPassword, createSession } from '@/lib/auth'
 import { sendWelcomeEmail } from '@/lib/email'
 import { jsonOk, jsonError, parseJson, ApiError } from '@/server/http'
+import { formatUniversityDisplayName, resolveOrCreateUniversity } from '@/server/universities'
 import { z } from 'zod'
 
 export const dynamic = 'force-dynamic'
@@ -29,25 +30,10 @@ export async function POST(request: NextRequest) {
       throw new ApiError('Email already registered', 409, 'CONFLICT')
     }
 
-    const universityName = data.universityName
-
-    let university = await prisma.university.findUnique({
-      where: { name: universityName },
+    const university = await resolveOrCreateUniversity({
+      name: formatUniversityDisplayName(data.universityName),
+      country: data.country,
     })
-
-    if (!university) {
-      university = await prisma.university.create({
-        data: {
-          name: universityName,
-          country: data.country,
-        },
-      })
-    } else if (!university.country) {
-      university = await prisma.university.update({
-        where: { id: university.id },
-        data: { country: data.country },
-      })
-    }
 
     const passwordHash = await hashPassword(data.password)
 
