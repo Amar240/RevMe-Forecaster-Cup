@@ -4,8 +4,15 @@ export interface AdminUser {
   lastName: string
   email: string
   role: 'ADMIN' | 'SUPERVISOR' | 'STUDENT' | 'SUB_ADMIN'
-  university: { name: string } | null
-  teamMemberships: { team: { name: string } }[]
+  isActive: boolean
+  universityId: string | null
+  university: { id: string; name: string } | null
+  teamMemberships: { id: string; isSubmitter: boolean; team: { id: string; name: string; displayId: string } }[]
+  _count: {
+    supervisedTeams: number
+    submissions: number
+    teamMemberships: number
+  }
   createdAt: string
 }
 
@@ -14,6 +21,14 @@ export interface AdminUsersResponse {
   total: number
   page: number
   pageSize: number
+  summary?: {
+    totalUsers: number
+    studentCount: number
+    supervisorCount: number
+    subAdminCount: number
+    adminCount: number
+    inactiveCount: number
+  }
 }
 
 export interface ResetPasswordEmailResponse {

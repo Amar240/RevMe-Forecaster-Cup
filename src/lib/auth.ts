@@ -77,6 +77,11 @@ export async function getSession(): Promise<User | null> {
     where: { id: session.userId },
     include: { university: true },
   })
+
+  if (!user || !user.isActive) {
+    await prisma.session.deleteMany({ where: { userId: session.userId } })
+    return null
+  }
   
   return user
 }

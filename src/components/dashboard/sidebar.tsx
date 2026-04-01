@@ -10,6 +10,7 @@ import {
   Send,
   Trophy,
   Users,
+  GraduationCap,
   FileText,
   Settings,
   Shield,
@@ -62,6 +63,7 @@ const studentNav: NavItem[] = [
 
 const supervisorNav: NavItem[] = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { name: 'Students', href: '/supervisor/students', icon: GraduationCap },
   { name: 'Join Requests', href: '/supervisor/requests', icon: Inbox, badgeKey: 'joinRequests' },
   { name: 'Support Inbox', href: '/supervisor/support-inbox', icon: Inbox },
   { name: 'My Teams', href: '/teams', icon: Users },
@@ -90,6 +92,7 @@ const adminNavGroups: NavGroup[] = [
     label: 'People',
     items: [
       { name: 'Universities', href: '/admin/universities', icon: Building2 },
+      { name: 'Supervisors', href: '/admin/supervisors', icon: UserCog },
       { name: 'Teams', href: '/admin/teams', icon: Users },
       { name: 'Team Approvals', href: '/admin/team-approvals', icon: CheckCircle, badgeKey: 'teamApprovals' },
       { name: 'Users', href: '/admin/users', icon: Users },
@@ -135,6 +138,7 @@ const subAdminNavGroups: NavGroup[] = [
     label: 'People',
     items: [
       { name: 'Universities', href: '/admin/universities', icon: Building2 },
+      { name: 'Supervisors', href: '/admin/supervisors', icon: UserCog },
       { name: 'Teams', href: '/admin/teams', icon: Users },
       { name: 'Team Approvals', href: '/admin/team-approvals', icon: CheckCircle, badgeKey: 'teamApprovals' },
       { name: 'Users', href: '/admin/users', icon: Users },

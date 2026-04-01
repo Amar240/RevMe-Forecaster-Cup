@@ -23,6 +23,10 @@ export async function POST(request: NextRequest) {
       throw new ApiError('Invalid email or password', 401, 'UNAUTHORIZED')
     }
 
+    if (!user.isActive) {
+      throw new ApiError('Your account is inactive. Please contact an administrator.', 403, 'FORBIDDEN')
+    }
+
     const validPassword = await verifyPassword(data.password, user.passwordHash)
 
     if (!validPassword) {

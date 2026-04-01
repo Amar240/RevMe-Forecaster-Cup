@@ -67,6 +67,23 @@ describe('getSession', () => {
     const deletedSession = await prisma.session.findUnique({ where: { token } })
     expect(deletedSession).toBeNull()
   })
+
+  it('returns null for an inactive user and removes their sessions', async () => {
+    const uni = await createUniversity()
+    const user = await createUser({
+      email: 'inactive-session@test.com',
+      role: 'STUDENT',
+      universityId: uni.id,
+      isActive: false,
+    })
+    const token = await loginAs(user.id)
+
+    const sessionUser = await getSession()
+    expect(sessionUser).toBeNull()
+
+    const deletedSession = await prisma.session.findUnique({ where: { token } })
+    expect(deletedSession).toBeNull()
+  })
 })
 
 describe('destroySession', () => {
@@ -84,7 +101,6 @@ describe('destroySession', () => {
 
 describe('requireRole', () => {
   it('returns true when user has an allowed role', async () => {
-    const uni = await createUniversity()
     const admin = await createUser({ email: 'admin@test.com', role: 'ADMIN' })
     expect(requireRole(admin, ['ADMIN'])).toBe(true)
     expect(requireRole(admin, ['ADMIN', 'SUPERVISOR'])).toBe(true)

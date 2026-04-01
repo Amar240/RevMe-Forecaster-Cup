@@ -56,6 +56,28 @@ describe('POST /api/auth/login', () => {
     expect(res.status).toBe(401)
   })
 
+  it('returns 403 for inactive users', async () => {
+    const uni = await createUniversity()
+    await createUser({
+      email: 'inactive-login@test.com',
+      role: 'STUDENT',
+      universityId: uni.id,
+      password: 'Password123!',
+      isActive: false,
+    })
+
+    const req = makeRequest(`${BASE}/api/auth/login`, {
+      method: 'POST',
+      body: { email: 'inactive-login@test.com', password: 'Password123!' },
+    })
+
+    const res = await loginHandler(req)
+    expect(res.status).toBe(403)
+
+    const data = await res.json()
+    expect(data.code).toBe('FORBIDDEN')
+  })
+
   it('returns 400 for invalid body (missing fields)', async () => {
     const req = makeRequest(`${BASE}/api/auth/login`, {
       method: 'POST',
