@@ -3,6 +3,12 @@ import { prisma } from '@/server/db'
 import { buildAuditLogData } from '@/lib/audit'
 import { ApiError } from '@/server/http'
 import { sameUniversity } from '@/server/universities'
+import {
+  ensureUniqueTeamName,
+  normalizeTeamName,
+  resolveAssignableSupervisor,
+  TEAM_SUPERVISOR_CAP,
+} from '@/server/team-management'
 
 type DbClient = Prisma.TransactionClient | typeof prisma
 type AccessMode = 'admin' | 'supervisor'
@@ -24,7 +30,7 @@ export interface EligibleSupervisorResult {
 }
 
 const currentManagedStatuses = new Set<TeamStatus>(['PENDING_APPROVAL', 'APPROVED', 'ACTIVE'])
-const blockedAssignmentStatuses = new Set<TeamStatus>(['REJECTED', 'DISQUALIFIED'])
+const blockedRosterStatuses = new Set<TeamStatus>(['REJECTED', 'DISQUALIFIED', 'ARCHIVED'])
 
 const teamRosterInclude = Prisma.validator<Prisma.TeamInclude>()({
   university: true,
@@ -80,15 +86,11 @@ type RosterTeam = Prisma.TeamGetPayload<{
   include: typeof teamRosterInclude
 }>
 
-function requireManageAccess(team: { supervisorId: string }, actor: RosterActor, access: AccessMode) {
+function requireManageAccess(team: { supervisorId: string | null }, actor: RosterActor, access: AccessMode) {
   if (access === 'admin') return
   if (team.supervisorId !== actor.id) {
     throw new ApiError('Forbidden', 403, 'FORBIDDEN')
   }
-}
-
-function normalizeTeamName(name: string) {
-  return name.trim().replace(/\s+/g, ' ')
 }
 
 function getSubmitter(team: Pick<RosterTeam, 'members'>) {
@@ -123,20 +125,6 @@ async function getRosterTeam(teamId: string, db: DbClient) {
   }
 
   return team
-}
-
-async function ensureUniqueTeamName(teamId: string, name: string, db: DbClient) {
-  const existingTeam = await db.team.findFirst({
-    where: {
-      id: { not: teamId },
-      name: { equals: name, mode: 'insensitive' },
-    },
-    select: { id: true },
-  })
-
-  if (existingTeam) {
-    throw new ApiError('A team with this name already exists. Please choose a different name.', 422, 'CONFLICT')
-  }
 }
 
 async function resolveStudent(
@@ -188,31 +176,6 @@ async function resolveStudent(
   return student
 }
 
-async function resolveSupervisor(supervisorId: string, db: DbClient) {
-  const supervisor = await db.user.findUnique({
-    where: { id: supervisorId },
-    include: {
-      university: {
-        select: {
-          id: true,
-          name: true,
-          normalizedName: true,
-        },
-      },
-    },
-  })
-
-  if (!supervisor) {
-    throw new ApiError('Supervisor not found', 404, 'NOT_FOUND')
-  }
-
-  if (supervisor.role !== 'SUPERVISOR') {
-    throw new ApiError('Selected user is not a supervisor', 422, 'INVALID_INPUT')
-  }
-
-  return supervisor
-}
-
 async function ensureEligibleStudent(team: RosterTeam, student: Awaited<ReturnType<typeof resolveStudent>>, db: DbClient) {
   if (!student.universityId || !sameUniversity(team.university, student.university)) {
     throw new ApiError('Student must belong to the same university as the team', 422, 'INVALID_INPUT')
@@ -232,9 +195,9 @@ async function ensureEligibleStudent(team: RosterTeam, student: Awaited<ReturnTy
   }
 }
 
-function ensureCanAssignMembers(team: RosterTeam) {
-  if (blockedAssignmentStatuses.has(team.status)) {
-    throw new ApiError('Members cannot be changed for rejected or disqualified teams', 422, 'INVALID_INPUT')
+function ensureCanManageRoster(team: RosterTeam) {
+  if (blockedRosterStatuses.has(team.status)) {
+    throw new ApiError('Roster changes are not allowed for rejected, disqualified, or archived teams', 422, 'INVALID_INPUT')
   }
 }
 
@@ -271,7 +234,7 @@ export async function renameTeam(args: {
       return team
     }
 
-    await ensureUniqueTeamName(team.id, nextName, tx)
+    await ensureUniqueTeamName({ teamId: team.id, name: nextName, db: tx })
 
     const updated = await tx.team.update({
       where: { id: team.id },
@@ -304,7 +267,7 @@ export async function addMemberToTeam(args: {
   return prisma.$transaction(async (tx) => {
     const team = await getRosterTeam(args.teamId, tx)
     requireManageAccess(team, args.actor, args.access)
-    ensureCanAssignMembers(team)
+    ensureCanManageRoster(team)
 
     if (team.members.length >= 5) {
       throw new ApiError('Maximum 5 students per team', 422, 'CONFLICT')
@@ -360,6 +323,7 @@ export async function removeMemberFromTeam(args: {
   return prisma.$transaction(async (tx) => {
     const team = await getRosterTeam(args.teamId, tx)
     requireManageAccess(team, args.actor, args.access)
+    ensureCanManageRoster(team)
 
     const member = team.members.find((entry) => entry.id === args.memberId)
     if (!member) {
@@ -433,6 +397,7 @@ export async function setTeamSubmitter(args: {
   return prisma.$transaction(async (tx) => {
     const team = await getRosterTeam(args.teamId, tx)
     requireManageAccess(team, args.actor, args.access)
+    ensureCanManageRoster(team)
 
     const member = team.members.find((entry) => entry.id === args.memberId)
     if (!member) {
@@ -475,15 +440,17 @@ export async function reassignTeamSupervisor(args: {
 }) {
   return prisma.$transaction(async (tx) => {
     const team = await getRosterTeam(args.teamId, tx)
-    const supervisor = await resolveSupervisor(args.supervisorId, tx)
 
-    if (!supervisor.universityId || !sameUniversity(team.university, supervisor.university)) {
-      throw new ApiError('Supervisor must belong to the same university as the team', 422, 'INVALID_INPUT')
-    }
-
-    if (team.supervisorId === supervisor.id) {
+    if (team.supervisorId === args.supervisorId) {
       return team
     }
+
+    const supervisor = await resolveAssignableSupervisor({
+      supervisorId: args.supervisorId,
+      university: team.university,
+      teamIdToExclude: team.id,
+      db: tx,
+    })
 
     const updatedTeam = await tx.team.update({
       where: { id: team.id },
@@ -532,7 +499,8 @@ export async function moveTeamMembers(args: {
     const targetTeam = await getRosterTeam(args.targetTeamId, tx)
 
     ensureSameCompetitionScope(sourceTeam, targetTeam)
-    ensureCanAssignMembers(targetTeam)
+    ensureCanManageRoster(sourceTeam)
+    ensureCanManageRoster(targetTeam)
 
     const movedMembers = sourceTeam.members.filter((member) => uniqueMemberIds.includes(member.id))
     if (movedMembers.length !== uniqueMemberIds.length) {
@@ -682,7 +650,7 @@ export async function searchEligibleStudents(args: {
 }) {
   const team = await getRosterTeam(args.teamId, prisma)
   requireManageAccess(team, args.actor, args.access)
-  ensureCanAssignMembers(team)
+  ensureCanManageRoster(team)
 
   const query = args.query?.trim()
 
@@ -735,6 +703,7 @@ export async function searchEligibleSupervisors(args: {
   const supervisors = await prisma.user.findMany({
     where: {
       role: 'SUPERVISOR',
+      isActive: true,
       ...(query
         ? {
             OR: [
@@ -757,12 +726,21 @@ export async function searchEligibleSupervisors(args: {
           normalizedName: true,
         },
       },
+      _count: {
+        select: {
+          supervisedTeams: true,
+        },
+      },
     },
     orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }, { email: 'asc' }],
   })
 
   return supervisors
-    .filter((supervisor) => sameUniversity(team.university, supervisor.university))
+    .filter(
+      (supervisor) =>
+        sameUniversity(team.university, supervisor.university) &&
+        (supervisor.id === team.supervisorId || supervisor._count.supervisedTeams < TEAM_SUPERVISOR_CAP)
+    )
     .slice(0, 12)
-    .map(({ university: _university, ...supervisor }) => supervisor)
+    .map(({ university: _university, _count: _count, ...supervisor }) => supervisor)
 }

@@ -1,12 +1,14 @@
 import { NextRequest } from 'next/server'
 import { z } from 'zod'
 import { requireAdminOrResponse, jsonOk, jsonError, parseJson } from '@/server/http'
-import { getAdminTeamDetail, renameTeam } from '@/server/team-roster'
+import { getAdminTeamDetail } from '@/server/team-roster'
+import { updateAdminTeamMetadata } from '@/server/team-management'
 
 export const dynamic = 'force-dynamic'
 
-const renameTeamSchema = z.object({
+const updateTeamSchema = z.object({
   name: z.string().min(1).max(100),
+  externalTeamId: z.string().max(100).optional().nullable(),
 })
 
 export async function GET(
@@ -35,16 +37,18 @@ export async function PATCH(
     if (response) return response
 
     const { id } = await params
-    const data = await parseJson(request, renameTeamSchema)
+    const data = await parseJson(request, updateTeamSchema)
 
-    const team = await renameTeam({
+    await updateAdminTeamMetadata({
       actor: user!,
-      access: 'admin',
       teamId: id,
       name: data.name,
+      externalTeamId: data.externalTeamId,
     })
 
-    return jsonOk({ team })
+    const detail = await getAdminTeamDetail(id)
+
+    return jsonOk({ team: detail.team })
   } catch (error) {
     return jsonError(error, 'Failed to update team')
   }

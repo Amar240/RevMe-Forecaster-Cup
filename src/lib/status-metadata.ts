@@ -5,6 +5,7 @@ export const teamStatusMeta = {
   PENDING_APPROVAL: { label: 'Pending Approval', tone: 'warning' as const },
   APPROVED: { label: 'Approved', tone: 'info' as const },
   ACTIVE: { label: 'Active', tone: 'success' as const },
+  ARCHIVED: { label: 'Archived', tone: 'neutral' as const },
   REJECTED: { label: 'Rejected', tone: 'error' as const },
   DISQUALIFIED: { label: 'Disqualified', tone: 'error' as const },
 }

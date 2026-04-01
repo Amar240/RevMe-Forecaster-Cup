@@ -14,6 +14,7 @@ import { POST as addSupervisorMember } from '@/app/api/teams/[id]/members/route'
 import { DELETE as removeSupervisorMember } from '@/app/api/teams/[id]/members/[memberId]/route'
 import { PATCH as patchSupervisorSubmitter } from '@/app/api/teams/[id]/submitter/route'
 import { PATCH as patchAdminTeam } from '@/app/api/admin/teams/[id]/route'
+import { PATCH as patchAdminTeamStatus } from '@/app/api/admin/teams/[id]/status/route'
 import { POST as addAdminMember } from '@/app/api/admin/teams/[id]/members/route'
 import { PATCH as patchAdminSupervisor } from '@/app/api/admin/teams/[id]/supervisor/route'
 import { POST as postAdminMoveMembers } from '@/app/api/admin/teams/move-members/route'
@@ -368,6 +369,53 @@ describe('Team roster APIs', () => {
     const res = await patchAdminSupervisor(req, { params: Promise.resolve({ id: team.id }) })
 
     expect(res.status).toBe(422)
+  })
+
+  it('supervisor reassignment rejects supervisors already at the cap', async () => {
+    for (let index = 0; index < 10; index += 1) {
+      await createTeam({
+        name: `Cap Team ${index}`,
+        displayId: `CAP-${index}`,
+        supervisorId: otherSupervisor.id,
+        universityId: university.id,
+        seasonId: season.id,
+        status: 'ACTIVE',
+      })
+    }
+
+    await loginAs(admin.id)
+    const req = makeRequest(`http://localhost/api/admin/teams/${team.id}/supervisor`, {
+      method: 'PATCH',
+      body: { supervisorId: otherSupervisor.id },
+    })
+    const res = await patchAdminSupervisor(req, { params: Promise.resolve({ id: team.id }) })
+
+    expect(res.status).toBe(422)
+  })
+
+  it('archived teams reject roster changes', async () => {
+    const student = await createUser({
+      email: 'archived-student@roster.test',
+      role: 'STUDENT',
+      universityId: university.id,
+    })
+
+    await loginAs(admin.id)
+    const archiveReq = makeRequest(`http://localhost/api/admin/teams/${team.id}/status`, {
+      method: 'PATCH',
+      body: { action: 'archive' },
+    })
+    const archiveRes = await patchAdminTeamStatus(archiveReq, { params: Promise.resolve({ id: team.id }) })
+
+    expect(archiveRes.status).toBe(200)
+
+    const addReq = makeRequest(`http://localhost/api/admin/teams/${team.id}/members`, {
+      method: 'POST',
+      body: { userId: student.id },
+    })
+    const addRes = await addAdminMember(addReq, { params: Promise.resolve({ id: team.id }) })
+
+    expect(addRes.status).toBe(422)
   })
 
   it('moving the source submitter without replacement is rejected', async () => {
