@@ -19,6 +19,7 @@ enum TeamStatus {
   PENDING_APPROVAL
   APPROVED
   ACTIVE
+  ARCHIVED
   REJECTED
   DISQUALIFIED
 }
@@ -123,6 +124,7 @@ model User {
   lastName             String
   role                 Role      @default(STUDENT)
   emailVerified        Boolean   @default(false)
+  isActive             Boolean   @default(true)
   resetToken           String?
   resetTokenExpiry     DateTime?
   rulesAcknowledgedAt  DateTime?
@@ -176,6 +178,7 @@ model Team {
   id                 String     @id @default(cuid())
   name               String
   displayId          String     @unique
+  externalTeamId     String?
   status             TeamStatus @default(PENDING_APPROVAL)
   disqualifiedAt     DateTime?
   disqualifiedReason String?
@@ -186,8 +189,8 @@ model Team {
   createdAt          DateTime   @default(now())
   updatedAt          DateTime   @updatedAt
 
-  supervisorId String
-  supervisor   User       @relation("Supervisor", fields: [supervisorId], references: [id])
+  supervisorId String?
+  supervisor   User?      @relation("Supervisor", fields: [supervisorId], references: [id])
   universityId String
   university   University @relation(fields: [universityId], references: [id])
   seasonId     String?
@@ -203,6 +206,8 @@ model Team {
   @@index([universityId])
   @@index([status])
   @@index([seasonId])
+  @@index([externalTeamId])
+  @@unique([seasonId, externalTeamId])
 }
 
 model TeamMember {

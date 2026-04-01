@@ -3,6 +3,7 @@ export type TeamStatus =
   | 'PENDING_APPROVAL'
   | 'APPROVED'
   | 'ACTIVE'
+  | 'ARCHIVED'
   | 'REJECTED'
   | 'DISQUALIFIED'
 
@@ -21,9 +22,10 @@ export interface TeamSummary {
   id: string
   name: string
   displayId: string
+  externalTeamId?: string | null
   status: TeamStatus
   university: { id: string; name: string }
-  supervisor: { id: string; firstName: string; lastName: string; email: string }
+  supervisor: { id: string; firstName: string; lastName: string; email: string } | null
   members: TeamMember[]
   _count: { submissions: number; warnings: number }
 }

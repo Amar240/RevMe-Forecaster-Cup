@@ -1,6 +1,6 @@
 import { prisma } from './db'
 import bcrypt from 'bcryptjs'
-import { addDays, subDays } from 'date-fns'
+import { addDays, subHours } from 'date-fns'
 import type { Role, TeamStatus } from '@prisma/client'
 import { formatUniversityDisplayName, normalizeUniversityName } from '@/server/universities'
 
@@ -22,6 +22,7 @@ export async function createUser(params: {
   universityId?: string | null
   password?: string
   hasFullAccess?: boolean
+  isActive?: boolean
 }) {
   const passwordHash = await bcrypt.hash(params.password || 'Password123!', 10)
   return prisma.user.create({
@@ -34,6 +35,7 @@ export async function createUser(params: {
       universityId: params.universityId || null,
       hasFullAccess: params.hasFullAccess || false,
       emailVerified: true,
+      isActive: params.isActive ?? true,
     },
   })
 }
@@ -62,7 +64,9 @@ export async function createSeasonWithRounds(params?: {
   name?: string
   startDate?: Date
 }) {
-  const startDate = params?.startDate || subDays(new Date(), 1)
+  // Keep the first round safely open by default so request-level tests do not
+  // race a near-now close time during execution.
+  const startDate = params?.startDate || subHours(new Date(), 12)
   const endDate = addDays(startDate, 49)
   const season = await prisma.season.create({
     data: {
@@ -114,6 +118,7 @@ export async function createMarkets(seasonId: string) {
 export async function createTeam(params: {
   name?: string
   displayId?: string
+  externalTeamId?: string | null
   supervisorId: string
   universityId: string
   seasonId?: string | null
@@ -123,6 +128,7 @@ export async function createTeam(params: {
     data: {
       name: params.name || 'Test Team',
       displayId: params.displayId || `T-${Date.now()}`,
+      externalTeamId: params.externalTeamId || null,
       supervisorId: params.supervisorId,
       universityId: params.universityId,
       seasonId: params.seasonId || null,
