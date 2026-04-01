@@ -83,6 +83,72 @@ const emailFooter = `
 </html>
 `
 
+export async function sendAccountActivationEmail(
+  email: string,
+  firstName: string,
+  activationToken: string
+): Promise<boolean> {
+  const transporter = getTransporter()
+  const activationUrl = `${getAppBaseUrl()}/reset-password?token=${activationToken}`
+
+  if (!transporter) {
+    logger.info('Account activation email skipped (SMTP not configured)', { email, activationUrl })
+    return false
+  }
+
+  try {
+    await sendMailWithRetry(transporter, {
+      from: `"RevME Forecaster Cup" <${getFromEmail()}>`,
+      to: email,
+      subject: "You've been added to RevME Forecaster Cup — Set Your Password",
+      text: `
+Hello ${firstName},
+
+You have been added to a team in the RevME Forecaster Cup competition.
+
+To access your account, please set your password by clicking the link below:
+${activationUrl}
+
+This link will expire in 72 hours.
+
+If you have any questions, please contact your supervisor or competition administrator.
+
+Best regards,
+The RevME Team
+      `,
+      html: `${emailHeader}
+        <h2 style="margin-top: 0; color: #1e293b;">You've Been Added to the Competition!</h2>
+        <p>Hi <strong>${firstName}</strong>,</p>
+        <p>You have been added to a team in the <strong>RevME Forecaster Cup</strong> competition.</p>
+
+        <div style="background: #f0f9ff; border-radius: 8px; padding: 20px; margin: 20px 0;">
+          <p style="margin: 0; color: #0369a1; font-weight: 600;">Action Required: Set Your Password</p>
+          <p style="margin: 8px 0 0 0; color: #475569;">Click the button below to activate your account and set your password. This link expires in <strong>72 hours</strong>.</p>
+        </div>
+
+        <div style="text-align: center; margin: 32px 0;">
+          <a href="${activationUrl}" style="background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%); color: white; padding: 14px 32px; text-decoration: none; border-radius: 8px; display: inline-block; font-weight: 600;">
+            Set My Password
+          </a>
+        </div>
+
+        <p style="color: #64748b; font-size: 14px;">If the button doesn't work, copy and paste this link into your browser:</p>
+        <p style="color: #2563eb; font-size: 13px; word-break: break-all;">${activationUrl}</p>
+        <p style="color: #64748b; font-size: 14px;">If you weren't expecting this email, please ignore it or contact your competition administrator.</p>
+      ${emailFooter}`,
+    })
+
+    logger.info('Account activation email sent', { email, firstName })
+    return true
+  } catch (error) {
+    logger.error('Failed to send account activation email', {
+      email,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return false
+  }
+}
+
 export async function sendPasswordResetEmail(
   email: string,
   resetToken: string

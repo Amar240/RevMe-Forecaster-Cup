@@ -459,16 +459,15 @@ Most pages use `md:` breakpoints for grids. Key gaps:
 
 ### Current state
 
-`docs/AWS_MIGRATION.md` outlines three options:
-- **Option A**: Vercel + RDS (fastest)
-- **Option B**: ECS Fargate + RDS (full AWS)
-- **Option C**: Elastic Beanstalk + RDS (simpler AWS)
+This section is now historical planning context only.
 
-The document mentions "MySQL" but the actual codebase uses **PostgreSQL** (the Prisma schema and `DATABASE_URL` reference Postgres). This discrepancy should be corrected.
+The current deployment source of truth is `docs/AWS_MIGRATION.md`, which standardizes the active staging path as `ALB -> EC2 -> RDS PostgreSQL`.
 
-### Recommended architecture: Option A — Vercel + RDS PostgreSQL
+The notes below reflect an older architecture evaluation and should not be treated as the current deployment recommendation.
 
-**Why Vercel + RDS is the right choice for RevME:**
+### Historical recommendation (superseded): Vercel + RDS PostgreSQL
+
+**Why Vercel + RDS was considered a strong option at the time:**
 
 | Factor | Reasoning |
 |--------|-----------|
@@ -479,7 +478,7 @@ The document mentions "MySQL" but the actual codebase uses **PostgreSQL** (the P
 | **Complexity** | No Dockerfiles, no ECS task definitions, no load balancers, no auto-scaling config. |
 | **Migration effort** | Near-zero — just set `DATABASE_URL` and SMTP vars in Vercel env config, run `prisma migrate deploy` in the build step. |
 
-**When to consider ECS Fargate instead:**
+**Historical comparison note: when ECS Fargate seemed more appropriate:**
 - If the platform grows to 1000+ concurrent users with real-time features (WebSockets)
 - If there are strict data residency requirements (everything must stay in a specific AWS region/VPC)
 - If you need background job workers that run for >30 seconds (Vercel serverless functions have a 60s timeout on Pro)
@@ -565,9 +564,9 @@ Vercel auto-deploys:
 - [ ] Enable RDS automated backups (daily, 7-day retention)
 - [ ] Set up CloudWatch alarm for RDS CPU > 80% and storage < 20%
 
-### Fix `docs/AWS_MIGRATION.md`
+### Status of this section
 
-The existing document references **MySQL** but the codebase uses **PostgreSQL**. Update all references from "MySQL 8.0" to "PostgreSQL 16" and from "RDS for MySQL" to "RDS for PostgreSQL".
+Keep this section only as background on past hosting tradeoff discussions. Do not use it as deployment guidance while `docs/AWS_MIGRATION.md` remains the active AWS reference.
 
 ---
 
@@ -649,7 +648,7 @@ Before merging to main or deploying to production:
 | **Phase 7** | Fix `next.config.js` (remove ignoreDuringBuilds) and resolve type/lint errors | 2-4 hours | Phases 2-5 done |
 | **Phase 8** | Write P2 tests (http helpers, email, audit) | 2-3 hours | Phase 6 done |
 | **Phase 9** | UX polish pass (loading states, error states, mobile fixes) | 3-5 hours | Phase 5 done |
-| **Phase 10** | AWS deployment (Vercel + RDS setup, first deploy) | 2-4 hours | Phases 1-9 done |
+| **Phase 10** | Historical AWS deployment option review (superseded Vercel + RDS setup) | 2-4 hours | Phases 1-9 done |
 
 **Total estimated effort: 25-37 hours** (spread across 2-3 weeks at a sustainable pace).
 

@@ -387,4 +387,4 @@ See `README.md` and `docs/AWS_MIGRATION.md` for details.
   - `npm run build`
   - `npm run start`
 
-For a detailed AWS path (Vercel + RDS, ECS Fargate, or Elastic Beanstalk), see `docs/AWS_MIGRATION.md`.
+For the current staging deployment path, see `docs/AWS_MIGRATION.md`. That document is the canonical source of truth for the AWS baseline and currently standardizes on `ALB -> EC2 -> RDS`.
