@@ -4,6 +4,8 @@ import { addDays, subHours } from 'date-fns'
 import type { Role, TeamStatus } from '@prisma/client'
 import { formatUniversityDisplayName, normalizeUniversityName } from '@/server/universities'
 
+let teamDisplayIdCounter = 0
+
 export async function createUniversity(name = 'Test University') {
   const displayName = formatUniversityDisplayName(name)
   return prisma.university.create({
@@ -127,7 +129,7 @@ export async function createTeam(params: {
   return prisma.team.create({
     data: {
       name: params.name || 'Test Team',
-      displayId: params.displayId || `T-${Date.now()}`,
+      displayId: params.displayId || `T-FIXTURE-${process.pid}-${++teamDisplayIdCounter}`,
       externalTeamId: params.externalTeamId || null,
       supervisorId: params.supervisorId,
       universityId: params.universityId,
