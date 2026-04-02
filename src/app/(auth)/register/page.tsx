@@ -98,8 +98,7 @@ export default function RegisterPage() {
         return
       }
 
-      router.push('/dashboard')
-      router.refresh()
+      router.push(formData.role === 'STUDENT' ? '/rules' : '/dashboard')
     } catch {
       setError('An error occurred. Please try again.')
     } finally {

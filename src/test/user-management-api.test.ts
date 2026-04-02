@@ -1,10 +1,13 @@
 import crypto from 'crypto'
 import { describe, expect, it } from 'vitest'
-import { prisma } from '@/lib/db'
+import { prisma } from './db'
 import { loginAs } from './auth'
 import { makeRequest } from './http'
 import {
   addTeamMember,
+  createMarkets,
+  createSeasonWithRounds,
+  createSubmission,
   createTeam,
   createUniversity,
   createUser,
@@ -12,6 +15,7 @@ import {
 
 import { POST as postAdminUsers } from '@/app/api/admin/users/route'
 import { PATCH as patchAdminUser } from '@/app/api/admin/users/[id]/route'
+import { DELETE as deleteAdminUser } from '@/app/api/admin/users/[id]/delete/route'
 import { PATCH as patchAdminUserStatus } from '@/app/api/admin/users/[id]/status/route'
 import { POST as postAdminSupervisors } from '@/app/api/admin/supervisors/route'
 import { PATCH as patchAdminSupervisor } from '@/app/api/admin/supervisors/[id]/route'
@@ -191,6 +195,250 @@ describe('admin student management', () => {
     expect(supervisorRes.status).toBe(201)
     const supervisorData = await supervisorRes.json()
     expect(supervisorData.supervisor.email).toBe('supervisor@surface-split.test')
+  })
+
+  it('deletes a clean student account and writes an audit log entry', async () => {
+    const admin = await createUser({ email: 'admin@student-delete.test', role: 'ADMIN' })
+    const university = await createUniversity('Student Delete University')
+    const student = await createUser({
+      email: 'student@student-delete.test',
+      role: 'STUDENT',
+      universityId: university.id,
+    })
+
+    await loginAs(admin.id)
+
+    const req = makeRequest(`${BASE}/api/admin/users/${student.id}/delete`, {
+      method: 'DELETE',
+    })
+
+    const res = await deleteAdminUser(req, { params: Promise.resolve({ id: student.id }) })
+    expect(res.status).toBe(200)
+
+    const deletedUser = await prisma.user.findUnique({ where: { id: student.id } })
+    expect(deletedUser).toBeNull()
+
+    const auditLog = await prisma.auditLog.findFirst({
+      where: {
+        action: 'USER_DELETED',
+        entityType: 'User',
+        entityId: student.id,
+      },
+      orderBy: { createdAt: 'desc' },
+    })
+
+    expect(auditLog).not.toBeNull()
+    expect(auditLog?.userId).toBe(admin.id)
+  })
+
+  it('blocks self-delete', async () => {
+    const admin = await createUser({ email: 'admin@self-delete.test', role: 'ADMIN' })
+    await loginAs(admin.id)
+
+    const req = makeRequest(`${BASE}/api/admin/users/${admin.id}/delete`, {
+      method: 'DELETE',
+    })
+
+    const res = await deleteAdminUser(req, { params: Promise.resolve({ id: admin.id }) })
+    expect(res.status).toBe(422)
+
+    const data = await res.json()
+    expect(data.message).toContain('own account')
+  })
+
+  it('blocks deleting non-student accounts', async () => {
+    const admin = await createUser({ email: 'admin@delete-scope.test', role: 'ADMIN' })
+    const university = await createUniversity('Delete Scope University')
+    const supervisor = await createUser({
+      email: 'supervisor@delete-scope.test',
+      role: 'SUPERVISOR',
+      universityId: university.id,
+    })
+
+    await loginAs(admin.id)
+
+    const req = makeRequest(`${BASE}/api/admin/users/${supervisor.id}/delete`, {
+      method: 'DELETE',
+    })
+
+    const res = await deleteAdminUser(req, { params: Promise.resolve({ id: supervisor.id }) })
+    expect(res.status).toBe(422)
+
+    const data = await res.json()
+    expect(data.message).toContain('Only clean student accounts')
+  })
+
+  it('blocks deleting a student with team membership', async () => {
+    const admin = await createUser({ email: 'admin@delete-team-membership.test', role: 'ADMIN' })
+    const university = await createUniversity('Delete Membership University')
+    const supervisor = await createUser({
+      email: 'supervisor@delete-team-membership.test',
+      role: 'SUPERVISOR',
+      universityId: university.id,
+    })
+    const student = await createUser({
+      email: 'student@delete-team-membership.test',
+      role: 'STUDENT',
+      universityId: university.id,
+    })
+
+    const team = await createTeam({
+      name: 'Delete Membership Team',
+      supervisorId: supervisor.id,
+      universityId: university.id,
+    })
+    await addTeamMember(team.id, student.id, true)
+
+    await loginAs(admin.id)
+
+    const req = makeRequest(`${BASE}/api/admin/users/${student.id}/delete`, {
+      method: 'DELETE',
+    })
+
+    const res = await deleteAdminUser(req, { params: Promise.resolve({ id: student.id }) })
+    expect(res.status).toBe(422)
+
+    const data = await res.json()
+    expect(data.message).toContain('team memberships')
+  })
+
+  it('blocks deleting a student with submissions', async () => {
+    const admin = await createUser({ email: 'admin@delete-submission.test', role: 'ADMIN' })
+    const university = await createUniversity('Delete Submission University')
+    const supervisor = await createUser({
+      email: 'supervisor@delete-submission.test',
+      role: 'SUPERVISOR',
+      universityId: university.id,
+    })
+    const student = await createUser({
+      email: 'student@delete-submission.test',
+      role: 'STUDENT',
+      universityId: university.id,
+    })
+    const { season, rounds } = await createSeasonWithRounds()
+    await createMarkets(season.id)
+    const team = await createTeam({
+      name: 'Delete Submission Team',
+      supervisorId: supervisor.id,
+      universityId: university.id,
+      seasonId: season.id,
+    })
+
+    await createSubmission({
+      teamId: team.id,
+      roundId: rounds[0].id,
+      submittedById: student.id,
+      values: [],
+    })
+
+    await loginAs(admin.id)
+
+    const req = makeRequest(`${BASE}/api/admin/users/${student.id}/delete`, {
+      method: 'DELETE',
+    })
+
+    const res = await deleteAdminUser(req, { params: Promise.resolve({ id: student.id }) })
+    expect(res.status).toBe(422)
+
+    const data = await res.json()
+    expect(data.message).toContain('submissions')
+  })
+
+  it('blocks deleting a student with join requests', async () => {
+    const admin = await createUser({ email: 'admin@delete-join-request.test', role: 'ADMIN' })
+    const university = await createUniversity('Delete Join Request University')
+    const student = await createUser({
+      email: 'student@delete-join-request.test',
+      role: 'STUDENT',
+      universityId: university.id,
+    })
+
+    await prisma.joinRequest.create({
+      data: {
+        studentId: student.id,
+        status: 'PENDING',
+      },
+    })
+
+    await loginAs(admin.id)
+
+    const req = makeRequest(`${BASE}/api/admin/users/${student.id}/delete`, {
+      method: 'DELETE',
+    })
+
+    const res = await deleteAdminUser(req, { params: Promise.resolve({ id: student.id }) })
+    expect(res.status).toBe(422)
+
+    const data = await res.json()
+    expect(data.message).toContain('join request')
+  })
+
+  it('blocks deleting a student with support tickets', async () => {
+    const admin = await createUser({ email: 'admin@delete-ticket.test', role: 'ADMIN' })
+    const university = await createUniversity('Delete Ticket University')
+    const student = await createUser({
+      email: 'student@delete-ticket.test',
+      role: 'STUDENT',
+      universityId: university.id,
+    })
+
+    await prisma.supportTicket.create({
+      data: {
+        createdById: student.id,
+        subject: 'Need help',
+        message: 'Please assist',
+      },
+    })
+
+    await loginAs(admin.id)
+
+    const req = makeRequest(`${BASE}/api/admin/users/${student.id}/delete`, {
+      method: 'DELETE',
+    })
+
+    const res = await deleteAdminUser(req, { params: Promise.resolve({ id: student.id }) })
+    expect(res.status).toBe(422)
+
+    const data = await res.json()
+    expect(data.message).toContain('support ticket')
+  })
+
+  it('blocks deleting a student with ticket replies', async () => {
+    const admin = await createUser({ email: 'admin@delete-ticket-reply.test', role: 'ADMIN' })
+    const university = await createUniversity('Delete Ticket Reply University')
+    const student = await createUser({
+      email: 'student@delete-ticket-reply.test',
+      role: 'STUDENT',
+      universityId: university.id,
+    })
+
+    const ticket = await prisma.supportTicket.create({
+      data: {
+        createdById: admin.id,
+        subject: 'Help',
+        message: 'Initial ticket',
+      },
+    })
+
+    await prisma.supportTicketReply.create({
+      data: {
+        ticketId: ticket.id,
+        authorId: student.id,
+        message: 'Reply message',
+      },
+    })
+
+    await loginAs(admin.id)
+
+    const req = makeRequest(`${BASE}/api/admin/users/${student.id}/delete`, {
+      method: 'DELETE',
+    })
+
+    const res = await deleteAdminUser(req, { params: Promise.resolve({ id: student.id }) })
+    expect(res.status).toBe(422)
+
+    const data = await res.json()
+    expect(data.message).toContain('support ticket')
   })
 })
 

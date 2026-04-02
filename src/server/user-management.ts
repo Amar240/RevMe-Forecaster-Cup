@@ -52,6 +52,13 @@ export const managedUserListSelect = Prisma.validator<Prisma.UserSelect>()({
       supervisedTeams: true,
       submissions: true,
       teamMemberships: true,
+      joinRequestsAsStudent: true,
+      joinRequestsAsSupervisor: true,
+      supportTicketsCreated: true,
+      supportTicketsAsSupervisor: true,
+      supportTicketsAssigned: true,
+      supportTicketsEscalated: true,
+      ticketReplies: true,
     },
   },
 })
@@ -79,6 +86,32 @@ const managedUserMutationSelect = Prisma.validator<Prisma.UserSelect>()({
 
 type ManagedMutationUser = Prisma.UserGetPayload<{
   select: typeof managedUserMutationSelect
+}>
+
+const managedUserDeleteEligibilitySelect = Prisma.validator<Prisma.UserSelect>()({
+  id: true,
+  email: true,
+  firstName: true,
+  lastName: true,
+  role: true,
+  _count: {
+    select: {
+      supervisedTeams: true,
+      submissions: true,
+      teamMemberships: true,
+      joinRequestsAsStudent: true,
+      joinRequestsAsSupervisor: true,
+      supportTicketsCreated: true,
+      supportTicketsAsSupervisor: true,
+      supportTicketsAssigned: true,
+      supportTicketsEscalated: true,
+      ticketReplies: true,
+    },
+  },
+})
+
+type ManagedDeleteEligibilityUser = Prisma.UserGetPayload<{
+  select: typeof managedUserDeleteEligibilitySelect
 }>
 
 function normalizeName(value: string) {
@@ -174,6 +207,73 @@ function buildResetCredentials() {
   const resetTokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000)
 
   return { tempPassword, resetToken, resetTokenExpiry }
+}
+
+export function getManagedUserDeleteEligibility(args: {
+  actorId: string
+  user: ManagedDeleteEligibilityUser
+}) {
+  const { actorId, user } = args
+
+  if (user.id === actorId) {
+    return {
+      canDelete: false,
+      deleteBlockedReason: 'You cannot delete your own account.',
+    }
+  }
+
+  if (user.role !== 'STUDENT') {
+    return {
+      canDelete: false,
+      deleteBlockedReason: 'Only clean student accounts can be deleted from this page.',
+    }
+  }
+
+  if (user._count.teamMemberships > 0) {
+    return {
+      canDelete: false,
+      deleteBlockedReason: 'Users with team memberships cannot be deleted.',
+    }
+  }
+
+  if (user._count.supervisedTeams > 0) {
+    return {
+      canDelete: false,
+      deleteBlockedReason: 'Users with supervised teams cannot be deleted.',
+    }
+  }
+
+  if (user._count.submissions > 0) {
+    return {
+      canDelete: false,
+      deleteBlockedReason: 'Users with submissions cannot be deleted.',
+    }
+  }
+
+  if (user._count.joinRequestsAsStudent > 0 || user._count.joinRequestsAsSupervisor > 0) {
+    return {
+      canDelete: false,
+      deleteBlockedReason: 'Users with join request history cannot be deleted.',
+    }
+  }
+
+  if (
+    user._count.supportTicketsCreated > 0 ||
+    user._count.supportTicketsAsSupervisor > 0 ||
+    user._count.supportTicketsAssigned > 0 ||
+    user._count.supportTicketsEscalated > 0 ||
+    user._count.ticketReplies > 0
+  ) {
+    return {
+      canDelete: false,
+      deleteBlockedReason: 'Users with support ticket activity cannot be deleted.',
+    }
+  }
+
+  return {
+    canDelete: true,
+    deleteBlockedReason: null,
+  }
 }
 
 export async function createManagedUser(args: {
@@ -405,4 +505,59 @@ export async function setManagedUserActiveStatus(args: {
   })
 
   return updatedUser
+}
+
+export async function deleteManagedStudent(args: {
+  actor: UserManagementActor
+  userId: string
+}) {
+  if (args.actor.role !== 'ADMIN' && args.actor.role !== 'SUB_ADMIN') {
+    throw new ApiError('Forbidden', 403, 'FORBIDDEN')
+  }
+
+  const targetUser = await prisma.user.findUnique({
+    where: { id: args.userId },
+    select: managedUserDeleteEligibilitySelect,
+  })
+
+  if (!targetUser) {
+    throw new ApiError('User not found', 404, 'NOT_FOUND')
+  }
+
+  const eligibility = getManagedUserDeleteEligibility({
+    actorId: args.actor.id,
+    user: targetUser,
+  })
+
+  if (!eligibility.canDelete) {
+    throw new ApiError(
+      eligibility.deleteBlockedReason ?? 'This user cannot be deleted. Deactivate the account instead.',
+      422,
+      'INVALID_INPUT'
+    )
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.session.deleteMany({ where: { userId: targetUser.id } })
+    await tx.notification.deleteMany({ where: { userId: targetUser.id } })
+    await tx.userPermission.deleteMany({ where: { userId: targetUser.id } })
+    await tx.user.delete({ where: { id: targetUser.id } })
+  })
+
+  await logAuditAction(args.actor.id, 'USER_DELETED', 'User', targetUser.id, {
+    deletedUserEmail: targetUser.email,
+    deletedUserRole: targetUser.role,
+    before: {
+      email: targetUser.email,
+      role: targetUser.role,
+      firstName: targetUser.firstName,
+      lastName: targetUser.lastName,
+    },
+  })
+
+  return {
+    id: targetUser.id,
+    email: targetUser.email,
+    role: targetUser.role,
+  }
 }

@@ -5,6 +5,8 @@ export interface AdminUser {
   email: string
   role: 'ADMIN' | 'SUPERVISOR' | 'STUDENT' | 'SUB_ADMIN'
   isActive: boolean
+  canDelete: boolean
+  deleteBlockedReason?: string | null
   universityId: string | null
   university: { id: string; name: string } | null
   teamMemberships: { id: string; isSubmitter: boolean; team: { id: string; name: string; displayId: string } }[]
@@ -12,6 +14,13 @@ export interface AdminUser {
     supervisedTeams: number
     submissions: number
     teamMemberships: number
+    joinRequestsAsStudent: number
+    joinRequestsAsSupervisor: number
+    supportTicketsCreated: number
+    supportTicketsAsSupervisor: number
+    supportTicketsAssigned: number
+    supportTicketsEscalated: number
+    ticketReplies: number
   }
   createdAt: string
 }

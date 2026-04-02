@@ -3,11 +3,13 @@
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import {
+  Edit,
   GraduationCap,
   Key,
   Loader2,
   LogOut,
   MoreVertical,
+  Plus,
   RefreshCw,
   Shield,
   Trash2,
@@ -17,7 +19,14 @@ import {
 } from 'lucide-react'
 import { clientLogger } from '@/lib/client-logger'
 import { csrfFetch } from '@/lib/csrf'
-import { changeUserRole, deleteUser, forceLogout, listUsers, sendResetPasswordEmail } from '@/features/users/api'
+import {
+  createStudent,
+  forceLogout,
+  listUsers,
+  sendResetPasswordEmail,
+  setStudentActiveStatus,
+  updateStudent,
+} from '@/features/users/api'
 import type { AdminUser } from '@/features/users/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -30,6 +39,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 
@@ -44,11 +54,19 @@ export default function AdminUsersPage() {
   const [loading, setLoading] = useState(true)
   const [users, setUsers] = useState<AdminUser[]>([])
   const [totalUsers, setTotalUsers] = useState(0)
+  const [universities, setUniversities] = useState<{ id: string; name: string }[]>([])
   const [actionLoading, setActionLoading] = useState<string | null>(null)
-  const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null)
-  const [showRoleDialog, setShowRoleDialog] = useState(false)
-  const [newRole, setNewRole] = useState('')
+  const [selectedStudent, setSelectedStudent] = useState<AdminUser | null>(null)
+  const [showStudentDialog, setShowStudentDialog] = useState(false)
+  const [savingStudent, setSavingStudent] = useState(false)
+  const [studentForm, setStudentForm] = useState({
+    firstName: '',
+    lastName: '',
+    email: '',
+    universityId: '',
+  })
   const [logoutTarget, setLogoutTarget] = useState<AdminUser | null>(null)
+  const [statusTarget, setStatusTarget] = useState<AdminUser | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<AdminUser | null>(null)
   const [showBulkImport, setShowBulkImport] = useState(false)
   const [bulkCsv, setBulkCsv] = useState('')
@@ -62,30 +80,86 @@ export default function AdminUsersPage() {
       setTotalUsers(data.total ?? data.users?.length ?? 0)
     } catch (error) {
       clientLogger.error('Failed to fetch users:', error)
-    } finally {
-      setLoading(false)
+    }
+  }, [])
+
+  const fetchUniversities = useCallback(async () => {
+    try {
+      const res = await csrfFetch('/api/admin/universities')
+      const data = await res.json() as { universities?: { id: string; name: string }[]; message?: string }
+      if (!res.ok) {
+        throw new Error(data.message || 'Failed to load universities')
+      }
+
+      setUniversities(data.universities ?? [])
+    } catch (error) {
+      clientLogger.error('Failed to fetch universities:', error)
     }
   }, [])
 
   useEffect(() => {
     if (!permLoading && canPerform('users:manage')) {
-      void fetchUsers()
+      setLoading(true)
+      void Promise.all([fetchUsers(), fetchUniversities()]).finally(() => {
+        setLoading(false)
+      })
     }
-  }, [permLoading, canPerform, fetchUsers])
+  }, [permLoading, canPerform, fetchUsers, fetchUniversities])
 
-  const handleChangeRole = async () => {
-    if (!selectedUser || !newRole) return
+  const resetStudentForm = useCallback(() => {
+    setSelectedStudent(null)
+    setStudentForm({
+      firstName: '',
+      lastName: '',
+      email: '',
+      universityId: '',
+    })
+  }, [])
 
-    setActionLoading(selectedUser.id)
+  const openCreateStudentDialog = () => {
+    resetStudentForm()
+    setShowStudentDialog(true)
+  }
+
+  const openEditStudentDialog = (user: AdminUser) => {
+    setSelectedStudent(user)
+    setStudentForm({
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      universityId: user.universityId ?? '',
+    })
+    setShowStudentDialog(true)
+  }
+
+  const handleSaveStudent = async () => {
+    if (!studentForm.firstName.trim() || !studentForm.lastName.trim() || !studentForm.email.trim() || !studentForm.universityId) {
+      toast.error('First name, last name, email, and university are required.')
+      return
+    }
+
+    setSavingStudent(true)
     try {
-      await changeUserRole(selectedUser.id, newRole)
+      if (selectedStudent) {
+        await updateStudent(selectedStudent.id, studentForm)
+        toast.success('Student updated successfully')
+      } else {
+        const data = await createStudent(studentForm)
+        toast.success(
+          data.emailSent
+            ? 'Student created and password reset email sent'
+            : 'Student created. Password reset email could not be sent.'
+        )
+      }
+
       await fetchUsers()
-      setShowRoleDialog(false)
+      resetStudentForm()
+      setShowStudentDialog(false)
     } catch (error) {
-      clientLogger.error('Change role failed:', error)
-      toast.error(error instanceof Error ? error.message : 'Failed to change role')
+      clientLogger.error('Save student failed:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to save student')
     } finally {
-      setActionLoading(null)
+      setSavingStudent(false)
     }
   }
 
@@ -116,10 +190,34 @@ export default function AdminUsersPage() {
     }
   }
 
+  const executeStatusChange = async (user: AdminUser) => {
+    setActionLoading(user.id)
+    try {
+      await setStudentActiveStatus(user.id, !user.isActive)
+      toast.success(user.isActive ? 'Student deactivated' : 'Student reactivated')
+      await fetchUsers()
+    } catch (error) {
+      clientLogger.error('Student status change failed:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to update student status')
+    } finally {
+      setActionLoading(null)
+      setStatusTarget(null)
+    }
+  }
+
   const executeDeleteUser = async (user: AdminUser) => {
     setActionLoading(user.id)
     try {
-      await deleteUser(user.id)
+      const res = await csrfFetch(`/api/admin/users/${user.id}/delete`, {
+        method: 'DELETE',
+      })
+      const data = await res.json() as { message?: string; error?: string }
+
+      if (!res.ok) {
+        throw new Error(data.message || data.error || 'Failed to delete user')
+      }
+
+      toast.success(data.message || 'User deleted successfully')
       await fetchUsers()
     } catch (error) {
       clientLogger.error('Delete user failed:', error)
@@ -260,16 +358,19 @@ export default function AdminUsersPage() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem
-              onClick={() => {
-                setSelectedUser(user)
-                setNewRole(user.role)
-                setShowRoleDialog(true)
-              }}
-            >
-              <Shield className="mr-2 h-4 w-4" />
-              Change Role
-            </DropdownMenuItem>
+            {user.role === 'STUDENT' ? (
+              <>
+                <DropdownMenuItem onClick={() => openEditStudentDialog(user)}>
+                  <Edit className="mr-2 h-4 w-4" />
+                  Edit Student
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setStatusTarget(user)}>
+                  <Shield className="mr-2 h-4 w-4" />
+                  {user.isActive ? 'Deactivate Student' : 'Reactivate Student'}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+              </>
+            ) : null}
             <DropdownMenuItem onClick={() => void handleSendResetEmail(user)}>
               <Key className="mr-2 h-4 w-4" />
               Send Password Reset Email
@@ -278,11 +379,18 @@ export default function AdminUsersPage() {
               <LogOut className="mr-2 h-4 w-4" />
               Force Logout
             </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-error" onClick={() => setDeleteTarget(user)} disabled={user.role === 'ADMIN'}>
-              <Trash2 className="mr-2 h-4 w-4" />
-              Delete User
-            </DropdownMenuItem>
+            {user.canDelete ? (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  className="text-error focus:text-error"
+                  onClick={() => setDeleteTarget(user)}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete User
+                </DropdownMenuItem>
+              </>
+            ) : null}
           </DropdownMenuContent>
         </DropdownMenu>
       ),
@@ -296,10 +404,16 @@ export default function AdminUsersPage() {
           <h1 className="text-3xl font-semibold tracking-tight text-foreground">All Users</h1>
           <p className="text-text-secondary">{totalUsers} registered users</p>
         </div>
-        <Button variant="outline" onClick={() => { setShowBulkImport(true); setBulkResults(null); setBulkCsv('') }}>
-          <Upload className="h-4 w-4 mr-2" />
-          Import Users
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={openCreateStudentDialog}>
+            <Plus className="h-4 w-4 mr-2" />
+            Add Student
+          </Button>
+          <Button variant="outline" onClick={() => { setShowBulkImport(true); setBulkResults(null); setBulkCsv('') }}>
+            <Upload className="h-4 w-4 mr-2" />
+            Import Users
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-6 md:grid-cols-4">
@@ -378,35 +492,75 @@ export default function AdminUsersPage() {
         </CardContent>
       </Card>
 
-      <Dialog open={showRoleDialog} onOpenChange={setShowRoleDialog}>
+      <Dialog
+        open={showStudentDialog}
+        onOpenChange={(open) => {
+          setShowStudentDialog(open)
+          if (!open) {
+            resetStudentForm()
+          }
+        }}
+      >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Change User Role</DialogTitle>
+            <DialogTitle>{selectedStudent ? 'Edit Student' : 'Add Student'}</DialogTitle>
             <DialogDescription>
-              Change role for {selectedUser?.firstName} {selectedUser?.lastName}
+              {selectedStudent
+                ? 'Update student details. Supervisor and admin management stays on the dedicated surfaces.'
+                : 'Create a student account from the admin users page.'}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label>Role</Label>
-              <Select value={newRole} onValueChange={setNewRole}>
+              <Label htmlFor="student-first-name">First name</Label>
+              <Input
+                id="student-first-name"
+                value={studentForm.firstName}
+                onChange={(event) => setStudentForm((current) => ({ ...current, firstName: event.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="student-last-name">Last name</Label>
+              <Input
+                id="student-last-name"
+                value={studentForm.lastName}
+                onChange={(event) => setStudentForm((current) => ({ ...current, lastName: event.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="student-email">Email</Label>
+              <Input
+                id="student-email"
+                type="email"
+                value={studentForm.email}
+                onChange={(event) => setStudentForm((current) => ({ ...current, email: event.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>University</Label>
+              <Select
+                value={studentForm.universityId}
+                onValueChange={(value) => setStudentForm((current) => ({ ...current, universityId: value }))}
+              >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select role" />
+                  <SelectValue placeholder="Select university" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="STUDENT">Student</SelectItem>
-                  <SelectItem value="SUPERVISOR">Supervisor</SelectItem>
-                  <SelectItem value="ADMIN">Admin</SelectItem>
+                  {universities.map((university) => (
+                    <SelectItem key={university.id} value={university.id}>
+                      {university.name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowRoleDialog(false)}>
+            <Button variant="outline" onClick={() => setShowStudentDialog(false)}>
               Cancel
             </Button>
-            <Button onClick={handleChangeRole} disabled={actionLoading === selectedUser?.id || newRole === selectedUser?.role}>
-              {actionLoading === selectedUser?.id ? 'Saving...' : 'Save'}
+            <Button onClick={() => void handleSaveStudent()} disabled={savingStudent}>
+              {savingStudent ? 'Saving...' : selectedStudent ? 'Save Changes' : 'Add Student'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -428,12 +582,31 @@ export default function AdminUsersPage() {
       />
 
       <ConfirmDialog
+        open={statusTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setStatusTarget(null)
+        }}
+        title={statusTarget?.isActive ? 'Deactivate Student' : 'Reactivate Student'}
+        description={
+          statusTarget
+            ? `${statusTarget.isActive ? 'Deactivate' : 'Reactivate'} ${statusTarget.firstName} ${statusTarget.lastName}?`
+            : ''
+        }
+        confirmLabel={statusTarget?.isActive ? 'Deactivate' : 'Reactivate'}
+        variant={statusTarget?.isActive ? 'destructive' : 'default'}
+        loading={actionLoading === statusTarget?.id}
+        onConfirm={() => {
+          if (statusTarget) void executeStatusChange(statusTarget)
+        }}
+      />
+
+      <ConfirmDialog
         open={deleteTarget !== null}
         onOpenChange={(open) => {
           if (!open) setDeleteTarget(null)
         }}
         title="Delete User"
-        description={`Delete ${deleteTarget?.firstName} ${deleteTarget?.lastName}? This action cannot be undone.`}
+        description="Are you sure you want to delete this user? This action cannot be undone."
         confirmLabel="Delete"
         variant="destructive"
         loading={actionLoading === deleteTarget?.id}
