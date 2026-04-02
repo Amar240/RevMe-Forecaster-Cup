@@ -43,8 +43,10 @@ export async function GET() {
       .map((team) => ({
         id: team.id, teamName: team.name, teamDisplayId: team.displayId,
         universityName: team.university?.name ?? 'Not set',
-        supervisorName: `${team.supervisor.firstName} ${team.supervisor.lastName}`,
-        supervisorEmail: team.supervisor.email,
+        supervisorName: team.supervisor
+          ? `${team.supervisor.firstName} ${team.supervisor.lastName}`.trim()
+          : 'Unassigned',
+        supervisorEmail: team.supervisor?.email ?? null,
         warningsCount: team._count.warnings,
         lastSubmissionAt: team.submissions[0]?.submittedAt?.toISOString() ?? null,
       }))
