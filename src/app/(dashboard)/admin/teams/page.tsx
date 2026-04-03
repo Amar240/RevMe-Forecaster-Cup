@@ -1,16 +1,14 @@
 'use client'
 
+import Link from 'next/link'
 import { csrfFetch } from '@/lib/csrf'
-
 import { clientLogger } from '@/lib/client-logger'
-
-
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Users, AlertTriangle, Check, Ban, RefreshCw, MoreVertical, Loader2, Settings } from 'lucide-react'
+import { Users, AlertTriangle, Check, Ban, RefreshCw, MoreVertical, Loader2, Settings, FileSpreadsheet, Upload, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { DataTable } from '@/components/ui/data-table'
 import { CardSkeleton, Skeleton, TableSkeleton } from '@/components/ui/skeleton'
@@ -34,6 +32,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 type TeamStatus = 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'ACTIVE' | 'REJECTED' | 'DISQUALIFIED'
 
@@ -47,6 +52,27 @@ interface Team {
   supervisor: { firstName: string; lastName: string; email: string }
   members: { user: { firstName: string; lastName: string; email: string }; isSubmitter: boolean }[]
   _count: { submissions: number; warnings: number }
+}
+
+interface SeasonOption {
+  id: string
+  name: string
+  status: string
+}
+
+interface UniversityOption {
+  id: string
+  name: string
+}
+
+interface SupervisorOption {
+  id: string
+  firstName: string
+  lastName: string
+  email: string
+  isActive: boolean
+  universityId: string | null
+  _count: { supervisedTeams: number }
 }
 
 const STATUS_CONFIG: Record<TeamStatus, { label: string; tone: 'neutral' | 'info' | 'success' | 'warning' | 'error'; icon: React.ElementType }> = {
@@ -70,6 +96,19 @@ export default function AdminTeamsPage() {
   const [disqualifyReason, setDisqualifyReason] = useState('')
   const [showDisqualifyDialog, setShowDisqualifyDialog] = useState(false)
   const [reinstateTarget, setReinstateTarget] = useState<Team | null>(null)
+  const [showCreateDialog, setShowCreateDialog] = useState(false)
+  const [loadingCreateOptions, setLoadingCreateOptions] = useState(false)
+  const [creatingTeam, setCreatingTeam] = useState(false)
+  const [seasons, setSeasons] = useState<SeasonOption[]>([])
+  const [universities, setUniversities] = useState<UniversityOption[]>([])
+  const [supervisors, setSupervisors] = useState<SupervisorOption[]>([])
+  const [teamForm, setTeamForm] = useState({
+    seasonId: '',
+    universityId: '',
+    name: '',
+    externalTeamId: '',
+    supervisorId: '',
+  })
   const hasRosterAccess = isAdmin || hasFullAccess
 
   const fetchTeams = useCallback(async () => {
@@ -92,6 +131,99 @@ export default function AdminTeamsPage() {
       void fetchTeams()
     }
   }, [fetchTeams, hasRosterAccess, permLoading])
+
+  const resetCreateForm = useCallback(() => {
+    setTeamForm({
+      seasonId: seasons[0]?.id ?? '',
+      universityId: '',
+      name: '',
+      externalTeamId: '',
+      supervisorId: '',
+    })
+  }, [seasons])
+
+  const loadCreateOptions = useCallback(async () => {
+    setLoadingCreateOptions(true)
+    try {
+      const [seasonRes, universityRes, supervisorRes] = await Promise.all([
+        csrfFetch('/api/admin/teams/import/options'),
+        csrfFetch('/api/admin/universities'),
+        csrfFetch('/api/admin/supervisors'),
+      ])
+
+      const [seasonData, universityData, supervisorData] = await Promise.all([
+        seasonRes.json(),
+        universityRes.json(),
+        supervisorRes.json(),
+      ])
+
+      if (!seasonRes.ok) throw new Error(seasonData.message || 'Failed to load seasons')
+      if (!universityRes.ok) throw new Error(universityData.message || 'Failed to load universities')
+      if (!supervisorRes.ok) throw new Error(supervisorData.message || 'Failed to load supervisors')
+
+      const nextSeasons = seasonData.seasons || []
+      setSeasons(nextSeasons)
+      setUniversities(universityData.universities || [])
+      setSupervisors(supervisorData.supervisors || [])
+      setTeamForm({
+        seasonId: nextSeasons[0]?.id ?? '',
+        universityId: '',
+        name: '',
+        externalTeamId: '',
+        supervisorId: '',
+      })
+    } catch (error) {
+      clientLogger.error('Failed to load create-team options:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to load team creation options')
+      setShowCreateDialog(false)
+    } finally {
+      setLoadingCreateOptions(false)
+    }
+  }, [])
+
+  const openCreateDialog = async () => {
+    setShowCreateDialog(true)
+    await loadCreateOptions()
+  }
+
+  const handleCreateTeam = async (event: React.FormEvent) => {
+    event.preventDefault()
+
+    if (!teamForm.seasonId || !teamForm.universityId || !teamForm.name.trim() || !teamForm.supervisorId) {
+      toast.error('Season, university, team name, and supervisor are required')
+      return
+    }
+
+    setCreatingTeam(true)
+    try {
+      const res = await csrfFetch('/api/admin/teams', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          seasonId: teamForm.seasonId,
+          universityId: teamForm.universityId,
+          name: teamForm.name.trim(),
+          externalTeamId: teamForm.externalTeamId.trim() || null,
+          supervisorId: teamForm.supervisorId,
+        }),
+      })
+      const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data.message || 'Failed to create team')
+      }
+
+      toast.success(`Team "${data.team.name}" created successfully`)
+      setShowCreateDialog(false)
+      resetCreateForm()
+      await fetchTeams()
+    } catch (error) {
+      clientLogger.error('Failed to create team:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to create team')
+    } finally {
+      setCreatingTeam(false)
+    }
+  }
 
   const handleDisqualify = async () => {
     if (!selectedTeam) return
@@ -189,6 +321,12 @@ export default function AdminTeamsPage() {
   const activeTeams = teams.filter((t) => t.status === 'ACTIVE')
   const pendingTeams = teams.filter((t) => t.status === 'PENDING_APPROVAL' || t.status === 'APPROVED' || t.status === 'DRAFT')
   const disqualifiedTeams = teams.filter((t) => t.status === 'DISQUALIFIED' || t.status === 'REJECTED')
+  const availableSupervisors = supervisors.filter(
+    (supervisor) =>
+      supervisor.isActive &&
+      supervisor.universityId === teamForm.universityId &&
+      supervisor._count.supervisedTeams < 10
+  )
 
   const columns = [
     {
@@ -315,11 +453,31 @@ export default function AdminTeamsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">All Teams</h1>
-        <p className="text-text-secondary">
-          {activeTeams.length} active, {pendingTeams.length} pending, {disqualifiedTeams.length} disqualified
-        </p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">All Teams</h1>
+          <p className="text-text-secondary">
+            {activeTeams.length} active, {pendingTeams.length} pending, {disqualifiedTeams.length} disqualified
+          </p>
+        </div>
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <Button asChild variant="outline">
+            <a href="/templates/team-import-template.xlsx" download>
+              <FileSpreadsheet className="mr-2 h-4 w-4" />
+              Download Template
+            </a>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href="/admin/teams/import">
+              <Upload className="mr-2 h-4 w-4" />
+              Bulk Import
+            </Link>
+          </Button>
+          <Button onClick={() => void openCreateDialog()}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Team
+          </Button>
+        </div>
       </div>
 
       {isAtRiskFilter && (
@@ -459,6 +617,151 @@ export default function AdminTeamsPage() {
         loading={actionLoading === reinstateTarget?.id}
         onConfirm={() => { if (reinstateTarget) executeReinstate(reinstateTarget) }}
       />
+
+      <Dialog
+        open={showCreateDialog}
+        onOpenChange={(open) => {
+          setShowCreateDialog(open)
+          if (!open) {
+            resetCreateForm()
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Team</DialogTitle>
+            <DialogDescription>
+              Create a draft team with season, university, team name, optional external ID, and supervisor.
+            </DialogDescription>
+          </DialogHeader>
+          {loadingCreateOptions ? (
+            <div className="flex items-center justify-center py-10">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            </div>
+          ) : (
+            <form onSubmit={handleCreateTeam} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="team-season">Season</Label>
+                <Select
+                  value={teamForm.seasonId}
+                  onValueChange={(value) => setTeamForm((current) => ({ ...current, seasonId: value }))}
+                  disabled={creatingTeam}
+                >
+                  <SelectTrigger id="team-season">
+                    <SelectValue placeholder="Select season..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {seasons.map((season) => (
+                      <SelectItem key={season.id} value={season.id}>
+                        {season.name} ({season.status})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="team-university">University</Label>
+                <Select
+                  value={teamForm.universityId}
+                  onValueChange={(value) =>
+                    setTeamForm((current) => ({
+                      ...current,
+                      universityId: value,
+                      supervisorId: '',
+                    }))
+                  }
+                  disabled={creatingTeam}
+                >
+                  <SelectTrigger id="team-university">
+                    <SelectValue placeholder="Select university..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {universities.map((university) => (
+                      <SelectItem key={university.id} value={university.id}>
+                        {university.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="team-name">Team Name</Label>
+                <Input
+                  id="team-name"
+                  value={teamForm.name}
+                  onChange={(event) =>
+                    setTeamForm((current) => ({ ...current, name: event.target.value }))
+                  }
+                  placeholder="Enter team name"
+                  disabled={creatingTeam}
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="team-external-id">External Team ID (optional)</Label>
+                <Input
+                  id="team-external-id"
+                  value={teamForm.externalTeamId}
+                  onChange={(event) =>
+                    setTeamForm((current) => ({ ...current, externalTeamId: event.target.value }))
+                  }
+                  placeholder="Optional external identifier"
+                  disabled={creatingTeam}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="team-supervisor">Supervisor</Label>
+                <Select
+                  value={teamForm.supervisorId}
+                  onValueChange={(value) => setTeamForm((current) => ({ ...current, supervisorId: value }))}
+                  disabled={creatingTeam || !teamForm.universityId}
+                >
+                  <SelectTrigger id="team-supervisor">
+                    <SelectValue placeholder={teamForm.universityId ? 'Select supervisor...' : 'Choose a university first'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableSupervisors.map((supervisor) => (
+                      <SelectItem key={supervisor.id} value={supervisor.id}>
+                        {supervisor.firstName} {supervisor.lastName} ({supervisor.email})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {teamForm.universityId && availableSupervisors.length === 0 ? (
+                  <p className="text-xs text-text-muted">
+                    No active supervisors under the team cap are available for this university.
+                  </p>
+                ) : null}
+              </div>
+
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowCreateDialog(false)}
+                  disabled={creatingTeam}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={creatingTeam || loadingCreateOptions}>
+                  {creatingTeam ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Creating...
+                    </>
+                  ) : (
+                    'Add Team'
+                  )}
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
