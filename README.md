@@ -1,94 +1,197 @@
 # RevME Forecaster Cup
 
-SaaS-style forecasting competition platform for hospitality revenue management, with role-based dashboards, scoring, and admin tools.
+> Production-grade SaaS forecasting competition platform 
+> serving 100+ teams across 29 universities worldwide in 
+> hospitality revenue management.
 
-## Features
-- Student, Supervisor, Admin, and Sub-admin roles with permissions
-- Season and round management (open/close), submissions, and scoring
-- Occupancy + ADR leaderboards and scoring verification
-- Support ticket flow (student → supervisor → admin escalation)
-- Audit logs and admin command center
+🔗 **Live Platform:** [https://staging.rev-me.org/](https://your-live-url.com)  
+📄 **Built by:** [Amarnath Goud Mammidipally](https://linkedin.com/in/amarnath240) · MS CS, University of Delaware
+
+---
+
+## What This Is
+
+RevME Forecaster Cup replaced entirely manual spreadsheet 
+and email workflows with a fully automated, role-based 
+competition platform for international hospitality 
+forecasting competitions. Teams submit weekly occupancy 
+and ADR forecasts across 3 markets, and the platform 
+handles scoring, leaderboards, warnings, and reporting 
+automatically.
+
+**Scale:**
+- 100+ competing teams · 29 universities worldwide
+- 7 rounds per season · 3 markets · 2 metrics (Occupancy + ADR)
+- 78 predictions per team per season
+- Full audit trail on every admin action
+
+---
 
 ## Tech Stack
-- Next.js (App Router), React, TypeScript
-- Prisma + PostgreSQL
-- Tailwind CSS, shadcn/ui, lucide-react
-- Vitest for tests
 
-## Prerequisites
-- Node.js 18+ (recommended 20+)
-- npm
-- Docker (for local Postgres)
+| Layer | Technology |
+|---|---|
+| Frontend | Next.js 14 (App Router), React, TypeScript, Tailwind CSS, shadcn/ui |
+| Backend | Next.js API Routes (serverless-style handlers) |
+| Database | PostgreSQL via Prisma ORM |
+| Auth | Custom session system, HTTP-only cookies, bcrypt, CSRF protection |
+| Testing | Vitest with DB reset, session mocking, fixtures |
+| Deployment | AWS EC2 + RDS PostgreSQL + Docker + CI/CD |
 
-## Environment
-Create a local env file:
+---
+
+## Key Features
+
+**Competition Management**
+- Season and round lifecycle (draft → active → completed)
+- Automated deadline enforcement and submission locking
+- Round-level actuals upload and idempotent scoring engine
+- MAPE/MAE-based prediction error computation with 
+  zero-actual edge case handling
+
+**Role-Based System**
+- Four roles: Student, Supervisor, Sub-Admin, Admin
+- Fine-grained permissions via `UserPermission` table
+- Tiered rate limiting (10/60/120 req/min) in middleware
+- CSRF protection on all state-changing endpoints
+
+**Scoring Engine**
+- Per-value absolute error (AE) and APE computation
+- Season and round-level MAPE aggregation
+- Auditable `ScoringRun` records with version tracking
+- Stale-score detection when actuals change
+
+**Admin Control Center**
+- Command center dashboard with real-time competition metrics
+- Actuals upload, scoring triggers, warnings automation
+- Team disqualification/reinstatement with audit logging
+- Support ticket escalation (Student → Supervisor → Admin)
+
+**Leaderboards & Reporting**
+- Occupancy and ADR leaderboards with rank tracking
+- Per-team score trends and round history
+- CSV export for submissions and audit logs
+- Email notifications via AWS SES
+
+---
+
+## Architecture
+Browser → Next.js App Router
+↓
+API Routes (68 endpoints)
+↓
+Prisma Client
+↓
+PostgreSQL (AWS RDS)
+
+**Auth flow:** HTTP-only `revme_session` cookie →
+`getSession()` → User + role → route handler
+
+**Scoring flow:** Admin triggers → `ScoringRun` created →
+submissions × actuals → `PredictionError` rows →
+`ScoreAggregate` upsert → leaderboard updated
+
+---
+
+## Local Setup
+
+### Option A — Node.js
 ```bash
-cp .env.example .env.local
-```
-Required values:
-- `DATABASE_URL`
-- `NEXT_PUBLIC_APP_URL`
-
-Optional (email):
-- `SMTP_*`
-- `DEMO_REQUEST_NOTIFY_EMAIL`
-
-Test env:
-```bash
-cp .env.test.example .env.test
-```
-If your local Docker volume already has older Postgres credentials, add a machine-local override in `.env.test.local`.
-
-## Local Dev (Node)
-```bash
+# 1. Install dependencies
 npm install
+
+# 2. Set environment variables
+cp .env.example .env.local
+# Set DATABASE_URL and NEXT_PUBLIC_APP_URL
+
+# 3. Run migrations
+npx prisma migrate dev
+
+# 4. Generate Prisma client
 npm run db:generate
+
+# 5. Start dev server
 npm run dev
 ```
-App runs at `http://localhost:5000`.
 
-## Local Dev (Docker Compose)
+App runs at `http://localhost:5000`
+
+### Option B — Docker Compose
 ```bash
 cp .env.docker.example .env.docker
 docker compose -f docker-compose.dev.yml up --build
 ```
-The app runs at `http://localhost:5000` and Postgres is provisioned via compose.
 
-## Database
-```bash
-npx prisma migrate dev
-```
+App + PostgreSQL provisioned at `http://localhost:5000`
+
+---
+
+## Environment Variables
+
+| Variable | Required | Purpose |
+|---|---|---|
+| `DATABASE_URL` | ✅ | PostgreSQL connection string |
+| `NEXT_PUBLIC_APP_URL` | ✅ | Base URL for the app |
+| `SMTP_*` | Optional | Email via AWS SES |
+| `DEMO_REQUEST_NOTIFY_EMAIL` | Optional | Demo request alerts |
+
+See `.env.example` for the full list.
+
+---
 
 ## Verification
 ```bash
-npm run lint
-npm run typecheck
-npm test
-npm run build
+npm run lint        # ESLint
+npm run typecheck   # TypeScript
+npm test            # Vitest
+npm run build       # Production build
 ```
 
-## Key Scripts
-- `npm run dev` – Next.js dev server
-- `npm run lint` – ESLint
-- `npm run typecheck` – TypeScript typecheck
-- `npm test` – Vitest
-- `npm run build` – Production build
-- `npm run db:generate` – Prisma client
-- `npm run db:studio` – Prisma Studio
+---
+
+## Database
+```bash
+npx prisma migrate dev      # Development migrations
+npx prisma migrate deploy   # Production migrations
+npx prisma migrate status   # Check migration state
+npm run db:studio           # Prisma Studio UI
+```
+
+⚠️ Never use `prisma db push` in staging or production.
+
+---
+
+## Deployment
+
+- Managed PostgreSQL recommended (AWS RDS)
+- Set all env vars in deployment environment
+- Run `npx prisma migrate deploy` on every deploy
+- Use `/api/health` for load balancer health checks
+- Start with `npm run build` + `npm run start`
+
+See `docs/AWS_MIGRATION.md` for full deployment guide.
+
+---
 
 ## Documentation
 
-- **Architecture**: see `docs/ARCHITECTURE.md` for a high-level overview of the system (frontend, backend, database, auth, scoring, and key modules).
-- **Admin & Operations Runbook**: see `docs/admin-runbook.md` for step-by-step guidance on running a season, weekly operations, support/escalations, and end-of-season workflows.
-- **Product Requirements**: see `docs/PRD_RevME_Forecaster_Cup.md` for detailed functional requirements, UX flows, and non-functional requirements.
-- **Staging Env Sheet**: see `docs/STAGING_ENV_SHEET.md` for the required staging variables, ownership, and value sources.
-- **Improvements Roadmap**: see `docs/IMPROVEMENTS.md` for a prioritized roadmap covering API normalization, UX fixes, test expansion, build hardening, and AWS deployment.
+| Doc | Purpose |
+|---|---|
+| `docs/ARCHITECTURE.md` | System architecture, auth, scoring, data model |
+| `docs/admin-runbook.md` | Season operations, weekly workflow, escalations |
+| `docs/PRD_RevME_Forecaster_Cup.md` | Full product requirements and UX flows |
+| `docs/IMPROVEMENTS.md` | Prioritized roadmap: API, UX, tests, deployment |
+| `docs/STAGING_ENV_SHEET.md` | Staging variables, ownership, value sources |
 
-## Deployment Notes (High Level)
-- Use a managed Postgres (e.g., RDS)
-- Set env vars in your deployment environment using a single canonical `NEXT_PUBLIC_APP_URL`
-- Verify migrations with `npx prisma migrate status` before deploy
-- Run `npx prisma migrate deploy` on deploy
-- Never use `prisma db push` in staging or production
-- Use `/api/health` for container or load balancer readiness checks
-- Start with `npm run build` + `npm run start`
+---
+
+## About
+
+Built as part of graduate research at the University of 
+Delaware to support the international RevME Forecaster Cup 
+competition in hospitality revenue management.
+
+**Amarnath Goud Mammidipally**  
+MS Computer Science · University of Delaware · GPA 3.74  
+[linkedin.com/in/amarnath240](https://linkedin.com/in/amarnath240) · 
+[github.com/Amar240](https://github.com/Amar240)
