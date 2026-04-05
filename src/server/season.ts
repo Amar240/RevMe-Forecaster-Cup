@@ -1,11 +1,37 @@
 import { prisma } from '@/server/db'
 import { canPerformAdminAction } from '@/server/permissions'
 import { ApiError } from '@/server/http'
-import type { User } from '@prisma/client'
+import type { Prisma, User } from '@prisma/client'
 import type { CreateSeasonInput } from '@/features/season/schema'
 
 const TOTAL_ROUNDS = 7
 const DAYS_PER_ROUND = 7
+
+type CurrentOperationalSeasonArgs = Omit<Prisma.SeasonFindFirstArgs, 'where' | 'orderBy'>
+
+export async function getCurrentOperationalSeason<T extends CurrentOperationalSeasonArgs>(
+  args?: Prisma.SelectSubset<T, CurrentOperationalSeasonArgs>
+): Promise<Prisma.SeasonGetPayload<T> | null> {
+  const baseArgs = (args ?? {}) as CurrentOperationalSeasonArgs
+
+  const activeSeason = await prisma.season.findFirst({
+    ...baseArgs,
+    where: { status: 'ACTIVE' },
+    orderBy: { createdAt: 'desc' },
+  })
+
+  if (activeSeason) {
+    return activeSeason as Prisma.SeasonGetPayload<T>
+  }
+
+  const pausedSeason = await prisma.season.findFirst({
+    ...baseArgs,
+    where: { status: 'PAUSED' },
+    orderBy: { createdAt: 'desc' },
+  })
+
+  return pausedSeason as Prisma.SeasonGetPayload<T> | null
+}
 
 export async function getSeasonOverview(user: User | null) {
   if (!user || (user.role !== 'ADMIN' && user.role !== 'SUB_ADMIN')) {

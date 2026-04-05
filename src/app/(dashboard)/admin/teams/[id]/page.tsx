@@ -193,12 +193,14 @@ export default function AdminTeamDetailPage() {
     setRecentActivity(data.recentActivity || [])
     setTeamName(data.team.name)
     setSelectedSupervisorId(data.team.supervisor?.id ?? '')
+    return data.team as TeamSummary
   }, [teamId])
 
-  const fetchTeamDirectory = useCallback(async () => {
+  const fetchTeamDirectory = useCallback(async (seasonId?: string) => {
     setTeamDirectoryLoading(true)
     try {
-      const res = await csrfFetch('/api/admin/teams')
+      const query = seasonId ? `?seasonId=${encodeURIComponent(seasonId)}` : ''
+      const res = await csrfFetch(`/api/admin/teams${query}`)
       const data = await res.json()
       if (!res.ok) {
         throw new Error(data.message || 'Failed to load teams')
@@ -209,6 +211,12 @@ export default function AdminTeamDetailPage() {
       setTeamDirectoryLoading(false)
     }
   }, [])
+
+  const refreshTeamAndDirectory = useCallback(async () => {
+    const nextTeam = await fetchTeam()
+    await fetchTeamDirectory(nextTeam.season?.id)
+    return nextTeam
+  }, [fetchTeam, fetchTeamDirectory])
 
   const fetchEligibleStudents = useCallback(
     async (query: string) => {
@@ -260,7 +268,7 @@ export default function AdminTeamDetailPage() {
     }
 
     setLoading(true)
-    void Promise.all([fetchTeam(), fetchTeamDirectory()])
+    void refreshTeamAndDirectory()
       .catch((error) => {
         clientLogger.error('Failed to load admin roster detail:', error)
         toast.error(error instanceof Error ? error.message : 'Failed to load team')
@@ -268,7 +276,7 @@ export default function AdminTeamDetailPage() {
       .finally(() => {
         setLoading(false)
       })
-  }, [fetchTeam, fetchTeamDirectory, hasRosterAccess, permLoading])
+  }, [hasRosterAccess, permLoading, refreshTeamAndDirectory])
 
   useEffect(() => {
     if (!team || blockedAssignmentStatuses.has(team.status) || team.members.length >= 5) {
@@ -392,7 +400,7 @@ export default function AdminTeamDetailPage() {
       setTeam(data.team)
       setTeamName(data.team.name)
       toast.success('Team name updated')
-      await fetchTeamDirectory()
+      await fetchTeamDirectory(data.team.season?.id)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to update team'
       setRosterError(message)
@@ -423,7 +431,7 @@ export default function AdminTeamDetailPage() {
       setTeam(data.team)
       setSelectedSupervisorId(data.team.supervisor?.id ?? '')
       toast.success('Supervisor updated')
-      await Promise.all([fetchTeam(), fetchTeamDirectory()])
+      await refreshTeamAndDirectory()
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to update supervisor'
       setRosterError(message)
@@ -454,7 +462,7 @@ export default function AdminTeamDetailPage() {
       setMemberSearch('')
       setSelectedStudentId('')
       toast.success('Member added to team')
-      await Promise.all([fetchTeam(), fetchTeamDirectory()])
+      await refreshTeamAndDirectory()
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to add member'
       setRosterError(message)
@@ -482,7 +490,7 @@ export default function AdminTeamDetailPage() {
       }
 
       toast.success('Submitter updated')
-      await Promise.all([fetchTeam(), fetchTeamDirectory()])
+      await refreshTeamAndDirectory()
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to update submitter'
       setRosterError(message)
@@ -518,7 +526,7 @@ export default function AdminTeamDetailPage() {
 
       toast.success('Member removed')
       setRemoveDialogOpen(false)
-      await Promise.all([fetchTeam(), fetchTeamDirectory()])
+      await refreshTeamAndDirectory()
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to remove member'
       setRosterError(message)
@@ -554,7 +562,7 @@ export default function AdminTeamDetailPage() {
       toast.success(selectedMemberIds.length > 1 ? 'Members moved' : 'Member moved')
       setSelectedMemberIds([])
       setMoveDialogOpen(false)
-      await Promise.all([fetchTeam(), fetchTeamDirectory()])
+      await refreshTeamAndDirectory()
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to move members'
       setRosterError(message)

@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/db'
 import { requireAdminOrResponse, jsonOk, jsonError } from '@/server/http'
+import { getCurrentOperationalSeason } from '@/server/season'
 
 export const dynamic = 'force-dynamic'
 
@@ -8,7 +9,13 @@ export async function GET() {
     const { response } = await requireAdminOrResponse()
     if (response) return response
 
+    const operationalSeason = await getCurrentOperationalSeason()
+    if (!operationalSeason) {
+      return jsonOk({ submissions: [], totalSubmissions: 0, scoredSubmissionsCount: 0, uniqueTeamsCount: 0 })
+    }
+
     const submissions = await prisma.submission.findMany({
+      where: { round: { seasonId: operationalSeason.id } },
       include: {
         team: true, round: true, submittedBy: true,
         values: { include: { market: true } },
@@ -16,13 +23,19 @@ export async function GET() {
       orderBy: [{ round: { number: 'desc' } }, { submittedAt: 'desc' }],
     })
 
-    const errors = await prisma.predictionError.findMany()
+    const errors = await prisma.predictionError.findMany({
+      where: { seasonId: operationalSeason.id },
+    })
     const errorMap = new Map<string, number>()
     for (const err of errors) {
       errorMap.set(`${err.teamId}-${err.roundId}-${err.marketId}-${err.metric}-${err.weekOffset}`, err.absError)
     }
 
-    const scoredPairs = await prisma.predictionError.findMany({ select: { teamId: true, roundId: true }, distinct: ['teamId', 'roundId'] })
+    const scoredPairs = await prisma.predictionError.findMany({
+      where: { seasonId: operationalSeason.id },
+      select: { teamId: true, roundId: true },
+      distinct: ['teamId', 'roundId'],
+    })
     const scoredKeySet = new Set(scoredPairs.map((p) => `${p.teamId}-${p.roundId}`))
     const scoredSubmissionsCount = submissions.filter((s) => scoredKeySet.has(`${s.teamId}-${s.roundId}`)).length
     const uniqueTeamsCount = new Set(submissions.map((s) => s.teamId)).size

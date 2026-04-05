@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { AlertTriangle, Zap } from 'lucide-react'
+import { AlertTriangle, Send, Zap } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -10,107 +10,88 @@ import type { DashboardData } from './command-center-types'
 export interface OperationalQueuesProps {
   submissionProgress: DashboardData['submissionProgress']
   meta: DashboardData['meta']
-  stats: DashboardData['stats']
+}
+
+function QueueRow({
+  icon: Icon,
+  title,
+  description,
+  count,
+  tone,
+  href,
+  actionLabel,
+}: {
+  icon: React.ElementType
+  title: string
+  description: string
+  count: number
+  tone: 'neutral' | 'info' | 'warning'
+  href: string
+  actionLabel: string
+}) {
+  return (
+    <div className="rounded-xl border border-border bg-surface-secondary px-4 py-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="space-y-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <Icon className="h-4 w-4 text-text-secondary" />
+            <p className="font-medium text-foreground">{title}</p>
+            <Badge variant={tone}>{count}</Badge>
+          </div>
+          <p className="text-sm leading-6 text-text-secondary">{description}</p>
+        </div>
+        <Button size="sm" variant="outline" asChild>
+          <Link href={href}>{actionLabel}</Link>
+        </Button>
+      </div>
+    </div>
+  )
 }
 
 export function OperationalQueues({
   submissionProgress,
   meta,
-  stats,
 }: OperationalQueuesProps) {
+  const pendingApprovals = meta.pendingTeamApprovals ?? 0
+
   return (
-    <div className="grid gap-6 lg:grid-cols-2">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-xl font-semibold">
-            <Zap className="h-5 w-5 text-accent" />
-            Operational Queues
-          </CardTitle>
-          <CardDescription>Items that need attention right now.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <details open className="rounded-xl border border-border bg-surface-secondary p-4">
-            <summary className="flex cursor-pointer items-center justify-between gap-3">
-              <div className="font-semibold text-foreground">
-                Pending Submissions ({submissionProgress.pending})
-              </div>
-              <Badge variant="info">{submissionProgress.pending} pending</Badge>
-            </summary>
-            <div className="mt-2 text-sm text-text-secondary">
-              View the submissions list for full team-level details.
-            </div>
-            <div className="mt-3">
-              <Button size="sm" variant="outline" asChild>
-                <Link href="/admin/submissions">View submissions</Link>
-              </Button>
-            </div>
-          </details>
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-xl font-semibold">
+          <Zap className="h-5 w-5 text-accent" />
+          Operational Queues
+        </CardTitle>
+        <CardDescription>Queues that still need a human decision or follow-up.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <QueueRow
+          icon={Send}
+          title="Pending submissions"
+          description={
+            submissionProgress.pending > 0
+              ? `${submissionProgress.pending} teams still have not submitted this round.`
+              : 'No teams are currently missing submissions.'
+          }
+          count={submissionProgress.pending}
+          tone={submissionProgress.pending > 0 ? 'warning' : 'info'}
+          href="/admin/submissions"
+          actionLabel="View submissions"
+        />
 
-          <details open className="rounded-xl border border-border bg-surface-secondary p-4">
-            <summary className="flex cursor-pointer items-center justify-between gap-3">
-              <div className="font-semibold text-foreground">
-                Team Approvals ({meta.pendingTeamApprovals ?? 0})
-              </div>
-              <Badge
-                variant={meta.pendingTeamApprovals && meta.pendingTeamApprovals > 0 ? 'warning' : 'neutral'}
-              >
-                {meta.pendingTeamApprovals ?? 0}
-              </Badge>
-            </summary>
-            <div className="mt-2 text-sm text-text-secondary">
-              Open Team Approvals to review pending requests.
-            </div>
-            <div className="mt-3">
-              <Button size="sm" variant="outline" asChild>
-                <Link href="/admin/team-approvals">Review teams</Link>
-              </Button>
-            </div>
-          </details>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-xl font-semibold">
-            <AlertTriangle className="h-5 w-5 text-warning" />
-            Disqualification Risk
-          </CardTitle>
-          <CardDescription>Warnings and disqualification thresholds.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-3 gap-3 text-sm">
-            <div className="rounded-xl border border-warning/20 bg-warning-background/60 p-3">
-              <div className="text-xs text-text-muted">1 Warning</div>
-              <div className="text-lg font-semibold text-foreground tabular-nums">
-                {stats.oneWarningTeams}
-              </div>
-            </div>
-            <div className="rounded-xl border border-warning/30 bg-warning-background/80 p-3">
-              <div className="text-xs text-text-muted">2 Warnings</div>
-              <div className="text-lg font-semibold text-foreground tabular-nums">
-                {stats.twoWarningTeams}
-              </div>
-            </div>
-            <div className="rounded-xl border border-error/20 bg-error-background/60 p-3">
-              <div className="text-xs text-text-muted">DQ (3+)</div>
-              <div className="text-lg font-semibold text-foreground tabular-nums">
-                {stats.disqualifiedTeams}
-              </div>
-            </div>
-          </div>
-          <div className="mt-3 text-sm text-text-secondary">
-            Total warnings issued:{' '}
-            <span className="font-semibold tabular-nums text-foreground">
-              {stats.totalWarnings}
-            </span>
-          </div>
-          <div className="mt-4">
-            <Button size="sm" variant="outline" asChild>
-              <Link href="/admin/teams?risk=at-risk">View at-risk teams</Link>
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+        <QueueRow
+          icon={AlertTriangle}
+          title="Team approvals"
+          description={
+            pendingApprovals > 0
+              ? `${pendingApprovals} team approvals are waiting for review.`
+              : 'No team approvals are waiting right now.'
+          }
+          count={pendingApprovals}
+          tone={pendingApprovals > 0 ? 'warning' : 'neutral'}
+          href="/admin/team-approvals"
+          actionLabel="Review teams"
+        />
+      </CardContent>
+    </Card>
   )
 }

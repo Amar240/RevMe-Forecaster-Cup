@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireUserOrResponse, jsonOk, jsonError, parseJson } from '@/server/http'
+import { getCurrentOperationalSeason } from '@/server/season'
 import { z } from 'zod'
 
 export const dynamic = 'force-dynamic'
@@ -15,11 +16,26 @@ export async function GET() {
     const { user, response } = await requireUserOrResponse()
     if (response) return response
 
+    const operationalSeason = await getCurrentOperationalSeason()
+    if (!operationalSeason) {
+      const fullUser = await prisma.user.findUnique({
+        where: { id: user!.id },
+        include: {
+          university: true,
+        },
+      })
+
+      return jsonOk({
+        user: fullUser ? { ...fullUser, teamMemberships: [] } : null,
+      })
+    }
+
     const fullUser = await prisma.user.findUnique({
       where: { id: user!.id },
       include: {
         university: true,
         teamMemberships: {
+          where: { team: { seasonId: operationalSeason.id } },
           include: {
             team: {
               include: { supervisor: true },

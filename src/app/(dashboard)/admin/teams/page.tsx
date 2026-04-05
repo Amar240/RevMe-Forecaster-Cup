@@ -54,6 +54,18 @@ interface Team {
   _count: { submissions: number; warnings: number }
 }
 
+interface TeamSummaryCounts {
+  activeTeams: number
+  pendingTeams: number
+  disqualifiedTeams: number
+}
+
+interface ResolvedSeason {
+  id: string
+  name: string
+  status: string
+}
+
 interface SeasonOption {
   id: string
   name: string
@@ -91,6 +103,12 @@ export default function AdminTeamsPage() {
   const [loading, setLoading] = useState(true)
   const [teams, setTeams] = useState<Team[]>([])
   const [totalTeams, setTotalTeams] = useState(0)
+  const [summary, setSummary] = useState<TeamSummaryCounts>({
+    activeTeams: 0,
+    pendingTeams: 0,
+    disqualifiedTeams: 0,
+  })
+  const [resolvedSeason, setResolvedSeason] = useState<ResolvedSeason | null>(null)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null)
   const [disqualifyReason, setDisqualifyReason] = useState('')
@@ -118,6 +136,12 @@ export default function AdminTeamsPage() {
         const data = await res.json()
         setTeams(data.teams || [])
         setTotalTeams(data.totalTeams ?? data.teams?.length ?? 0)
+        setSummary({
+          activeTeams: data.summary?.activeTeams ?? 0,
+          pendingTeams: data.summary?.pendingTeams ?? 0,
+          disqualifiedTeams: data.summary?.disqualifiedTeams ?? 0,
+        })
+        setResolvedSeason(data.season ?? null)
       }
     } catch (error) {
       clientLogger.error('Failed to fetch teams:', error)
@@ -318,9 +342,6 @@ export default function AdminTeamsPage() {
   const riskFilter = searchParams.get('risk')
   const isAtRiskFilter = riskFilter === 'at-risk'
   const visibleTeams = isAtRiskFilter ? teams.filter((team) => team._count.warnings > 0) : teams
-  const activeTeams = teams.filter((t) => t.status === 'ACTIVE')
-  const pendingTeams = teams.filter((t) => t.status === 'PENDING_APPROVAL' || t.status === 'APPROVED' || t.status === 'DRAFT')
-  const disqualifiedTeams = teams.filter((t) => t.status === 'DISQUALIFIED' || t.status === 'REJECTED')
   const availableSupervisors = supervisors.filter(
     (supervisor) =>
       supervisor.isActive &&
@@ -455,9 +476,11 @@ export default function AdminTeamsPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">All Teams</h1>
+          <h1 className="text-2xl font-bold text-foreground">Teams</h1>
           <p className="text-text-secondary">
-            {activeTeams.length} active, {pendingTeams.length} pending, {disqualifiedTeams.length} disqualified
+            {resolvedSeason
+              ? `${resolvedSeason.name} (${resolvedSeason.status}) · ${summary.activeTeams} active, ${summary.pendingTeams} pending, ${summary.disqualifiedTeams} disqualified`
+              : 'No active or paused season available'}
           </p>
         </div>
         <div className="flex flex-col gap-3 sm:flex-row">
@@ -508,7 +531,7 @@ export default function AdminTeamsPage() {
             <CardTitle className="text-sm font-medium text-text-secondary">Active</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold text-success">{activeTeams.length}</p>
+            <p className="text-3xl font-bold text-success">{summary.activeTeams}</p>
           </CardContent>
         </Card>
         <Card variant="metric" className="border-warning/20 bg-warning-background/60">
@@ -516,7 +539,7 @@ export default function AdminTeamsPage() {
             <CardTitle className="text-sm font-medium text-text-secondary">Pending</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold text-warning">{pendingTeams.length}</p>
+            <p className="text-3xl font-bold text-warning">{summary.pendingTeams}</p>
           </CardContent>
         </Card>
         <Card variant="metric" className="border-error/20 bg-error-background/60">
@@ -524,7 +547,7 @@ export default function AdminTeamsPage() {
             <CardTitle className="text-sm font-medium text-text-secondary">Disqualified</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold text-error">{disqualifiedTeams.length}</p>
+            <p className="text-3xl font-bold text-error">{summary.disqualifiedTeams}</p>
           </CardContent>
         </Card>
       </div>

@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, FileSpreadsheet, Loader2, Upload } from 'lucide-react'
+import { ArrowLeft, Copy, FileSpreadsheet, Loader2, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import type {
   TeamImportConfirmResult,
@@ -23,6 +23,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { PageLoader } from '@/components/ui/page-loader'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { CopyFromSeasonModal } from '@/components/admin/copy-from-season-modal'
 
 interface ImportSeasonOption {
   id: string
@@ -82,7 +83,9 @@ export default function AdminTeamsImportPage() {
   const [previewLoading, setPreviewLoading] = useState(false)
   const [confirmLoading, setConfirmLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
+  const [copyModalOpen, setCopyModalOpen] = useState(false)
   const hasRosterAccess = isAdmin || hasFullAccess
+  const selectedSeason = seasons.find((season) => season.id === selectedSeasonId) ?? null
 
   const fetchOptions = useCallback(async () => {
     try {
@@ -342,12 +345,23 @@ export default function AdminTeamsImportPage() {
             Upload a season-specific team roster, review validation results, and confirm the import.
           </p>
         </div>
-        <Button asChild variant="outline">
-          <a href="/templates/team-import-template.xlsx" download>
-            <FileSpreadsheet className="mr-2 h-4 w-4" />
-            Download Template
-          </a>
-        </Button>
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setCopyModalOpen(true)}
+            disabled={!selectedSeasonId}
+          >
+            <Copy className="mr-2 h-4 w-4" />
+            Copy Teams from Previous Season
+          </Button>
+          <Button asChild variant="outline">
+            <a href="/templates/team-import-template.xlsx" download>
+              <FileSpreadsheet className="mr-2 h-4 w-4" />
+              Download Template
+            </a>
+          </Button>
+        </div>
       </div>
 
       <Card>
@@ -577,6 +591,19 @@ export default function AdminTeamsImportPage() {
           </Card>
         </>
       )}
+
+      <CopyFromSeasonModal
+        open={copyModalOpen}
+        onOpenChange={setCopyModalOpen}
+        targetSeasonId={selectedSeasonId}
+        targetSeasonName={selectedSeason?.name ?? ''}
+        onSuccess={() => {
+          setPreview(null)
+          setResult(null)
+          setErrorMessage('')
+          void fetchOptions()
+        }}
+      />
     </div>
   )
 }

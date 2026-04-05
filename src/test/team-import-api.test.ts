@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { NextRequest } from 'next/server'
 import { prisma } from './db'
 import { loginAs } from './auth'
+import { makeRequest } from './http'
 import {
   addTeamMember,
   createSeasonWithRounds,
@@ -206,7 +207,7 @@ describe('team import API', () => {
     expect(data.summary.skippedRows).toBe(1)
     expect(data.rows.find((row: { teamExternalId: string }) => row.teamExternalId === 'api-302')?.reason).toContain('already assigned')
 
-    const teamsRes = await getAdminTeams()
+    const teamsRes = await getAdminTeams(makeRequest('http://localhost/api/admin/teams'))
     const teamsData = await teamsRes.json()
     const importedTeam = teamsData.teams.find((team: { externalTeamId?: string | null }) => team.externalTeamId === 'api-301')
 

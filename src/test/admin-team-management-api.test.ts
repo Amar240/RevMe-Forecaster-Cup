@@ -254,7 +254,7 @@ describe('Admin team management APIs', () => {
     })
 
     await loginAs(admin.id)
-    const res = await getAdminTeams()
+    const res = await getAdminTeams(makeRequest(`http://localhost/api/admin/teams?seasonId=${season.id}`))
     const data = await res.json()
 
     expect(res.status).toBe(200)

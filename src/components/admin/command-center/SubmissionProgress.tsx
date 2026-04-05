@@ -1,130 +1,112 @@
+import { Activity, Clock3, Radar, Timer } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent } from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import type { DashboardData } from './command-center-types'
+import type { CommandCenterDisplay } from './command-center-display'
+import { RoundLifecycle } from './RoundLifecycle'
+import { SubmissionTracker } from './SubmissionTracker'
 
 export interface SubmissionProgressProps {
-  stats: Pick<DashboardData['stats'], 'totalSubmissions' | 'totalWarnings' | 'scoredSubmissions' | 'activeTeams'>
-  meta: Pick<DashboardData['meta'], 'expectedErrors'>
-  submissionProgress: DashboardData['submissionProgress']
+  data: DashboardData
+  display: CommandCenterDisplay
 }
 
-function ProgressBar({
+function SummaryStat({
+  icon: Icon,
+  label,
   value,
-  tone,
 }: {
-  value: number
-  tone: 'primary' | 'warning' | 'error' | 'success'
+  icon: React.ElementType
+  label: string
+  value: string
 }) {
-  const toneClass =
-    tone === 'primary'
-      ? 'bg-primary'
-      : tone === 'warning'
-        ? 'bg-warning'
-        : tone === 'error'
-          ? 'bg-error'
-          : 'bg-success'
-
   return (
-    <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-surface-secondary">
-      <div className={`h-full ${toneClass}`} style={{ width: `${Math.min(100, value)}%` }} />
+    <div className="rounded-xl border border-border bg-surface-secondary px-4 py-4">
+      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-text-muted">
+        <Icon className="h-4 w-4" />
+        {label}
+      </div>
+      <div className="mt-2 text-base font-semibold text-foreground">{value}</div>
     </div>
   )
 }
 
-export function SubmissionProgress({ stats, meta, submissionProgress }: SubmissionProgressProps) {
-  const submissionPercent =
-    submissionProgress.total > 0
-      ? Math.round((submissionProgress.submitted / submissionProgress.total) * 100)
-      : 0
-
-  const warningPercent = Math.round(
-    (stats.totalWarnings / ((stats.activeTeams * 3) || 1)) * 100,
-  )
-  const warningTone: 'warning' | 'error' = warningPercent > 50 ? 'error' : 'warning'
-
-  const scoringPercent =
-    meta.expectedErrors
-      ? Math.round((stats.scoredSubmissions / meta.expectedErrors) * 100)
-      : 0
-
+export function SubmissionProgress({ data, display }: SubmissionProgressProps) {
   return (
-    <div className="grid gap-6 md:grid-cols-3">
-      <Card variant="metric">
-        <CardContent className="p-5">
-          <div className="flex items-center justify-between">
-            <div
-              className="text-sm font-medium text-text-secondary"
-              title="% of active teams that have submitted this round"
-            >
-              Submissions
+    <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+      <Card>
+        <CardHeader>
+          <CardTitle>Submission Progress</CardTitle>
+          <CardDescription>
+            Current-round coverage first, with the live tracker kept as secondary detail.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <div className="rounded-2xl border border-primary/15 bg-primary-soft/70 p-5">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant={display.roundBadge.tone}>{display.roundBadge.label}</Badge>
+                  <span className="text-sm font-medium text-text-secondary">
+                    {display.roundLabel}
+                  </span>
+                </div>
+                <h3 className="text-2xl font-semibold tracking-tight text-foreground">
+                  {display.submissionSummary}
+                </h3>
+                <p className="text-sm leading-6 text-text-secondary">
+                  {display.deadlineLabel}
+                  {display.countdownLabel ? ` · ${display.countdownLabel}` : ''}
+                </p>
+              </div>
+
+              <div className="text-left lg:text-right">
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-text-muted">
+                  Current submission rate
+                </div>
+                <div className="mt-2 text-3xl font-semibold tabular-nums text-foreground">
+                  {display.submissionPercent}%
+                </div>
+              </div>
             </div>
-            <Badge variant="info">Live</Badge>
+
+            <div className="mt-4 h-2.5 w-full overflow-hidden rounded-full bg-card">
+              <div
+                className="h-full rounded-full bg-primary transition-all duration-500"
+                style={{ width: `${display.submissionPercent}%` }}
+              />
+            </div>
           </div>
-          <div className="mt-3 text-2xl font-semibold tabular-nums text-foreground">
-            {submissionProgress.submitted} / {submissionProgress.total}
+
+          <div className="grid gap-3 md:grid-cols-3">
+            <SummaryStat
+              icon={Activity}
+              label="Submitted"
+              value={`${data.submissionProgress.submitted} of ${data.submissionProgress.total}`}
+            />
+            <SummaryStat
+              icon={Timer}
+              label="Pending"
+              value={`${data.submissionProgress.pending} teams`}
+            />
+            <SummaryStat
+              icon={Clock3}
+              label="Scoring Status"
+              value={display.scoringStatus}
+            />
           </div>
-          <ProgressBar value={submissionPercent} tone="primary" />
+
+          <div className="rounded-2xl border border-border bg-card p-5">
+            <div className="mb-4 flex items-center gap-2">
+              <Radar className="h-4 w-4 text-primary" />
+              <p className="text-sm font-semibold text-foreground">Live tracker detail</p>
+            </div>
+            <SubmissionTracker compact />
+          </div>
         </CardContent>
       </Card>
 
-      <Card variant="metric">
-        <CardContent className="p-5">
-          <div className="flex items-center justify-between">
-            <div
-              className="text-sm font-medium text-text-secondary"
-              title="% of max possible warnings before all teams are DQ'd"
-            >
-              Warnings
-            </div>
-            <Badge variant="warning">Live</Badge>
-          </div>
-          <div className="mt-3 text-2xl font-semibold tabular-nums text-foreground">
-            {stats.totalWarnings}
-          </div>
-          <ProgressBar value={warningPercent} tone={warningTone} />
-        </CardContent>
-      </Card>
-
-      <Card variant="metric">
-        <CardContent className="p-5">
-          <div className="flex items-center justify-between">
-            <div
-              className="text-sm font-medium text-text-secondary"
-              title="% of expected prediction errors that have been scored"
-            >
-              Scoring integrity
-            </div>
-            <Badge variant="success">Live</Badge>
-          </div>
-          <div className="mt-4 space-y-2 text-sm text-text-secondary">
-            <div className="flex items-center justify-between">
-              <span title="Processed errors = scored submissions available for scoring.">
-                Processed Errors
-              </span>
-              <span className="font-semibold tabular-nums text-foreground">
-                {stats.scoredSubmissions}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span title={meta.expectedErrors === null ? 'Data not available' : undefined}>
-                Expected Errors
-              </span>
-              <span
-                className={`font-semibold tabular-nums ${meta.expectedErrors === null ? 'text-text-muted' : 'text-foreground'}`}
-              >
-                {meta.expectedErrors === null ? 'Not set' : meta.expectedErrors}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span>Teams Submitted</span>
-              <span className="font-semibold text-foreground">
-                {submissionProgress.submitted} / {submissionProgress.total}
-              </span>
-            </div>
-          </div>
-          <ProgressBar value={scoringPercent} tone="success" />
-        </CardContent>
-      </Card>
+      <RoundLifecycle rounds={data.rounds} />
     </div>
   )
 }

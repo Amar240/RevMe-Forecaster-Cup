@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireUserOrResponse, jsonError } from '@/server/http'
+import { getCurrentOperationalSeason } from '@/server/season'
 
 export const dynamic = 'force-dynamic'
 
@@ -9,8 +10,13 @@ export async function GET() {
     const { user, response } = await requireUserOrResponse()
     if (response) return response
 
+    const operationalSeason = await getCurrentOperationalSeason()
+    if (!operationalSeason) {
+      return new NextResponse('No current season found', { status: 404 })
+    }
+
     const teamMember = await prisma.teamMember.findFirst({
-      where: { userId: user!.id },
+      where: { userId: user!.id, team: { seasonId: operationalSeason.id } },
       include: { team: true },
     })
 
@@ -19,12 +25,17 @@ export async function GET() {
     }
 
     const submissions = await prisma.submission.findMany({
-      where: { teamId: teamMember.teamId },
+      where: {
+        teamId: teamMember.teamId,
+        round: { seasonId: operationalSeason.id },
+      },
       include: { round: true, values: { include: { market: true } } },
       orderBy: [{ round: { number: 'asc' } }],
     })
 
-    const errors = await prisma.predictionError.findMany({ where: { teamId: teamMember.teamId } })
+    const errors = await prisma.predictionError.findMany({
+      where: { teamId: teamMember.teamId, seasonId: operationalSeason.id },
+    })
     const errorMap = new Map<string, number>()
     for (const err of errors) {
       errorMap.set(`${err.roundId}-${err.marketId}-${err.metric}-${err.weekOffset}`, err.absError)

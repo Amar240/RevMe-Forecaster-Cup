@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { requireAdminOrResponse, jsonOk, jsonError, parseJson } from '@/server/http'
 import { z } from 'zod'
 import { createAdminTeam } from '@/server/team-management'
+import { getAdminTeamScope, getSeasonTeamWhere } from '@/server/team-scope'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,12 +15,25 @@ const createAdminTeamSchema = z.object({
   supervisorId: z.string().min(1),
 })
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const { response } = await requireAdminOrResponse()
     if (response) return response
 
+    const seasonId = request?.nextUrl.searchParams.get('seasonId')
+    const scope = await getAdminTeamScope({ seasonId })
+
+    if (!scope.season) {
+      return jsonOk({
+        teams: [],
+        totalTeams: 0,
+        summary: scope.summary,
+        season: null,
+      })
+    }
+
     const teams = await prisma.team.findMany({
+      where: getSeasonTeamWhere(scope.season.id),
       include: {
         season: true,
         university: true,
@@ -30,7 +44,12 @@ export async function GET() {
       orderBy: { createdAt: 'desc' },
     })
 
-    return jsonOk({ teams, totalTeams: teams.length })
+    return jsonOk({
+      teams,
+      totalTeams: scope.totalTeams,
+      summary: scope.summary,
+      season: scope.season,
+    })
   } catch (error) {
     return jsonError(error, 'Failed to get teams')
   }

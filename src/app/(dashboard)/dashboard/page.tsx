@@ -6,20 +6,20 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { CountdownTimer } from '@/components/countdown-timer'
 import { AdminCommandCenter } from '@/components/admin/AdminCommandCenter'
+import { getCurrentOperationalSeason } from '@/server/season'
 
 export default async function DashboardPage() {
   const user = await getSession()
   if (!user) return null
 
-  const activeSeason = await prisma.season.findFirst({
-    where: { status: 'ACTIVE' },
+  const operationalSeason = await getCurrentOperationalSeason({
     include: {
       rounds: { orderBy: { number: 'asc' } },
       markets: { where: { isActive: true }, include: { market: true } },
     },
   })
 
-  const currentRound = activeSeason?.rounds.find(
+  const currentRound = operationalSeason?.rounds.find(
     (r) => {
       const now = new Date()
       const isTimeOpen = new Date(r.closesAt) > now && new Date(r.opensAt) <= now
@@ -30,7 +30,9 @@ export default async function DashboardPage() {
   )
 
   const stats = {
-    totalTeams: await prisma.team.count({ where: { status: 'ACTIVE' } }),
+    totalTeams: operationalSeason
+      ? await prisma.team.count({ where: { status: 'ACTIVE', seasonId: operationalSeason.id } })
+      : 0,
     totalSubmissions: currentRound
       ? await prisma.submission.count({ where: { roundId: currentRound.id } })
       : 0,
@@ -42,13 +44,15 @@ export default async function DashboardPage() {
   }
 
   if (user.role === 'SUPERVISOR') {
-    const supervisorTeams = await prisma.team.findMany({
-      where: { supervisorId: user.id },
-      include: {
-        members: { include: { user: true } },
-        _count: { select: { submissions: true, warnings: true } },
-      },
-    })
+    const supervisorTeams = operationalSeason
+      ? await prisma.team.findMany({
+          where: { supervisorId: user.id, seasonId: operationalSeason.id },
+          include: {
+            members: { include: { user: true } },
+            _count: { select: { submissions: true, warnings: true } },
+          },
+        })
+      : []
 
     return (
       <div className="space-y-8">
@@ -146,22 +150,25 @@ export default async function DashboardPage() {
     )
   }
 
-  const studentTeam = await prisma.teamMember.findFirst({
-    where: { userId: user.id },
-    include: {
-      team: {
+  const studentTeam = operationalSeason
+    ? await prisma.teamMember.findFirst({
+        where: { userId: user.id, team: { seasonId: operationalSeason.id } },
         include: {
-          members: { include: { user: true } },
-          submissions: { 
-            orderBy: { submittedAt: 'desc' }, 
-            take: 5,
-            include: { round: true, values: true }
+          team: {
+            include: {
+              members: { include: { user: true } },
+              submissions: {
+                where: { round: { seasonId: operationalSeason.id } },
+                orderBy: { submittedAt: 'desc' },
+                take: 5,
+                include: { round: true, values: true },
+              },
+              warnings: { include: { round: true } },
+            },
           },
-          warnings: { include: { round: true } },
         },
-      },
-    },
-  })
+      })
+    : null
 
   const hasSubmittedThisRound = currentRound && studentTeam
     ? await prisma.submission.count({
@@ -208,10 +215,10 @@ export default async function DashboardPage() {
             {studentTeam ? `Team: ${studentTeam.team.name}` : 'Not assigned to a team yet'}
           </p>
         </div>
-        {activeSeason && (
+        {operationalSeason && (
           <div className="hidden items-center space-x-2 text-sm text-text-secondary md:flex">
             <Calendar className="h-4 w-4" />
-            <span>{activeSeason.name}</span>
+            <span>{operationalSeason.name}</span>
           </div>
         )}
       </div>

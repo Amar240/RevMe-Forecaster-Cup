@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/server/db'
 import { logger } from '@/server/logger'
 import { requireUserOrResponse, jsonError } from '@/server/http'
+import { getCurrentOperationalSeason } from '@/server/season'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,8 +13,13 @@ export async function GET() {
     if (response) return response
     const authUser = user!
 
+    const operationalSeason = await getCurrentOperationalSeason()
+    if (!operationalSeason) {
+      return NextResponse.json({ submissions: [] })
+    }
+
     const teamMember = await prisma.teamMember.findFirst({
-      where: { userId: authUser.id },
+      where: { userId: authUser.id, team: { seasonId: operationalSeason.id } },
     })
 
     if (!teamMember) {
@@ -21,7 +27,10 @@ export async function GET() {
     }
 
     const submissions = await prisma.submission.findMany({
-      where: { teamId: teamMember.teamId },
+      where: {
+        teamId: teamMember.teamId,
+        round: { seasonId: operationalSeason.id },
+      },
       include: {
         round: true,
         values: {
@@ -32,7 +41,7 @@ export async function GET() {
     })
 
     const errors = await prisma.predictionError.findMany({
-      where: { teamId: teamMember.teamId },
+      where: { teamId: teamMember.teamId, seasonId: operationalSeason.id },
     })
 
     const errorMap = new Map<string, { absError: number; apeError: number | null }>()
@@ -91,4 +100,3 @@ export async function GET() {
     return jsonError(error, 'Failed to get submissions')
   }
 }
-

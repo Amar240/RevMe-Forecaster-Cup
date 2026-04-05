@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import {
   CheckCircle2,
@@ -101,14 +102,14 @@ function TrackerTable({
                 {showSupervisor && (
                   <td className="px-4 py-2 text-text-secondary">
                     {team.supervisor}
-                    {team.supervisorEmail && (
+                    {team.supervisorEmail ? (
                       <a
                         href={`mailto:${team.supervisorEmail}`}
                         className="ml-2 text-xs text-primary hover:text-primary-hover hover:underline"
                       >
                         {team.supervisorEmail}
                       </a>
-                    )}
+                    ) : null}
                   </td>
                 )}
                 {showSubmittedAt && (
@@ -145,7 +146,179 @@ function TrackerTable({
   )
 }
 
-export function SubmissionTracker() {
+function TrackerBody({
+  data,
+  countdown,
+  compact,
+  reminderSent,
+  sendingReminder,
+  showSubmitted,
+  setShowSubmitted,
+  onSendReminder,
+  onRefresh,
+  loading,
+}: {
+  data: TrackerData
+  countdown: { hours: number; minutes: number; passed: boolean } | null
+  compact: boolean
+  reminderSent: boolean
+  sendingReminder: boolean
+  showSubmitted: boolean
+  setShowSubmitted: React.Dispatch<React.SetStateAction<boolean>>
+  onSendReminder: () => Promise<void>
+  onRefresh: () => Promise<void>
+  loading: boolean
+}) {
+  const { summary, teams } = data
+  const progressPercent =
+    summary.total > 0 ? Math.round((summary.submitted / summary.total) * 100) : 0
+  const deadlinePassed = countdown?.passed ?? false
+
+  const sortedTeams = [...teams].sort((a, b) => {
+    if (a.hasSubmitted === b.hasSubmitted) return a.name.localeCompare(b.name)
+    return a.hasSubmitted ? 1 : -1
+  })
+  const missingTeams = sortedTeams.filter((team) => !team.hasSubmitted)
+  const submittedTeams = sortedTeams.filter((team) => team.hasSubmitted)
+  const visibleMissingTeams = compact ? missingTeams.slice(0, 6) : missingTeams
+  const visibleSubmittedTeams = compact ? submittedTeams.slice(0, 6) : submittedTeams
+
+  return (
+    <div className="space-y-5">
+      <div
+        className={`rounded-xl border p-4 ${
+          deadlinePassed
+            ? 'border-error/20 bg-error-background/60'
+            : 'border-primary/15 bg-primary-soft/70'
+        }`}
+      >
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className={`text-sm font-medium ${deadlinePassed ? 'text-error' : 'text-primary'}`}>
+              {deadlinePassed ? 'Deadline Passed' : 'Time Remaining'}
+            </div>
+            <div className="text-2xl font-bold tabular-nums text-foreground">
+              {deadlinePassed
+                ? 'Deadline passed'
+                : `${countdown?.hours ?? 0}h ${countdown?.minutes ?? 0}m left`}
+            </div>
+            <div className="mt-1 text-xs text-text-muted">
+              Deadline:{' '}
+              {new Date(data.round!.closesAt).toLocaleString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit',
+                timeZoneName: 'short',
+              })}
+            </div>
+          </div>
+          <div className="text-right">
+            <div className="text-sm font-medium text-text-secondary">
+              {summary.submitted} of {summary.total} teams submitted
+            </div>
+            <div className="text-3xl font-bold tabular-nums text-foreground">
+              {progressPercent}%
+            </div>
+          </div>
+        </div>
+        <div className="mt-3 h-3 w-full overflow-hidden rounded-full bg-surface-secondary">
+          <div
+            className={`h-full rounded-full transition-all duration-500 ${
+              deadlinePassed ? 'bg-error' : 'bg-primary'
+            }`}
+            style={{ width: `${progressPercent}%` }}
+          />
+        </div>
+      </div>
+
+      {missingTeams.length > 0 ? (
+        <div className="space-y-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 className="flex items-center text-sm font-semibold text-error">
+                <XCircle className="mr-2 h-4 w-4" />
+                Missing Submissions ({summary.missing})
+              </h3>
+              {compact && missingTeams.length > visibleMissingTeams.length ? (
+                <p className="mt-1 text-xs text-text-muted">
+                  Showing {visibleMissingTeams.length} of {missingTeams.length} missing teams
+                </p>
+              ) : null}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant="danger"
+                onClick={() => void onSendReminder()}
+                disabled={sendingReminder || reminderSent}
+              >
+                {sendingReminder ? (
+                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Mail className="mr-2 h-4 w-4" />
+                )}
+                {reminderSent ? 'Reminders Sent' : 'Send Reminder'}
+              </Button>
+              {!compact ? (
+                <Button size="sm" variant="outline" onClick={() => void onRefresh()} disabled={loading}>
+                  <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                  Refresh
+                </Button>
+              ) : null}
+            </div>
+          </div>
+          <TrackerTable tone="error" teams={visibleMissingTeams} showSupervisor />
+        </div>
+      ) : null}
+
+      {submittedTeams.length > 0 ? (
+        <div className="space-y-3">
+          <button
+            onClick={() => setShowSubmitted((value) => !value)}
+            className="flex items-center text-sm font-semibold text-success transition-colors hover:opacity-80"
+          >
+            <CheckCircle2 className="mr-2 h-4 w-4" />
+            Submitted ({summary.submitted})
+            <span className="ml-2 text-xs text-text-muted">
+              {showSubmitted ? '(click to collapse)' : '(click to expand)'}
+            </span>
+          </button>
+          {showSubmitted ? (
+            <TrackerTable tone="success" teams={visibleSubmittedTeams} showSubmittedAt />
+          ) : null}
+        </div>
+      ) : null}
+
+      {compact ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-surface-secondary px-4 py-3">
+          <div className="text-sm text-text-secondary">
+            Need more team-level detail? Open the full submissions explorer.
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="outline" onClick={() => void onRefresh()} disabled={loading}>
+              <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+            <Button size="sm" variant="outline" asChild>
+              <Link href="/admin/submissions">Open explorer</Link>
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <h3 className="flex items-center text-sm font-semibold text-foreground">
+            <Send className="mr-2 h-4 w-4 text-primary" />
+            All Teams Overview
+          </h3>
+          <TrackerTable tone="neutral" teams={sortedTeams} showSubmittedAt />
+        </div>
+      )}
+    </div>
+  )
+}
+
+export function SubmissionTracker({ compact = false }: { compact?: boolean }) {
   const [data, setData] = useState<TrackerData | null>(null)
   const [loading, setLoading] = useState(true)
   const [reminderSent, setReminderSent] = useState(false)
@@ -164,6 +337,7 @@ export function SubmissionTracker() {
       if (res.ok) {
         const result: TrackerData = await res.json()
         setData(result)
+        setReminderSent(false)
         if (result.round) {
           setCountdown(getTimeRemaining(result.round.closesAt))
         }
@@ -214,6 +388,18 @@ export function SubmissionTracker() {
   }
 
   if (loading) {
+    const skeleton = (
+      <div className="space-y-4">
+        <Skeleton className="h-4 w-64" />
+        <Skeleton className="h-3 w-full" />
+        <Skeleton className="h-32 w-full" />
+      </div>
+    )
+
+    if (compact) {
+      return skeleton
+    }
+
     return (
       <Card>
         <CardHeader>
@@ -221,16 +407,22 @@ export function SubmissionTracker() {
             <Skeleton className="h-6 w-48" />
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <Skeleton className="h-4 w-64" />
-          <Skeleton className="h-3 w-full" />
-          <Skeleton className="h-32 w-full" />
-        </CardContent>
+        <CardContent>{skeleton}</CardContent>
       </Card>
     )
   }
 
   if (!data?.round) {
+    const content = (
+      <p className="text-sm text-text-secondary">
+        No active round. The live tracker will appear when submissions open.
+      </p>
+    )
+
+    if (compact) {
+      return content
+    }
+
     return (
       <Card>
         <CardHeader>
@@ -239,139 +431,43 @@ export function SubmissionTracker() {
             Live Submission Tracker
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <p className="text-sm text-text-secondary">
-            No active round. The tracker will appear when a round is open.
-          </p>
-        </CardContent>
+        <CardContent>{content}</CardContent>
       </Card>
     )
   }
 
-  const { summary, teams } = data
-  const progressPercent =
-    summary.total > 0 ? Math.round((summary.submitted / summary.total) * 100) : 0
-  const deadlinePassed = countdown?.passed ?? false
+  const body = (
+    <TrackerBody
+      data={data}
+      countdown={countdown}
+      compact={compact}
+      reminderSent={reminderSent}
+      sendingReminder={sendingReminder}
+      showSubmitted={showSubmitted}
+      setShowSubmitted={setShowSubmitted}
+      onSendReminder={handleSendReminder}
+      onRefresh={fetchData}
+      loading={loading}
+    />
+  )
 
-  const sortedTeams = [...teams].sort((a, b) => {
-    if (a.hasSubmitted === b.hasSubmitted) return a.name.localeCompare(b.name)
-    return a.hasSubmitted ? 1 : -1
-  })
-  const missingTeams = sortedTeams.filter((team) => !team.hasSubmitted)
-  const submittedTeams = sortedTeams.filter((team) => team.hasSubmitted)
+  if (compact) {
+    return body
+  }
 
   return (
-    <Card className={deadlinePassed ? 'border-error/20' : undefined}>
+    <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
         <CardTitle className="flex items-center text-xl font-semibold">
-          <Clock className={`mr-2 h-5 w-5 ${deadlinePassed ? 'text-error' : 'text-primary'}`} />
+          <Clock className="mr-2 h-5 w-5 text-primary" />
           Live Submission Tracker - Round {data.round.number}
         </CardTitle>
-        <Button variant="outline" size="sm" onClick={fetchData} disabled={loading}>
+        <Button variant="outline" size="sm" onClick={() => void fetchData()} disabled={loading}>
           <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           Refresh
         </Button>
       </CardHeader>
-
-      <CardContent className="space-y-6">
-        <div
-          className={`rounded-xl border p-4 ${
-            deadlinePassed
-              ? 'border-error/20 bg-error-background/60'
-              : 'border-primary/15 bg-primary-soft/70'
-          }`}
-        >
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <div className={`text-sm font-medium ${deadlinePassed ? 'text-error' : 'text-primary'}`}>
-                {deadlinePassed ? 'Deadline Passed' : 'Time Remaining'}
-              </div>
-              <div className="text-2xl font-bold tabular-nums text-foreground">
-                {deadlinePassed
-                  ? 'Deadline passed'
-                  : `${countdown!.hours}h ${countdown!.minutes}m left`}
-              </div>
-              <div className="mt-1 text-xs text-text-muted">
-                Deadline:{' '}
-                {new Date(data.round.closesAt).toLocaleString('en-US', {
-                  month: 'short',
-                  day: 'numeric',
-                  hour: 'numeric',
-                  minute: '2-digit',
-                  timeZoneName: 'short',
-                })}
-              </div>
-            </div>
-            <div className="text-right">
-              <div className="text-sm font-medium text-text-secondary">
-                {summary.submitted} of {summary.total} teams submitted
-              </div>
-              <div className="text-3xl font-bold tabular-nums text-foreground">
-                {progressPercent}%
-              </div>
-            </div>
-          </div>
-          <div className="mt-3 h-3 w-full overflow-hidden rounded-full bg-surface-secondary">
-            <div
-              className={`h-full rounded-full transition-all duration-500 ${
-                deadlinePassed ? 'bg-error' : 'bg-primary'
-              }`}
-              style={{ width: `${progressPercent}%` }}
-            />
-          </div>
-        </div>
-
-        {missingTeams.length > 0 && (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <h3 className="flex items-center text-sm font-semibold text-error">
-                <XCircle className="mr-2 h-4 w-4" />
-                Missing Submissions ({summary.missing})
-              </h3>
-              <Button
-                size="sm"
-                variant="danger"
-                onClick={handleSendReminder}
-                disabled={sendingReminder || reminderSent}
-              >
-                {sendingReminder ? (
-                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Mail className="mr-2 h-4 w-4" />
-                )}
-                {reminderSent ? 'Reminders Sent' : 'Send Reminder'}
-              </Button>
-            </div>
-            <TrackerTable tone="error" teams={missingTeams} showSupervisor />
-          </div>
-        )}
-
-        {submittedTeams.length > 0 && (
-          <div className="space-y-3">
-            <button
-              onClick={() => setShowSubmitted((value) => !value)}
-              className="flex items-center text-sm font-semibold text-success transition-colors hover:opacity-80"
-            >
-              <CheckCircle2 className="mr-2 h-4 w-4" />
-              Submitted ({summary.submitted})
-              <span className="ml-2 text-xs text-text-muted">
-                {showSubmitted ? '(click to collapse)' : '(click to expand)'}
-              </span>
-            </button>
-            {showSubmitted && (
-              <TrackerTable tone="success" teams={submittedTeams} showSubmittedAt />
-            )}
-          </div>
-        )}
-
-        <div className="space-y-3">
-          <h3 className="flex items-center text-sm font-semibold text-foreground">
-            <Send className="mr-2 h-4 w-4 text-primary" />
-            All Teams Overview
-          </h3>
-          <TrackerTable tone="neutral" teams={sortedTeams} showSubmittedAt />
-        </div>
-      </CardContent>
+      <CardContent>{body}</CardContent>
     </Card>
   )
 }

@@ -13,7 +13,7 @@ describe('RBAC enforcement', () => {
     const student = await createUser({ email: 'student@test.com', role: 'STUDENT', universityId: uni.id })
     await loginAs(student.id)
 
-    const res = await getAdminTeams()
+    const res = await getAdminTeams(makeRequest('http://localhost/api/admin/teams'))
     expect(res.status).toBe(403)
   })
 
@@ -22,7 +22,7 @@ describe('RBAC enforcement', () => {
     const supervisor = await createUser({ email: 'sup@test.com', role: 'SUPERVISOR', universityId: uni.id })
     await loginAs(supervisor.id)
 
-    const res = await getAdminTeams()
+    const res = await getAdminTeams(makeRequest('http://localhost/api/admin/teams'))
     expect(res.status).toBe(403)
   })
 
@@ -30,7 +30,7 @@ describe('RBAC enforcement', () => {
     const admin = await createUser({ email: 'admin@test.com', role: 'ADMIN' })
     await loginAs(admin.id)
 
-    const res = await getAdminTeams()
+    const res = await getAdminTeams(makeRequest('http://localhost/api/admin/teams'))
     expect(res.status).toBe(200)
   })
 
@@ -43,7 +43,7 @@ describe('RBAC enforcement', () => {
     const allowed = await getAuditLogs(makeRequest('http://localhost/api/admin/audit-logs'))
     expect(allowed.status).toBe(200)
 
-    const forbidden = await getAdminTeams()
+    const forbidden = await getAdminTeams(makeRequest('http://localhost/api/admin/teams'))
     expect(forbidden.status).toBe(403)
   })
 })

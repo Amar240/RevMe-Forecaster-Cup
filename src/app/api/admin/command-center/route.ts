@@ -1,5 +1,7 @@
 import { prisma } from '@/lib/db'
 import { requireAdminOrResponse, jsonOk, jsonError } from '@/server/http'
+import { getCurrentOperationalSeason } from '@/server/season'
+import { getAdminTeamScope, getSeasonTeamWhere } from '@/server/team-scope'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,8 +19,7 @@ export async function GET() {
     const { response } = await requireAdminOrResponse()
     if (response) return response
 
-    const activeSeason = await prisma.season.findFirst({
-      where: { status: 'ACTIVE' },
+    const operationalSeason = await getCurrentOperationalSeason({
       include: {
         rounds: {
           orderBy: { number: 'asc' },
@@ -29,31 +30,30 @@ export async function GET() {
         markets: { where: { isActive: true }, include: { market: true } },
       },
     })
+    const teamScope = await getAdminTeamScope({ seasonId: operationalSeason?.id })
 
     const now = new Date()
-    const currentRound = activeSeason?.rounds.find((r) => {
+    const currentRound = operationalSeason?.rounds.find((r) => {
       const isTimeOpen = new Date(r.closesAt) > now && new Date(r.opensAt) <= now
       const hasStatus = 'status' in r
       const isStatusOpen = !hasStatus || r.status === 'OPEN'
       return isTimeOpen && isStatusOpen
     })
 
-    const seasonFilter = activeSeason ? { seasonId: activeSeason.id } : {}
-    const [totalTeams, activeTeams, disqualifiedTeams, totalUsers, totalSubmissions, totalWarnings, pendingTeamApprovals] = await Promise.all([
-      prisma.team.count({ where: seasonFilter }),
-      prisma.team.count({ where: { ...seasonFilter, status: 'ACTIVE' } }),
-      prisma.team.count({ where: { ...seasonFilter, status: 'DISQUALIFIED' } }),
+    const [totalUsers, totalSubmissions, totalWarnings, pendingTeamApprovals] = await Promise.all([
       prisma.user.count(),
       prisma.submission.count(),
       prisma.warning.count(),
-      prisma.team.count({ where: { ...seasonFilter, status: 'PENDING_APPROVAL' } }),
+      operationalSeason
+        ? prisma.team.count({ where: { seasonId: operationalSeason.id, status: 'PENDING_APPROVAL' } })
+        : Promise.resolve(0),
     ])
 
     // Warning breakdown for disqualification risk card
     const teamWarningCounts = await prisma.warning.groupBy({
       by: ['teamId'],
       _count: { id: true },
-      where: activeSeason ? { team: { seasonId: activeSeason.id } } : {},
+      where: operationalSeason ? { team: getSeasonTeamWhere(operationalSeason.id) } : {},
     })
     const oneWarningTeams = teamWarningCounts.filter((w) => w._count.id === 1).length
     const twoWarningTeams = teamWarningCounts.filter((w) => w._count.id === 2).length
@@ -87,19 +87,19 @@ export async function GET() {
       ).sort((a, b) => a - b)
     }
 
-    const activeMarketCount = activeSeason?.markets?.length ?? 0
+    const activeMarketCount = operationalSeason?.markets?.length ?? 0
     const expectedErrors =
       weekOffsets.length > 0
-        ? activeTeams * activeMarketCount * 2 * weekOffsets.length
+        ? teamScope.summary.activeTeams * activeMarketCount * 2 * weekOffsets.length
         : null
 
     const rounds = await Promise.all(
-      (activeSeason?.rounds || []).map(async (round) => {
+      (operationalSeason?.rounds || []).map(async (round) => {
         const expectedWeekOffsets = round.isFinal ? 1 : 2
         const expectedActuals = activeMarketCount * 2 * expectedWeekOffsets
         const [actualsCount, aggregatesExist] = await Promise.all([
           prisma.actual.count({ where: { roundId: round.id, isVoided: false } }),
-          prisma.scoreAggregate.count({ where: { seasonId: activeSeason!.id, roundId: round.id } }),
+          prisma.scoreAggregate.count({ where: { seasonId: operationalSeason!.id, roundId: round.id } }),
         ])
         const hasActuals = actualsCount > 0
         const isScored = aggregatesExist > 0 && actualsCount === expectedActuals
@@ -117,8 +117,8 @@ export async function GET() {
     )
 
     return jsonOk({
-      activeSeason: activeSeason
-        ? { id: activeSeason.id, name: activeSeason.name, status: activeSeason.status }
+      activeSeason: operationalSeason
+        ? { id: operationalSeason.id, name: operationalSeason.name, status: operationalSeason.status }
         : null,
       currentRound: currentRound
         ? {
@@ -132,9 +132,9 @@ export async function GET() {
           }
         : null,
       stats: {
-        totalTeams,
-        activeTeams,
-        disqualifiedTeams,
+        totalTeams: teamScope.totalTeams,
+        activeTeams: teamScope.summary.activeTeams,
+        disqualifiedTeams: teamScope.summary.disqualifiedTeams,
         totalUsers,
         totalSubmissions,
         currentRoundSubmissions,
@@ -154,8 +154,8 @@ export async function GET() {
       },
       submissionProgress: {
         submitted: currentRoundSubmissions,
-        pending: activeTeams - currentRoundSubmissions,
-        total: activeTeams,
+        pending: teamScope.summary.activeTeams - currentRoundSubmissions,
+        total: teamScope.summary.activeTeams,
       },
       rounds,
     })
