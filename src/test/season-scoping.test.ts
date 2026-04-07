@@ -12,10 +12,15 @@ import {
 import { getCurrentOperationalSeason } from '@/server/season'
 import { GET as getCurrentUser } from '@/app/api/users/me/route'
 import { GET as getSubmissionHistory } from '@/app/api/submissions/history/route'
+import { GET as getCurrentSubmissions } from '@/app/api/submissions/current/route'
 import { GET as getAdminSubmissions } from '@/app/api/admin/submissions/route'
 import { GET as getAdminTeams } from '@/app/api/admin/teams/route'
 import { GET as getCommandCenter } from '@/app/api/admin/command-center/route'
 import { GET as getSubmissionTracker } from '@/app/api/admin/submissions/tracker/route'
+import { GET as getCurrentSupervisor } from '@/app/api/user/supervisor/route'
+import { GET as getLeaderboards } from '@/app/api/leaderboards/route'
+import { GET as getScoringVerification } from '@/app/api/scoring/verification/route'
+import { POST as postSupportTicket } from '@/app/api/support-tickets/route'
 import { makeRequest } from './http'
 
 async function attachStandardMarkets(seasonId: string) {
@@ -139,6 +144,114 @@ describe('current operational season scoping', () => {
     const historyData = await historyRes.json()
     expect(historyData.submissions).toHaveLength(1)
     expect(historyData.submissions[0].occupancy).toBe(81)
+  })
+
+  it('uses the current season team for submission, supervisor, support, leaderboard, and verification reads', async () => {
+    const university = await createUniversity('Operational Membership University')
+    const oldSupervisor = await createUser({
+      email: 'old-supervisor@operational-membership.test',
+      role: 'SUPERVISOR',
+      universityId: university.id,
+    })
+    const currentSupervisor = await createUser({
+      email: 'current-supervisor@operational-membership.test',
+      role: 'SUPERVISOR',
+      universityId: university.id,
+    })
+    const student = await createUser({
+      email: 'student@operational-membership.test',
+      role: 'STUDENT',
+      universityId: university.id,
+    })
+
+    const { season: oldSeason, rounds: oldRounds } = await createSeasonWithRounds({
+      name: 'Completed Operational Season',
+      status: 'ACTIVE',
+    })
+    const [oldMarket] = await attachStandardMarkets(oldSeason.id)
+    await prisma.season.update({
+      where: { id: oldSeason.id },
+      data: { status: 'COMPLETED' },
+    })
+
+    const { season: currentSeason, rounds: currentRounds } = await createSeasonWithRounds({
+      name: 'Current Operational Season',
+      status: 'ACTIVE',
+    })
+    const [currentMarket] = await attachStandardMarkets(currentSeason.id)
+
+    const oldTeam = await createTeam({
+      name: 'Old Operational Team',
+      supervisorId: oldSupervisor.id,
+      universityId: university.id,
+      seasonId: oldSeason.id,
+    })
+    const currentTeam = await createTeam({
+      name: 'Current Operational Team',
+      supervisorId: currentSupervisor.id,
+      universityId: university.id,
+      seasonId: currentSeason.id,
+    })
+
+    await addTeamMember(oldTeam.id, student.id, true)
+    await addTeamMember(currentTeam.id, student.id, true)
+
+    await createSubmission({
+      teamId: oldTeam.id,
+      roundId: oldRounds[0].id,
+      submittedById: student.id,
+      values: [{ marketId: oldMarket.id, metric: 'OCCUPANCY', weekOffset: 1, value: 70 }],
+    })
+    await createSubmission({
+      teamId: currentTeam.id,
+      roundId: currentRounds[0].id,
+      submittedById: student.id,
+      values: [
+        { marketId: currentMarket.id, metric: 'OCCUPANCY', weekOffset: 1, value: 82 },
+        { marketId: currentMarket.id, metric: 'ADR', weekOffset: 1, value: 210 },
+      ],
+    })
+
+    await loginAs(student.id)
+
+    const [currentSubmissionRes, currentSupervisorRes, leaderboardRes, verificationRes, supportTicketRes] = await Promise.all([
+      getCurrentSubmissions(),
+      getCurrentSupervisor(),
+      getLeaderboards(makeRequest('http://localhost/api/leaderboards')),
+      getScoringVerification(makeRequest('http://localhost/api/scoring/verification')),
+      postSupportTicket(
+        makeRequest('http://localhost/api/support-tickets', {
+          method: 'POST',
+          body: {
+            subject: 'Need help with current round',
+            message: 'Please confirm my current team support path.',
+          },
+        })
+      ),
+    ])
+
+    expect(currentSubmissionRes.status).toBe(200)
+    const currentSubmissionData = await currentSubmissionRes.json()
+    expect(currentSubmissionData.canSubmit).toBe(true)
+    expect(currentSubmissionData.currentRound.id).toBe(currentRounds[0].id)
+    expect(currentSubmissionData.existingSubmissions.some((entry: { occupancy: number }) => entry.occupancy === 82)).toBe(true)
+
+    expect(currentSupervisorRes.status).toBe(200)
+    const currentSupervisorData = await currentSupervisorRes.json()
+    expect(currentSupervisorData.supervisor.id).toBe(currentSupervisor.id)
+
+    expect(leaderboardRes.status).toBe(200)
+    const leaderboardData = await leaderboardRes.json()
+    expect(leaderboardData.myTeamId).toBe(currentTeam.id)
+
+    expect(verificationRes.status).toBe(200)
+    const verificationData = await verificationRes.json()
+    expect(verificationData.selectedTeamId).toBe(currentTeam.id)
+
+    expect(supportTicketRes.status).toBe(200)
+    const supportTicketData = await supportTicketRes.json()
+    expect(supportTicketData.ticket.teamId).toBe(currentTeam.id)
+    expect(supportTicketData.ticket.supervisorId).toBe(currentSupervisor.id)
   })
 
   it('defaults admin submissions explorer to the current operational season', async () => {

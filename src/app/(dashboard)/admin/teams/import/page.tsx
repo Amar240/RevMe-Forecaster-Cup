@@ -421,7 +421,7 @@ export default function AdminTeamsImportPage() {
               duplicate identifiers, team size, and existing team membership conflicts before anything is written.
             </p>
             <p className="mt-2">
-              Current system limitation: a student already assigned to any team is rejected, even across seasons.
+              Students can be reused across seasons, but they cannot already belong to another team in the selected season.
             </p>
           </div>
 

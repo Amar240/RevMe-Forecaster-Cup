@@ -123,6 +123,59 @@ describe('team import API', () => {
     expect(await prisma.team.count()).toBe(1)
   })
 
+  it('preview rejects duplicate team names only within the selected season', async () => {
+    await createTeam({
+      name: 'I7',
+      displayId: 'T-I7-CURRENT',
+      supervisorId: supervisor.id,
+      universityId: university.id,
+      seasonId: season.id,
+      status: 'ACTIVE',
+    })
+
+    const priorSeason = (await createSeasonWithRounds({ name: 'Historical Import Name Season' })).season
+    await prisma.season.update({
+      where: { id: priorSeason.id },
+      data: { status: 'COMPLETED' },
+    })
+    await createTeam({
+      name: 'Legacy Team',
+      displayId: 'T-LEGACY-NAME',
+      supervisorId: supervisor.id,
+      universityId: university.id,
+      seasonId: priorSeason.id,
+      status: 'ACTIVE',
+    })
+
+    const historicalSubmitter = await createUser({
+      email: 'historical-name@team-import-api.test',
+      role: 'STUDENT',
+      universityId: university.id,
+    })
+
+    await loginAs(admin.id)
+
+    const csv = buildCsv([
+      ['universityName', 'teamExternalId', 'teamName', 'supervisorEmail', 'submitterEmail'],
+      ['API Import University', 'api-name-001', 'I7', 'supervisor@team-import-api.test', 'submitter@team-import-api.test'],
+      ['API Import University', 'api-name-002', 'Legacy Team', 'supervisor@team-import-api.test', historicalSubmitter.email],
+    ])
+
+    const res = await previewTeamImport(
+      makeFormRequest(
+        'http://localhost/api/admin/teams/import/preview',
+        makeImportFormData(season.id, 'teams.csv', csv)
+      )
+    )
+    const data = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(data.summary.validRows).toBe(1)
+    expect(data.summary.invalidRows).toBe(1)
+    expect(data.rows[0].errors.join(' ')).toContain('already exists in this season')
+    expect(data.rows[1].errors).toEqual([])
+  })
+
   it('confirm creates teams and members with approval metadata', async () => {
     await loginAs(admin.id)
 
@@ -205,7 +258,7 @@ describe('team import API', () => {
     expect(res.status).toBe(200)
     expect(data.summary.teamsCreated).toBe(1)
     expect(data.summary.skippedRows).toBe(1)
-    expect(data.rows.find((row: { teamExternalId: string }) => row.teamExternalId === 'api-302')?.reason).toContain('already assigned')
+    expect(data.rows.find((row: { teamExternalId: string }) => row.teamExternalId === 'api-302')?.reason).toContain('selected season')
 
     const teamsRes = await getAdminTeams(makeRequest('http://localhost/api/admin/teams'))
     const teamsData = await teamsRes.json()
@@ -213,6 +266,112 @@ describe('team import API', () => {
 
     expect(teamsRes.status).toBe(200)
     expect(importedTeam).toBeTruthy()
+  })
+
+  it('confirm allows students who only belong to teams in previous seasons', async () => {
+    const priorSeason = (await createSeasonWithRounds({ name: 'Previous API Import Season' })).season
+    await prisma.season.update({
+      where: { id: priorSeason.id },
+      data: { status: 'COMPLETED' },
+    })
+
+    const priorSeasonStudent = await createUser({
+      email: 'previous-season-student@team-import-api.test',
+      role: 'STUDENT',
+      universityId: university.id,
+    })
+
+    const priorSeasonTeam = await createTeam({
+      name: 'Previous Season Assignment',
+      supervisorId: supervisor.id,
+      universityId: university.id,
+      seasonId: priorSeason.id,
+      status: 'ACTIVE',
+    })
+    await addTeamMember(priorSeasonTeam.id, priorSeasonStudent.id, true)
+
+    await loginAs(admin.id)
+
+    const csv = buildCsv([
+      ['universityName', 'teamExternalId', 'teamName', 'supervisorEmail', 'submitterEmail'],
+      ['API Import University', 'api-351', 'Reused Student Team', 'supervisor@team-import-api.test', 'previous-season-student@team-import-api.test'],
+    ])
+
+    const res = await confirmTeamImport(
+      makeFormRequest(
+        'http://localhost/api/admin/teams/import/confirm',
+        makeImportFormData(season.id, 'teams.csv', csv)
+      )
+    )
+    const data = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(data.summary.teamsCreated).toBe(1)
+
+    const memberships = await prisma.teamMember.findMany({
+      where: { userId: priorSeasonStudent.id },
+    })
+    expect(memberships).toHaveLength(2)
+  })
+
+  it('confirm allows team names reused from previous seasons but skips same-season duplicates', async () => {
+    const priorSeason = (await createSeasonWithRounds({ name: 'Previous Import Team Name Season' })).season
+    await prisma.season.update({
+      where: { id: priorSeason.id },
+      data: { status: 'COMPLETED' },
+    })
+
+    await createTeam({
+      name: 'I7',
+      displayId: 'T-I7-HIST',
+      supervisorId: supervisor.id,
+      universityId: university.id,
+      seasonId: priorSeason.id,
+      status: 'ACTIVE',
+    })
+    await createTeam({
+      name: 'Fire',
+      displayId: 'T-FIRE-CURRENT',
+      supervisorId: supervisor.id,
+      universityId: university.id,
+      seasonId: season.id,
+      status: 'ACTIVE',
+    })
+
+    const historicalNameStudent = await createUser({
+      email: 'historical-team-name@team-import-api.test',
+      role: 'STUDENT',
+      universityId: university.id,
+    })
+    const duplicateNameStudent = await createUser({
+      email: 'duplicate-team-name@team-import-api.test',
+      role: 'STUDENT',
+      universityId: university.id,
+    })
+
+    await loginAs(admin.id)
+
+    const csv = buildCsv([
+      ['universityName', 'teamExternalId', 'teamName', 'supervisorEmail', 'submitterEmail'],
+      ['API Import University', 'api-352', 'I7', 'supervisor@team-import-api.test', historicalNameStudent.email],
+      ['API Import University', 'api-353', 'Fire', 'supervisor@team-import-api.test', duplicateNameStudent.email],
+    ])
+
+    const res = await confirmTeamImport(
+      makeFormRequest(
+        'http://localhost/api/admin/teams/import/confirm',
+        makeImportFormData(season.id, 'teams.csv', csv)
+      )
+    )
+    const data = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(data.summary.teamsCreated).toBe(1)
+    expect(data.summary.skippedRows).toBe(1)
+    expect(data.rows.find((row: { teamExternalId: string }) => row.teamExternalId === 'api-352')?.status).toBe('created')
+    expect(
+      data.rows.find((row: { teamExternalId: string }) => row.teamExternalId === 'api-353')?.reason
+    ).toContain('already exists in this season')
   })
 
   it('keeps email as the identity key and returns advisory name mismatch warnings', async () => {

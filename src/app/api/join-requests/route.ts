@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { TeamStatus } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { requireUserOrResponse, jsonOk, jsonError, ApiError, parseJson } from '@/server/http'
+import { findSeasonMembershipConflict } from '@/server/team-membership'
 import { sameUniversity } from '@/server/universities'
 import { z } from 'zod'
 
@@ -82,20 +83,33 @@ export async function POST(request: NextRequest) {
       throw new ApiError('Add your university before sending a join request.', 422, 'INVALID_INPUT')
     }
 
-    const existingMembership = await prisma.teamMember.findFirst({
-      where: { userId: user!.id },
+    const activeSeason = await prisma.season.findFirst({
+      where: { status: 'ACTIVE' },
     })
+
+    const existingMembership = activeSeason
+      ? await findSeasonMembershipConflict({
+          userId: user!.id,
+          seasonId: activeSeason.id,
+        })
+      : null
 
     if (existingMembership) {
-      throw new ApiError('You are already a member of a team', 400, 'CONFLICT')
+      throw new ApiError('You are already a member of a team in the current season', 400, 'CONFLICT')
     }
 
-    const pendingRequest = await prisma.joinRequest.findFirst({
-      where: { studentId: user!.id, status: 'PENDING' },
-    })
+    const pendingRequest = activeSeason
+      ? await prisma.joinRequest.findFirst({
+          where: {
+            studentId: user!.id,
+            status: 'PENDING',
+            seasonId: activeSeason.id,
+          },
+        })
+      : null
 
     if (pendingRequest) {
-      throw new ApiError('You already have a pending join request', 400, 'CONFLICT')
+      throw new ApiError('You already have a pending join request for the current season', 400, 'CONFLICT')
     }
 
     const supervisor = body.supervisorId
@@ -131,10 +145,6 @@ export async function POST(request: NextRequest) {
     if (!supervisor.universityId || !supervisor.university || !sameUniversity(student.university, supervisor.university)) {
       throw new ApiError('Join requests must stay within your university.', 422, 'INVALID_INPUT')
     }
-
-    const activeSeason = await prisma.season.findFirst({
-      where: { status: 'ACTIVE' },
-    })
 
     if (body.teamId) {
       const selectedTeam = await prisma.team.findUnique({

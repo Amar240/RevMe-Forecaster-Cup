@@ -13,10 +13,12 @@ import { PATCH as patchSupervisorTeam } from '@/app/api/teams/[id]/route'
 import { POST as addSupervisorMember } from '@/app/api/teams/[id]/members/route'
 import { DELETE as removeSupervisorMember } from '@/app/api/teams/[id]/members/[memberId]/route'
 import { PATCH as patchSupervisorSubmitter } from '@/app/api/teams/[id]/submitter/route'
+import { GET as getSupervisorEligibleStudents } from '@/app/api/teams/[id]/eligible-students/route'
 import { PATCH as patchAdminTeam } from '@/app/api/admin/teams/[id]/route'
 import { PATCH as patchAdminTeamStatus } from '@/app/api/admin/teams/[id]/status/route'
 import { POST as addAdminMember } from '@/app/api/admin/teams/[id]/members/route'
 import { PATCH as patchAdminSupervisor } from '@/app/api/admin/teams/[id]/supervisor/route'
+import { GET as getEligibleStudents } from '@/app/api/admin/teams/eligible-students/route'
 import { POST as postAdminMoveMembers } from '@/app/api/admin/teams/move-members/route'
 
 describe('Team roster APIs', () => {
@@ -99,6 +101,33 @@ describe('Team roster APIs', () => {
     expect(res.status).toBe(422)
   })
 
+  it('admin rename allows a team name reused only in a previous season', async () => {
+    const previousSeason = (await createSeasonWithRounds({ name: 'Historical Rename Season' })).season
+    await prisma.season.update({
+      where: { id: previousSeason.id },
+      data: { status: 'COMPLETED' },
+    })
+
+    await createTeam({
+      name: 'Historic Rename',
+      supervisorId: supervisor.id,
+      universityId: university.id,
+      seasonId: previousSeason.id,
+      status: 'ACTIVE',
+    })
+
+    await loginAs(admin.id)
+    const req = makeRequest(`http://localhost/api/admin/teams/${team.id}`, {
+      method: 'PATCH',
+      body: { name: 'Historic Rename' },
+    })
+    const res = await patchAdminTeam(req, { params: Promise.resolve({ id: team.id }) })
+    const data = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(data.team.name).toBe('Historic Rename')
+  })
+
   it('admin add member assigns first member as submitter', async () => {
     const student = await createUser({
       email: 'student1@roster.test',
@@ -163,6 +192,154 @@ describe('Team roster APIs', () => {
     const res = await addAdminMember(req, { params: Promise.resolve({ id: secondTeam.id }) })
 
     expect(res.status).toBe(409)
+  })
+
+  it('admin add member allows a student who only belongs to a previous-season team', async () => {
+    const previousSeason = (await createSeasonWithRounds({ name: 'Previous Roster Season' })).season
+    await prisma.season.update({
+      where: { id: previousSeason.id },
+      data: { status: 'COMPLETED' },
+    })
+
+    const student = await createUser({
+      email: 'prior-season@roster.test',
+      role: 'STUDENT',
+      universityId: university.id,
+    })
+    const previousTeam = await createTeam({
+      name: 'Previous Season Team',
+      supervisorId: supervisor.id,
+      universityId: university.id,
+      seasonId: previousSeason.id,
+      status: 'ACTIVE',
+    })
+    await addTeamMember(previousTeam.id, student.id, true)
+
+    await loginAs(admin.id)
+    const req = makeRequest(`http://localhost/api/admin/teams/${team.id}/members`, {
+      method: 'POST',
+      body: { userId: student.id },
+    })
+    const res = await addAdminMember(req, { params: Promise.resolve({ id: team.id }) })
+
+    expect(res.status).toBe(201)
+
+    const memberships = await prisma.teamMember.findMany({
+      where: { userId: student.id },
+      orderBy: { joinedAt: 'asc' },
+    })
+    expect(memberships).toHaveLength(2)
+    expect(memberships.some((membership) => membership.teamId === team.id)).toBe(true)
+  })
+
+  it('eligible student search includes prior-season members and excludes same-season members', async () => {
+    const previousSeason = (await createSeasonWithRounds({ name: 'Historical Search Season' })).season
+    await prisma.season.update({
+      where: { id: previousSeason.id },
+      data: { status: 'COMPLETED' },
+    })
+
+    const priorSeasonStudent = await createUser({
+      email: 'historical@student.test',
+      role: 'STUDENT',
+      universityId: university.id,
+    })
+    const sameSeasonStudent = await createUser({
+      email: 'current@student.test',
+      role: 'STUDENT',
+      universityId: university.id,
+    })
+
+    const previousTeam = await createTeam({
+      name: 'Historical Team',
+      supervisorId: supervisor.id,
+      universityId: university.id,
+      seasonId: previousSeason.id,
+      status: 'ACTIVE',
+    })
+    const otherCurrentTeam = await createTeam({
+      name: 'Current Conflict Team',
+      supervisorId: supervisor.id,
+      universityId: university.id,
+      seasonId: season.id,
+      status: 'ACTIVE',
+    })
+
+    await addTeamMember(previousTeam.id, priorSeasonStudent.id, true)
+    await addTeamMember(otherCurrentTeam.id, sameSeasonStudent.id, true)
+
+    await loginAs(admin.id)
+    const res = await getEligibleStudents(
+      makeRequest(`http://localhost/api/admin/teams/eligible-students?teamId=${team.id}&query=@student.test`)
+    )
+    const data = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(data.students.map((student: { email: string }) => student.email)).toContain('historical@student.test')
+    expect(data.students.map((student: { email: string }) => student.email)).not.toContain('current@student.test')
+  })
+
+  it('supervisor eligible student search returns only eligible students', async () => {
+    const previousSeason = (await createSeasonWithRounds({ name: 'Supervisor Historical Search Season' })).season
+    await prisma.season.update({
+      where: { id: previousSeason.id },
+      data: { status: 'COMPLETED' },
+    })
+
+    const eligibleStudent = await createUser({
+      email: 'eligible-supervisor@student.test',
+      role: 'STUDENT',
+      universityId: university.id,
+      firstName: 'Eligible',
+      lastName: 'Student',
+    })
+    const priorSeasonStudent = await createUser({
+      email: 'prior-supervisor@student.test',
+      role: 'STUDENT',
+      universityId: university.id,
+    })
+    const sameSeasonStudent = await createUser({
+      email: 'same-season@student.test',
+      role: 'STUDENT',
+      universityId: university.id,
+    })
+    await createUser({
+      email: 'admin@student.test',
+      role: 'ADMIN',
+      universityId: university.id,
+    })
+
+    const previousTeam = await createTeam({
+      name: 'Supervisor Historical Team',
+      supervisorId: supervisor.id,
+      universityId: university.id,
+      seasonId: previousSeason.id,
+      status: 'ACTIVE',
+    })
+    const otherCurrentTeam = await createTeam({
+      name: 'Supervisor Current Conflict Team',
+      supervisorId: supervisor.id,
+      universityId: university.id,
+      seasonId: season.id,
+      status: 'ACTIVE',
+    })
+
+    await addTeamMember(previousTeam.id, priorSeasonStudent.id, true)
+    await addTeamMember(otherCurrentTeam.id, sameSeasonStudent.id, true)
+
+    await loginAs(supervisor.id)
+    const res = await getSupervisorEligibleStudents(
+      makeRequest(`http://localhost/api/teams/${team.id}/eligible-students?query=@student.test`),
+      { params: Promise.resolve({ id: team.id }) }
+    )
+    const data = await res.json()
+    const emails = data.students.map((student: { email: string }) => student.email)
+
+    expect(res.status).toBe(200)
+    expect(emails).toContain('eligible-supervisor@student.test')
+    expect(emails).toContain('prior-supervisor@student.test')
+    expect(emails).not.toContain('same-season@student.test')
+    expect(emails).not.toContain('admin@student.test')
   })
 
   it('removing the current submitter without replacement is rejected', async () => {
@@ -267,6 +444,56 @@ describe('Team roster APIs', () => {
     expect(data.team.name).toBe('Supervisor Updated Team')
   })
 
+  it('supervisor rename rejects a duplicate team name in the same season', async () => {
+    await createTeam({
+      name: 'Supervisor Conflict',
+      supervisorId: supervisor.id,
+      universityId: university.id,
+      seasonId: season.id,
+      status: 'ACTIVE',
+    })
+
+    await loginAs(supervisor.id)
+
+    const req = makeRequest(`http://localhost/api/teams/${team.id}`, {
+      method: 'PATCH',
+      body: { name: 'supervisor conflict' },
+    })
+    const res = await patchSupervisorTeam(req, { params: Promise.resolve({ id: team.id }) })
+    const data = await res.json()
+
+    expect(res.status).toBe(422)
+    expect(data.message).toContain('already exists in this season')
+  })
+
+  it('supervisor rename allows a team name reused only in a previous season', async () => {
+    const previousSeason = (await createSeasonWithRounds({ name: 'Historical Supervisor Rename Season' })).season
+    await prisma.season.update({
+      where: { id: previousSeason.id },
+      data: { status: 'COMPLETED' },
+    })
+
+    await createTeam({
+      name: 'Supervisor Historic Name',
+      supervisorId: supervisor.id,
+      universityId: university.id,
+      seasonId: previousSeason.id,
+      status: 'ACTIVE',
+    })
+
+    await loginAs(supervisor.id)
+
+    const req = makeRequest(`http://localhost/api/teams/${team.id}`, {
+      method: 'PATCH',
+      body: { name: 'Supervisor Historic Name' },
+    })
+    const res = await patchSupervisorTeam(req, { params: Promise.resolve({ id: team.id }) })
+    const data = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(data.team.name).toBe('Supervisor Historic Name')
+  })
+
   it('supervisor cannot mutate another supervisors team', async () => {
     const otherTeam = await createTeam({
       name: 'Other Supervisor Team',
@@ -318,6 +545,25 @@ describe('Team roster APIs', () => {
     const res = await addSupervisorMember(req, { params: Promise.resolve({ id: team.id }) })
 
     expect(res.status).toBe(201)
+  })
+
+  it('supervisor add member route accepts userId through the shared service', async () => {
+    const student = await createUser({
+      email: 'user-id-lookup@roster.test',
+      role: 'STUDENT',
+      universityId: university.id,
+    })
+
+    await loginAs(supervisor.id)
+    const req = makeRequest(`http://localhost/api/teams/${team.id}/members`, {
+      method: 'POST',
+      body: { userId: student.id },
+    })
+    const res = await addSupervisorMember(req, { params: Promise.resolve({ id: team.id }) })
+    const data = await res.json()
+
+    expect(res.status).toBe(201)
+    expect(data.member.userId).toBe(student.id)
   })
 
   it('admin can reassign a supervisor within the same university', async () => {

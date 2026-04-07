@@ -1,6 +1,7 @@
 import { prisma } from '@/server/db'
 import type { Role } from '@prisma/client'
 import { requireUserOrResponse, jsonOk, jsonError, ApiError } from '@/server/http'
+import { getSeasonScopedTeamMemberWhere } from '@/server/team-membership'
 
 export const dynamic = 'force-dynamic'
 
@@ -47,7 +48,11 @@ export async function GET(request: Request) {
       if (teamId && !allowedTeamIds.includes(teamId)) targetTeamId = null
     } else {
       const member = await prisma.teamMember.findFirst({
-        where: { userId: session.id }, include: { team: true },
+        where: getSeasonScopedTeamMemberWhere({
+          userId: session.id,
+          seasonId: activeSeason.id,
+        }),
+        include: { team: true },
       })
       if (!member) throw new ApiError('Not on a team', 403, 'FORBIDDEN')
       targetTeamId = member.teamId

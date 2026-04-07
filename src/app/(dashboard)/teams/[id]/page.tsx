@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { Crown, Loader2, UserMinus, Users } from 'lucide-react'
+import { Crown, Loader2, Search, UserMinus, UserPlus, Users } from 'lucide-react'
 import { toast } from 'sonner'
 import { csrfFetch } from '@/lib/csrf'
 import { clientLogger } from '@/lib/client-logger'
@@ -43,17 +43,53 @@ interface Team {
   members: TeamMember[]
 }
 
+interface EligibleStudentResult {
+  id: string
+  email: string
+  firstName: string
+  lastName: string
+}
+
+const blockedAssignmentStatuses = new Set(['REJECTED', 'DISQUALIFIED', 'ARCHIVED'])
+
+function getPersonLabel(person: {
+  firstName?: string | null
+  lastName?: string | null
+  email: string
+}) {
+  const fullName = [person.firstName, person.lastName].filter(Boolean).join(' ').trim()
+  return fullName || person.email
+}
+
+function getRosterRestrictionMessage(status: string) {
+  switch (status) {
+    case 'ARCHIVED':
+      return 'Member changes are unavailable while this team is archived.'
+    case 'REJECTED':
+      return 'Member changes are unavailable while this team is rejected.'
+    case 'DISQUALIFIED':
+      return 'Member changes are unavailable while this team is disqualified.'
+    default:
+      return ''
+  }
+}
+
 export default function TeamDetailPage() {
   const params = useParams()
   const router = useRouter()
+  const teamId = String(params.id)
   const [team, setTeam] = useState<Team | null>(null)
   const [viewerCanManage, setViewerCanManage] = useState(false)
   const [teamName, setTeamName] = useState('')
-  const [email, setEmail] = useState('')
+  const [memberSearch, setMemberSearch] = useState('')
+  const [eligibleStudents, setEligibleStudents] = useState<EligibleStudentResult[]>([])
+  const [selectedStudentId, setSelectedStudentId] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [addingMember, setAddingMember] = useState(false)
   const [savingName, setSavingName] = useState(false)
+  const [searchingStudents, setSearchingStudents] = useState(false)
+  const [eligibleStudentsLoaded, setEligibleStudentsLoaded] = useState(false)
   const [submitterLoading, setSubmitterLoading] = useState<string | null>(null)
   const [removeLoading, setRemoveLoading] = useState<string | null>(null)
   const [removeDialogOpen, setRemoveDialogOpen] = useState(false)
@@ -62,7 +98,7 @@ export default function TeamDetailPage() {
 
   const fetchTeam = useCallback(async () => {
     try {
-      const res = await csrfFetch(`/api/teams/${params.id}`)
+      const res = await csrfFetch(`/api/teams/${teamId}`)
       if (res.ok) {
         const data = await res.json()
         setTeam(data.team)
@@ -75,16 +111,89 @@ export default function TeamDetailPage() {
     } finally {
       setLoading(false)
     }
-  }, [params.id])
+  }, [teamId])
+
+  const fetchEligibleStudents = useCallback(
+    async (query: string) => {
+      if (!viewerCanManage) return
+
+      setSearchingStudents(true)
+      try {
+        const searchParams = new URLSearchParams({ query })
+        const res = await csrfFetch(`/api/teams/${teamId}/eligible-students?${searchParams.toString()}`)
+        const data = await res.json()
+
+        if (!res.ok) {
+          throw new Error(data.message || 'Failed to load eligible students')
+        }
+
+        setEligibleStudents(data.students || [])
+      } catch (err) {
+        clientLogger.error('Failed to fetch eligible students:', err)
+        setEligibleStudents([])
+      } finally {
+        setSearchingStudents(false)
+        setEligibleStudentsLoaded(true)
+      }
+    },
+    [teamId, viewerCanManage]
+  )
 
   useEffect(() => {
     void fetchTeam()
   }, [fetchTeam])
 
+  useEffect(() => {
+    if (!team || !viewerCanManage || blockedAssignmentStatuses.has(team.status) || team.members.length >= 5) {
+      setEligibleStudents([])
+      setSelectedStudentId('')
+      setEligibleStudentsLoaded(false)
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      void fetchEligibleStudents(memberSearch)
+    }, 250)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [fetchEligibleStudents, memberSearch, team, viewerCanManage])
+
+  useEffect(() => {
+    if (selectedStudentId && !eligibleStudents.some((student) => student.id === selectedStudentId)) {
+      setSelectedStudentId('')
+    }
+  }, [eligibleStudents, selectedStudentId])
+
   const replacementOptions = useMemo(() => {
     if (!team || !memberToRemove) return []
     return team.members.filter((member) => member.id !== memberToRemove.id)
   }, [memberToRemove, team])
+
+  const isRosterLocked = team ? blockedAssignmentStatuses.has(team.status) : false
+  const rosterRestrictionMessage = team ? getRosterRestrictionMessage(team.status) : ''
+  const isAtMemberCap = team ? team.members.length >= 5 : false
+  const canAddMembers = viewerCanManage && !isRosterLocked && !isAtMemberCap
+  const addMemberHelperText = useMemo(() => {
+    if (!team) return ''
+    if (isRosterLocked) {
+      return rosterRestrictionMessage
+    }
+    if (isAtMemberCap) {
+      return 'This team is already at the 5-member limit.'
+    }
+    if (eligibleStudentsLoaded && !searchingStudents && eligibleStudents.length === 0) {
+      return 'No eligible students available for this season.'
+    }
+    return ''
+  }, [
+    eligibleStudents.length,
+    eligibleStudentsLoaded,
+    isAtMemberCap,
+    isRosterLocked,
+    rosterRestrictionMessage,
+    searchingStudents,
+    team,
+  ])
 
   const handleRenameTeam = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -119,10 +228,10 @@ export default function TeamDetailPage() {
     setAddingMember(true)
 
     try {
-      const res = await csrfFetch(`/api/teams/${params.id}/members`, {
+      const res = await csrfFetch(`/api/teams/${teamId}/members`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ userId: selectedStudentId }),
       })
 
       const data = await res.json()
@@ -132,8 +241,9 @@ export default function TeamDetailPage() {
         return
       }
 
-      setEmail('')
-      void fetchTeam()
+      setMemberSearch('')
+      setSelectedStudentId('')
+      await fetchTeam()
     } catch {
       setError('An error occurred')
     } finally {
@@ -152,7 +262,7 @@ export default function TeamDetailPage() {
 
     setRemoveLoading(memberToRemove.id)
     try {
-      const res = await csrfFetch(`/api/teams/${params.id}/members/${memberToRemove.id}`, {
+      const res = await csrfFetch(`/api/teams/${teamId}/members/${memberToRemove.id}`, {
         method: 'DELETE',
         headers:
           memberToRemove.isSubmitter && replacementOptions.length > 0
@@ -183,7 +293,7 @@ export default function TeamDetailPage() {
   const handleSetSubmitter = async (memberId: string) => {
     setSubmitterLoading(memberId)
     try {
-      const res = await csrfFetch(`/api/teams/${params.id}/submitter`, {
+      const res = await csrfFetch(`/api/teams/${teamId}/submitter`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ memberId }),
@@ -328,28 +438,66 @@ export default function TeamDetailPage() {
         </CardContent>
       </Card>
 
-      {viewerCanManage && team.members.length < 5 && (
+      {viewerCanManage && (
         <Card>
           <CardHeader>
             <CardTitle>Add Member</CardTitle>
-            <CardDescription>Add a student by their registered email address.</CardDescription>
+            <CardDescription>
+              Add a registered student from the same university who is not already assigned in this season.
+            </CardDescription>
           </CardHeader>
           <form onSubmit={handleAddMember}>
             <CardContent className="space-y-4">
               {error && <AlertBanner variant="error">{error}</AlertBanner>}
+              {!canAddMembers && addMemberHelperText ? (
+                <AlertBanner variant="warning" title="Roster changes are limited">
+                  {addMemberHelperText}
+                </AlertBanner>
+              ) : null}
               <div className="space-y-2">
-                <Label htmlFor="email">Student Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="student@university.edu"
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  required
-                />
+                <Label htmlFor="student-search">Find student</Label>
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
+                  <Input
+                    id="student-search"
+                    value={memberSearch}
+                    onChange={(event) => setMemberSearch(event.target.value)}
+                    placeholder="Search by name or email"
+                    className="pl-9"
+                    disabled={!canAddMembers}
+                  />
+                </div>
               </div>
-              <Button type="submit" disabled={addingMember}>
-                {addingMember ? 'Adding...' : 'Add Member'}
+
+              <div className="space-y-2">
+                <Label>Eligible students</Label>
+                <Select value={selectedStudentId} onValueChange={setSelectedStudentId} disabled={!canAddMembers}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a student" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {eligibleStudents.map((student) => (
+                      <SelectItem key={student.id} value={student.id}>
+                        {getPersonLabel(student)} ({student.email})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {searchingStudents ? <p className="text-xs text-text-muted">Searching students...</p> : null}
+                {canAddMembers && addMemberHelperText && !searchingStudents ? (
+                  <p className="text-xs text-text-muted">{addMemberHelperText}</p>
+                ) : null}
+              </div>
+
+              <Button type="submit" disabled={!canAddMembers || !selectedStudentId || addingMember}>
+                {addingMember ? (
+                  'Adding...'
+                ) : (
+                  <>
+                    <UserPlus className="mr-2 h-4 w-4" />
+                    Add Member
+                  </>
+                )}
               </Button>
             </CardContent>
           </form>

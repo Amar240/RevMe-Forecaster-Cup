@@ -3,6 +3,7 @@ import { Prisma, TeamStatus, User } from '@prisma/client'
 import { buildAuditLogData } from '@/lib/audit'
 import { prisma } from '@/server/db'
 import { ApiError } from '@/server/http'
+import { countSupervisorTeamsInSeason } from '@/server/team-membership'
 import { sameUniversity } from '@/server/universities'
 
 type DbClient = Prisma.TransactionClient | typeof prisma
@@ -158,6 +159,7 @@ async function generateDisplayId(db: DbClient) {
 }
 
 export async function ensureUniqueTeamName(args: {
+  seasonId: string
   name: string
   teamId?: string
   db?: DbClient
@@ -165,6 +167,7 @@ export async function ensureUniqueTeamName(args: {
   const db = args.db ?? prisma
   const existingTeam = await db.team.findFirst({
     where: {
+      seasonId: args.seasonId,
       ...(args.teamId ? { id: { not: args.teamId } } : {}),
       name: { equals: args.name, mode: 'insensitive' },
     },
@@ -172,7 +175,7 @@ export async function ensureUniqueTeamName(args: {
   })
 
   if (existingTeam) {
-    throw new ApiError('A team with this name already exists. Please choose a different name.', 422, 'CONFLICT')
+    throw new ApiError('A team with this name already exists in this season.', 422, 'CONFLICT')
   }
 }
 
@@ -208,6 +211,7 @@ async function ensureUniqueExternalTeamId(args: {
 export async function resolveAssignableSupervisor(args: {
   supervisorId: string
   university: UniversityRecord
+  seasonId?: string | null
   teamIdToExclude?: string
   db?: DbClient
 }) {
@@ -234,11 +238,11 @@ export async function resolveAssignableSupervisor(args: {
     throw new ApiError('Supervisor must belong to the same university as the team.', 422, 'INVALID_INPUT')
   }
 
-  const teamCount = await db.team.count({
-    where: {
-      supervisorId: supervisor.id,
-      ...(args.teamIdToExclude ? { id: { not: args.teamIdToExclude } } : {}),
-    },
+  const teamCount = await countSupervisorTeamsInSeason({
+    supervisorId: supervisor.id,
+    seasonId: args.seasonId,
+    excludeTeamId: args.teamIdToExclude,
+    db,
   })
 
   if (teamCount >= TEAM_SUPERVISOR_CAP) {
@@ -280,7 +284,10 @@ export async function createAdminTeam(args: {
     requireUniversity(args.universityId, prisma),
   ])
 
-  await ensureUniqueTeamName({ name })
+  await ensureUniqueTeamName({
+    seasonId: season.id,
+    name,
+  })
   await ensureUniqueExternalTeamId({
     seasonId: season.id,
     externalTeamId,
@@ -288,6 +295,7 @@ export async function createAdminTeam(args: {
   await resolveAssignableSupervisor({
     supervisorId: args.supervisorId,
     university,
+    seasonId: season.id,
   })
 
   return prisma.$transaction(async (tx) => {
@@ -350,6 +358,7 @@ export async function updateAdminTeamMetadata(args: {
 
   if (nextName !== currentTeam.name) {
     await ensureUniqueTeamName({
+      seasonId: currentTeam.seasonId,
       name: nextName,
       teamId: currentTeam.id,
     })

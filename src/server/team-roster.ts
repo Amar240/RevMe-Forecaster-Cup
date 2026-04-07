@@ -9,6 +9,11 @@ import {
   resolveAssignableSupervisor,
   TEAM_SUPERVISOR_CAP,
 } from '@/server/team-management'
+import {
+  findSeasonMembershipConflict,
+  getSeasonScopedMembershipFilter,
+  getSupervisorTeamCountsForSeason,
+} from '@/server/team-membership'
 
 type DbClient = Prisma.TransactionClient | typeof prisma
 type AccessMode = 'admin' | 'supervisor'
@@ -181,14 +186,15 @@ async function ensureEligibleStudent(team: RosterTeam, student: Awaited<ReturnTy
     throw new ApiError('Student must belong to the same university as the team', 422, 'INVALID_INPUT')
   }
 
-  const existingMembership = await db.teamMember.findFirst({
-    where: { userId: student.id },
-    include: { team: true },
+  const existingMembership = await findSeasonMembershipConflict({
+    userId: student.id,
+    seasonId: team.seasonId,
+    db,
   })
 
   if (existingMembership) {
     throw new ApiError(
-      `Student is already assigned to ${existingMembership.team.name}. Remove them there first.`,
+      `Student is already assigned to ${existingMembership.team.name} in this season. Remove them there first.`,
       409,
       'CONFLICT'
     )
@@ -234,7 +240,16 @@ export async function renameTeam(args: {
       return team
     }
 
-    await ensureUniqueTeamName({ teamId: team.id, name: nextName, db: tx })
+    if (!team.seasonId) {
+      throw new ApiError('Teams without a season cannot be renamed through this flow.', 422, 'INVALID_INPUT')
+    }
+
+    await ensureUniqueTeamName({
+      seasonId: team.seasonId,
+      teamId: team.id,
+      name: nextName,
+      db: tx,
+    })
 
     const updated = await tx.team.update({
       where: { id: team.id },
@@ -448,6 +463,7 @@ export async function reassignTeamSupervisor(args: {
     const supervisor = await resolveAssignableSupervisor({
       supervisorId: args.supervisorId,
       university: team.university,
+      seasonId: team.seasonId,
       teamIdToExclude: team.id,
       db: tx,
     })
@@ -658,7 +674,9 @@ export async function searchEligibleStudents(args: {
     where: {
       role: 'STUDENT',
       teamMemberships: {
-        none: {},
+        none: getSeasonScopedMembershipFilter({
+          seasonId: team.seasonId,
+        }),
       },
       ...(query
         ? {
@@ -735,11 +753,17 @@ export async function searchEligibleSupervisors(args: {
     orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }, { email: 'asc' }],
   })
 
+  const teamCountsBySeason = await getSupervisorTeamCountsForSeason({
+    supervisorIds: supervisors.map((supervisor) => supervisor.id),
+    seasonId: team.seasonId,
+    db: prisma,
+  })
+
   return supervisors
     .filter(
       (supervisor) =>
         sameUniversity(team.university, supervisor.university) &&
-        (supervisor.id === team.supervisorId || supervisor._count.supervisedTeams < TEAM_SUPERVISOR_CAP)
+        (supervisor.id === team.supervisorId || (teamCountsBySeason.get(supervisor.id) ?? 0) < TEAM_SUPERVISOR_CAP)
     )
     .slice(0, 12)
     .map(({ university: _university, _count: _count, ...supervisor }) => supervisor)

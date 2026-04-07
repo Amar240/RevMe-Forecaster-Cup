@@ -71,7 +71,7 @@ describe('Admin team management APIs', () => {
     expect(created?.supervisorId).toBe(supervisor.id)
   })
 
-  it('manual create rejects duplicate team names case-insensitively', async () => {
+  it('manual create allows reusing a team name from a different season', async () => {
     await createTeam({
       name: 'Revenue Runners',
       supervisorId: supervisor.id,
@@ -91,8 +91,37 @@ describe('Admin team management APIs', () => {
       },
     })
     const res = await postAdminTeams(req)
+    const data = await res.json()
+
+    expect(res.status).toBe(201)
+    expect(data.team.name).toBe('revenue runners')
+    expect(data.team.seasonId).toBe(secondSeason.id)
+  })
+
+  it('manual create rejects duplicate team names case-insensitively in the same season', async () => {
+    await createTeam({
+      name: 'Revenue Runners',
+      supervisorId: supervisor.id,
+      universityId: university.id,
+      seasonId: season.id,
+      status: 'ACTIVE',
+    })
+
+    await loginAs(admin.id)
+    const req = makeRequest('http://localhost/api/admin/teams', {
+      method: 'POST',
+      body: {
+        seasonId: season.id,
+        universityId: university.id,
+        name: 'revenue runners',
+        supervisorId: supervisor.id,
+      },
+    })
+    const res = await postAdminTeams(req)
+    const data = await res.json()
 
     expect(res.status).toBe(422)
+    expect(data.message).toContain('already exists in this season')
   })
 
   it('manual create rejects duplicate external team IDs in the same season', async () => {
@@ -138,6 +167,40 @@ describe('Admin team management APIs', () => {
     expect(res.status).toBe(422)
   })
 
+  it('manual create ignores a supervisor cap reached only in previous seasons', async () => {
+    const historicalSeason = (await createSeasonWithRounds({ name: 'Historical Admin Cap Season' })).season
+    await prisma.season.update({
+      where: { id: historicalSeason.id },
+      data: { status: 'COMPLETED' },
+    })
+
+    for (let index = 0; index < 10; index += 1) {
+      await createTeam({
+        name: `Historical Admin Team ${index}`,
+        supervisorId: supervisor.id,
+        universityId: university.id,
+        seasonId: historicalSeason.id,
+        status: 'ACTIVE',
+      })
+    }
+
+    await loginAs(admin.id)
+    const req = makeRequest('http://localhost/api/admin/teams', {
+      method: 'POST',
+      body: {
+        seasonId: season.id,
+        universityId: university.id,
+        name: 'Current Manual Team',
+        supervisorId: supervisor.id,
+      },
+    })
+    const res = await postAdminTeams(req)
+    const data = await res.json()
+
+    expect(res.status).toBe(201)
+    expect(data.team.seasonId).toBe(season.id)
+  })
+
   it('admin can edit team metadata safely', async () => {
     const team = await createTeam({
       name: 'Editable Team',
@@ -166,6 +229,68 @@ describe('Admin team management APIs', () => {
     const updated = await prisma.team.findUnique({ where: { id: team.id } })
     expect(updated?.seasonId).toBe(season.id)
     expect(updated?.universityId).toBe(university.id)
+  })
+
+  it('admin rename allows a team name that exists only in another season', async () => {
+    await createTeam({
+      name: 'Historic Name',
+      supervisorId: supervisor.id,
+      universityId: university.id,
+      seasonId: secondSeason.id,
+      status: 'ACTIVE',
+    })
+
+    const team = await createTeam({
+      name: 'Current Name',
+      supervisorId: supervisor.id,
+      universityId: university.id,
+      seasonId: season.id,
+      status: 'DRAFT',
+    })
+
+    await loginAs(admin.id)
+    const req = makeRequest(`http://localhost/api/admin/teams/${team.id}`, {
+      method: 'PATCH',
+      body: {
+        name: 'Historic Name',
+      },
+    })
+    const res = await patchAdminTeam(req, { params: Promise.resolve({ id: team.id }) })
+    const data = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(data.team.name).toBe('Historic Name')
+  })
+
+  it('admin rename rejects a duplicate team name in the same season', async () => {
+    await createTeam({
+      name: 'Existing Current Name',
+      supervisorId: supervisor.id,
+      universityId: university.id,
+      seasonId: season.id,
+      status: 'ACTIVE',
+    })
+
+    const team = await createTeam({
+      name: 'Rename Target',
+      supervisorId: supervisor.id,
+      universityId: university.id,
+      seasonId: season.id,
+      status: 'DRAFT',
+    })
+
+    await loginAs(admin.id)
+    const req = makeRequest(`http://localhost/api/admin/teams/${team.id}`, {
+      method: 'PATCH',
+      body: {
+        name: 'existing current name',
+      },
+    })
+    const res = await patchAdminTeam(req, { params: Promise.resolve({ id: team.id }) })
+    const data = await res.json()
+
+    expect(res.status).toBe(422)
+    expect(data.message).toContain('already exists in this season')
   })
 
   it('archive and restore to draft preserve team history safely', async () => {

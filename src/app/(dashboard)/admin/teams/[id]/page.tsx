@@ -95,7 +95,8 @@ interface EligibleSupervisorResult {
   lastName: string
 }
 
-const blockedAssignmentStatuses = new Set(['REJECTED', 'DISQUALIFIED'])
+const blockedAssignmentStatuses = new Set(['REJECTED', 'DISQUALIFIED', 'ARCHIVED'])
+const currentManagedStatuses = new Set(['PENDING_APPROVAL', 'APPROVED', 'ACTIVE'])
 
 const actionLabels: Record<string, string> = {
   TEAM_RENAMED: 'Team renamed',
@@ -145,6 +146,83 @@ function formatAuditMessage(entry: AuditEntry) {
   }
 }
 
+function getRosterRestrictionMessage(status: TeamSummary['status']) {
+  switch (status) {
+    case 'ARCHIVED':
+      return 'Member changes are unavailable while this team is archived.'
+    case 'REJECTED':
+      return 'Member changes are unavailable while this team is rejected.'
+    case 'DISQUALIFIED':
+      return 'Member changes are unavailable while this team is disqualified.'
+    default:
+      return ''
+  }
+}
+
+function getTeamStatusBanner(team: TeamSummary): {
+  variant: 'info' | 'success' | 'warning' | 'error'
+  title: string
+  message: string
+} {
+  switch (team.status) {
+    case 'DRAFT':
+      return {
+        variant: 'info',
+        title: 'Draft team',
+        message:
+          'This team is still being prepared. Team settings, roster updates, and supervisor changes are available before participation begins.',
+      }
+    case 'PENDING_APPROVAL':
+      return {
+        variant: 'warning',
+        title: 'Pending approval',
+        message:
+          'This team is under review. Roster updates and supervisor changes are still available while approval is pending.',
+      }
+    case 'APPROVED':
+      return {
+        variant: 'info',
+        title: 'Approved team',
+        message:
+          'This team is approved. Roster updates, submitter changes, and supervisor reassignment remain available.',
+      }
+    case 'ACTIVE':
+      return {
+        variant: 'success',
+        title: 'Active team',
+        message:
+          'This team is active. Roster updates, submitter changes, and supervisor reassignment are available right now.',
+      }
+    case 'ARCHIVED':
+      return {
+        variant: 'info',
+        title: 'Archived team',
+        message:
+          'This team is archived. Roster updates, submitter changes, and member moves are unavailable while the team remains visible for reference.',
+      }
+    case 'REJECTED':
+      return {
+        variant: 'error',
+        title: 'Rejected team',
+        message:
+          'This team is rejected. Roster updates, submitter changes, and member moves are unavailable unless the team returns to a managed status later.',
+      }
+    case 'DISQUALIFIED':
+      return {
+        variant: 'error',
+        title: 'Disqualified team',
+        message:
+          'This team is disqualified. Roster updates, submitter changes, and member moves are unavailable, but the team remains visible for operations and history.',
+      }
+    default:
+      return {
+        variant: 'info',
+        title: 'Team status',
+        message: 'Review the current team state before making changes.',
+      }
+  }
+}
+
 export default function AdminTeamDetailPage() {
   const params = useParams()
   const { loading: permLoading, isAdmin, hasFullAccess } = usePermissions()
@@ -158,6 +236,7 @@ export default function AdminTeamDetailPage() {
   const [searchingStudents, setSearchingStudents] = useState(false)
   const [searchingSupervisors, setSearchingSupervisors] = useState(false)
   const [teamDirectoryLoading, setTeamDirectoryLoading] = useState(false)
+  const [eligibleStudentsLoaded, setEligibleStudentsLoaded] = useState(false)
   const [team, setTeam] = useState<TeamSummary | null>(null)
   const [teamDirectory, setTeamDirectory] = useState<TeamSummary[]>([])
   const [recentActivity, setRecentActivity] = useState<AuditEntry[]>([])
@@ -234,6 +313,7 @@ export default function AdminTeamDetailPage() {
         setEligibleStudents(data.students || [])
       } finally {
         setSearchingStudents(false)
+        setEligibleStudentsLoaded(true)
       }
     },
     [hasRosterAccess, teamId]
@@ -282,6 +362,7 @@ export default function AdminTeamDetailPage() {
     if (!team || blockedAssignmentStatuses.has(team.status) || team.members.length >= 5) {
       setEligibleStudents([])
       setSelectedStudentId('')
+      setEligibleStudentsLoaded(false)
       return
     }
 
@@ -311,6 +392,12 @@ export default function AdminTeamDetailPage() {
   }, [team])
 
   useEffect(() => {
+    if (team && blockedAssignmentStatuses.has(team.status) && selectedMemberIds.length > 0) {
+      setSelectedMemberIds([])
+    }
+  }, [selectedMemberIds.length, team])
+
+  useEffect(() => {
     if (!removeDialogOpen) {
       setMemberToRemove(null)
       setReplacementMemberId('')
@@ -326,7 +413,16 @@ export default function AdminTeamDetailPage() {
   }, [moveDialogOpen])
 
   const teamStatus = team ? teamStatusMeta[team.status] : null
-  const canAddMembers = team ? !blockedAssignmentStatuses.has(team.status) && team.members.length < 5 : false
+  const statusBanner = team ? getTeamStatusBanner(team) : null
+  const isRosterLocked = team ? blockedAssignmentStatuses.has(team.status) : false
+  const rosterRestrictionMessage = team ? getRosterRestrictionMessage(team.status) : ''
+  const isAtMemberCap = team ? team.members.length >= 5 : false
+  const canAddMembers = Boolean(team && !isRosterLocked && !isAtMemberCap)
+  const moveSelectionDisabled = !team || isRosterLocked || team.members.length === 0
+  const allMembersSelected = Boolean(team && team.members.length > 0 && selectedMemberIds.length === team.members.length)
+  const singleManagedMemberRemovalLocked = Boolean(
+    team && team.members.length === 1 && currentManagedStatuses.has(team.status)
+  )
 
   const replacementOptions = useMemo(() => {
     if (!team || !memberToRemove) return []
@@ -378,6 +474,66 @@ export default function AdminTeamDetailPage() {
       })),
     ]
   }, [selectedMembers, selectedTargetTeam])
+
+  const moveDisabledReason = useMemo(() => {
+    if (!team) return ''
+    if (isRosterLocked) {
+      return rosterRestrictionMessage
+    }
+    if (team.members.length === 0) {
+      return 'Add a student before moving members.'
+    }
+    if (!teamDirectoryLoading && targetTeamOptions.length === 0) {
+      return 'No same-season destination teams are available.'
+    }
+    if (selectedMemberIds.length === 0) {
+      return 'Select one or more members to move them.'
+    }
+    return ''
+  }, [isRosterLocked, rosterRestrictionMessage, selectedMemberIds.length, targetTeamOptions.length, team, teamDirectoryLoading])
+
+  const addMemberHelperText = useMemo(() => {
+    if (!team) return ''
+    if (isRosterLocked) {
+      return rosterRestrictionMessage
+    }
+    if (isAtMemberCap) {
+      return 'This team is already at the 5-member limit.'
+    }
+    if (eligibleStudentsLoaded && !searchingStudents && eligibleStudents.length === 0) {
+      return 'No eligible students available for this season.'
+    }
+    return ''
+  }, [
+    eligibleStudents.length,
+    eligibleStudentsLoaded,
+    isAtMemberCap,
+    isRosterLocked,
+    rosterRestrictionMessage,
+    searchingStudents,
+    team,
+  ])
+
+  const rosterHelperText = useMemo(() => {
+    if (!team) return ''
+    if (isRosterLocked) {
+      return rosterRestrictionMessage
+    }
+    if (team.members.length === 0) {
+      return 'Add a student before assigning a submitter or moving members.'
+    }
+    return moveDisabledReason
+  }, [isRosterLocked, moveDisabledReason, rosterRestrictionMessage, team])
+
+  const getRemoveDisabledReason = (member: AdminRosterMember) => {
+    if (isRosterLocked) {
+      return rosterRestrictionMessage
+    }
+    if (singleManagedMemberRemovalLocked && team?.members[0]?.id === member.id) {
+      return 'This member cannot be removed because this team must keep at least one member in its current status.'
+    }
+    return ''
+  }
 
   const handleRenameTeam = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -616,27 +772,32 @@ export default function AdminTeamDetailPage() {
               {teamStatus ? <Badge variant={teamStatus.tone}>{teamStatus.label}</Badge> : null}
             </div>
             <p className="text-sm text-text-secondary">
-              {team.displayId} - {team.university.name} - {team.season?.name ?? 'No season assigned'}
+              Display ID {team.displayId} / {team.university.name} / {team.season?.name ?? 'No season assigned'}
             </p>
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant="outline"
-            onClick={() => setMoveDialogOpen(true)}
-            disabled={selectedMemberIds.length === 0}
-          >
-            <ArrowRightLeft className="mr-2 h-4 w-4" />
-            Move selected ({selectedMemberIds.length})
-          </Button>
-          <Button asChild variant="secondary">
-            <Link href={`/teams/${team.id}`}>Open supervisor view</Link>
-          </Button>
+        <div className="flex flex-col gap-2 md:items-end">
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setMoveDialogOpen(true)}
+              disabled={Boolean(moveDisabledReason)}
+            >
+              <ArrowRightLeft className="mr-2 h-4 w-4" />
+              Move selected ({selectedMemberIds.length})
+            </Button>
+            <Button asChild variant="secondary">
+              <Link href={`/teams/${team.id}`}>Open supervisor view</Link>
+            </Button>
+          </div>
+          {moveDisabledReason ? (
+            <p className="max-w-sm text-sm text-text-secondary md:text-right">{moveDisabledReason}</p>
+          ) : null}
         </div>
       </div>
 
       {rosterError ? (
-        <AlertBanner variant="error" title="Roster update failed">
+        <AlertBanner variant="error" title="Action couldn't be completed">
           {rosterError}
         </AlertBanner>
       ) : null}
@@ -670,12 +831,196 @@ export default function AdminTeamDetailPage() {
         </Card>
       </div>
 
+      {statusBanner ? (
+        <AlertBanner variant={statusBanner.variant} title={statusBanner.title}>
+          {statusBanner.message}
+        </AlertBanner>
+      ) : null}
+
       <div className="grid gap-6 xl:grid-cols-[1.15fr,0.85fr]">
         <div className="space-y-6">
           <Card>
+            <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <CardTitle>Roster</CardTitle>
+                <CardDescription>Manage team members, submitter responsibility, and same-season member moves.</CardDescription>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={toggleSelectAllMembers} disabled={moveSelectionDisabled}>
+                  <Users className="mr-2 h-4 w-4" />
+                  {allMembersSelected ? 'Clear selection' : 'Select all'}
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setMoveDialogOpen(true)}
+                  disabled={Boolean(moveDisabledReason)}
+                >
+                  <ArrowRightLeft className="mr-2 h-4 w-4" />
+                  Move selected
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {rosterHelperText ? <p className="text-sm text-text-secondary">{rosterHelperText}</p> : null}
+              <div className="overflow-x-auto">
+                <table className="min-w-full border-separate border-spacing-y-2">
+                  <thead>
+                    <tr className="text-left text-xs uppercase tracking-[0.08em] text-text-muted">
+                      <th className="px-3 py-2">
+                        <input
+                          type="checkbox"
+                          checked={allMembersSelected}
+                          onChange={toggleSelectAllMembers}
+                          aria-label="Select all team members"
+                          disabled={moveSelectionDisabled}
+                        />
+                      </th>
+                      <th className="px-3 py-2">Member</th>
+                      <th className="px-3 py-2">Role</th>
+                      <th className="px-3 py-2">Joined</th>
+                      <th className="px-3 py-2">Submitter</th>
+                      <th className="px-3 py-2 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {team.members.map((member) => (
+                      <tr key={member.id} className="rounded-xl border border-border bg-card shadow-sm">
+                        <td className="rounded-l-xl px-3 py-3">
+                          <input
+                            type="checkbox"
+                            checked={selectedMemberIds.includes(member.id)}
+                            onChange={() => toggleMemberSelection(member.id)}
+                            aria-label={`Select ${member.user.email}`}
+                            disabled={moveSelectionDisabled}
+                          />
+                        </td>
+                        <td className="px-3 py-3">
+                          <div className="space-y-1">
+                            <p className="font-medium text-foreground">{getPersonLabel(member.user)}</p>
+                            <p className="text-sm text-text-secondary">{member.user.email}</p>
+                          </div>
+                        </td>
+                        <td className="px-3 py-3 text-sm text-text-secondary">{member.user.role}</td>
+                        <td className="px-3 py-3 text-sm text-text-secondary">
+                          {new Date(member.joinedAt).toLocaleDateString()}
+                        </td>
+                        <td className="px-3 py-3">
+                          {member.isSubmitter ? (
+                            <Badge variant="info" className="gap-1">
+                              <Crown className="h-3.5 w-3.5" />
+                              Submitter
+                            </Badge>
+                          ) : (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => void handleSetSubmitter(member.id)}
+                              disabled={isRosterLocked || submitterLoading === member.id}
+                            >
+                              {submitterLoading === member.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                'Make submitter'
+                              )}
+                            </Button>
+                          )}
+                        </td>
+                        <td className="rounded-r-xl px-3 py-3">
+                          <div className="flex flex-col items-end gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => openRemoveDialog(member)}
+                              disabled={Boolean(getRemoveDisabledReason(member))}
+                            >
+                              <UserMinus className="mr-2 h-4 w-4" />
+                              Remove
+                            </Button>
+                            {!isRosterLocked && getRemoveDisabledReason(member) ? (
+                              <p className="max-w-[15rem] text-right text-xs text-text-muted">
+                                {getRemoveDisabledReason(member)}
+                              </p>
+                            ) : null}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Add Existing Student</CardTitle>
+              <CardDescription>Add a registered student from the same university who is not already assigned in this season.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {!canAddMembers && addMemberHelperText ? (
+                <AlertBanner variant="warning" title="Roster changes are limited">
+                  {addMemberHelperText}
+                </AlertBanner>
+              ) : null}
+
+              <form className="space-y-4" onSubmit={handleAddMember}>
+                <div className="space-y-2">
+                  <Label htmlFor="student-search">Find student</Label>
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
+                    <Input
+                      id="student-search"
+                      value={memberSearch}
+                      onChange={(event) => setMemberSearch(event.target.value)}
+                      placeholder="Search by name or email"
+                      className="pl-9"
+                      disabled={!canAddMembers}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Eligible students</Label>
+                  <Select value={selectedStudentId} onValueChange={setSelectedStudentId} disabled={!canAddMembers}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a student" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {eligibleStudents.map((student) => (
+                        <SelectItem key={student.id} value={student.id}>
+                          {getPersonLabel(student)} ({student.email})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {searchingStudents ? <p className="text-xs text-text-muted">Searching students...</p> : null}
+                  {canAddMembers && addMemberHelperText && !searchingStudents ? (
+                    <p className="text-xs text-text-muted">{addMemberHelperText}</p>
+                  ) : null}
+                </div>
+
+                <Button type="submit" disabled={!canAddMembers || !selectedStudentId || addLoading}>
+                  {addLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Adding
+                    </>
+                  ) : (
+                    <>
+                      <UserPlus className="mr-2 h-4 w-4" />
+                      Add member
+                    </>
+                  )}
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+
+          <Card>
             <CardHeader>
               <CardTitle>Team Settings</CardTitle>
-              <CardDescription>Rename the team and reassign supervisor ownership.</CardDescription>
+              <CardDescription>Update the team name or reassign the supervisor for this season.</CardDescription>
             </CardHeader>
             <CardContent className="grid gap-6 lg:grid-cols-2">
               <form className="space-y-4" onSubmit={handleRenameTeam}>
@@ -730,7 +1075,10 @@ export default function AdminTeamDetailPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                <Button type="submit" disabled={savingSupervisor || !selectedSupervisorId || selectedSupervisorId === team.supervisor?.id}>
+                <Button
+                  type="submit"
+                  disabled={savingSupervisor || !selectedSupervisorId || selectedSupervisorId === team.supervisor?.id}
+                >
                   {savingSupervisor ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -748,183 +1096,15 @@ export default function AdminTeamDetailPage() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <CardTitle>Roster</CardTitle>
-                <CardDescription>
-                  Exactly one active submitter is enforced. Moving or removing the current submitter requires an explicit replacement.
-                </CardDescription>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" onClick={toggleSelectAllMembers}>
-                  <Users className="mr-2 h-4 w-4" />
-                  {selectedMemberIds.length === team.members.length ? 'Clear selection' : 'Select all'}
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => setMoveDialogOpen(true)}
-                  disabled={selectedMemberIds.length === 0}
-                >
-                  <ArrowRightLeft className="mr-2 h-4 w-4" />
-                  Move selected
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="overflow-x-auto">
-                <table className="min-w-full border-separate border-spacing-y-2">
-                  <thead>
-                    <tr className="text-left text-xs uppercase tracking-[0.08em] text-text-muted">
-                      <th className="px-3 py-2">
-                        <input
-                          type="checkbox"
-                          checked={team.members.length > 0 && selectedMemberIds.length === team.members.length}
-                          onChange={toggleSelectAllMembers}
-                          aria-label="Select all team members"
-                        />
-                      </th>
-                      <th className="px-3 py-2">Member</th>
-                      <th className="px-3 py-2">Role</th>
-                      <th className="px-3 py-2">Joined</th>
-                      <th className="px-3 py-2">Submitter</th>
-                      <th className="px-3 py-2 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {team.members.map((member) => (
-                      <tr key={member.id} className="rounded-xl border border-border bg-card shadow-sm">
-                        <td className="rounded-l-xl px-3 py-3">
-                          <input
-                            type="checkbox"
-                            checked={selectedMemberIds.includes(member.id)}
-                            onChange={() => toggleMemberSelection(member.id)}
-                            aria-label={`Select ${member.user.email}`}
-                          />
-                        </td>
-                        <td className="px-3 py-3">
-                          <div className="space-y-1">
-                            <p className="font-medium text-foreground">{getPersonLabel(member.user)}</p>
-                            <p className="text-sm text-text-secondary">{member.user.email}</p>
-                          </div>
-                        </td>
-                        <td className="px-3 py-3 text-sm text-text-secondary">{member.user.role}</td>
-                        <td className="px-3 py-3 text-sm text-text-secondary">
-                          {new Date(member.joinedAt).toLocaleDateString()}
-                        </td>
-                        <td className="px-3 py-3">
-                          {member.isSubmitter ? (
-                            <Badge variant="info" className="gap-1">
-                              <Crown className="h-3.5 w-3.5" />
-                              Submitter
-                            </Badge>
-                          ) : (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => void handleSetSubmitter(member.id)}
-                              disabled={submitterLoading === member.id}
-                            >
-                              {submitterLoading === member.id ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
-                                'Make submitter'
-                              )}
-                            </Button>
-                          )}
-                        </td>
-                        <td className="rounded-r-xl px-3 py-3">
-                          <div className="flex justify-end gap-2">
-                            <Button variant="ghost" size="sm" onClick={() => openRemoveDialog(member)}>
-                              <UserMinus className="mr-2 h-4 w-4" />
-                              Remove
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
+          <Card variant="subtle">
             <CardHeader>
-              <CardTitle>Add Existing Student</CardTitle>
-              <CardDescription>
-                Search registered students from the same university who are not already assigned to a team.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {!canAddMembers ? (
-                <AlertBanner variant="warning" title="Roster changes are limited">
-                  {team.members.length >= 5
-                    ? 'This team is already at the 5-member limit.'
-                    : 'Rejected and disqualified teams cannot accept new members.'}
-                </AlertBanner>
-              ) : null}
-
-              <form className="space-y-4" onSubmit={handleAddMember}>
-                <div className="space-y-2">
-                  <Label htmlFor="student-search">Find student</Label>
-                  <div className="relative">
-                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
-                    <Input
-                      id="student-search"
-                      value={memberSearch}
-                      onChange={(event) => setMemberSearch(event.target.value)}
-                      placeholder="Search by name or email"
-                      className="pl-9"
-                      disabled={!canAddMembers}
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Eligible students</Label>
-                  <Select value={selectedStudentId} onValueChange={setSelectedStudentId} disabled={!canAddMembers}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a student" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {eligibleStudents.map((student) => (
-                        <SelectItem key={student.id} value={student.id}>
-                          {getPersonLabel(student)} ({student.email})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {searchingStudents ? <p className="text-xs text-text-muted">Searching students...</p> : null}
-                </div>
-
-                <Button type="submit" disabled={!canAddMembers || !selectedStudentId || addLoading}>
-                  {addLoading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Adding
-                    </>
-                  ) : (
-                    <>
-                      <UserPlus className="mr-2 h-4 w-4" />
-                      Add member
-                    </>
-                  )}
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Next-phase Controls</CardTitle>
-              <CardDescription>Archive, delete, and merge stay admin-only and land in the next schema-backed phase.</CardDescription>
+              <CardTitle>Additional Admin Actions</CardTitle>
+              <CardDescription>Additional admin cleanup actions are not available in this version yet.</CardDescription>
             </CardHeader>
             <CardContent>
-              <AlertBanner variant="info" title="Destructive actions intentionally deferred">
-                This phase ships safe roster control first. Archive, delete, and merge will be added after archive metadata is introduced on the team model.
-              </AlertBanner>
+              <p className="text-sm text-text-secondary">
+                Team settings and roster controls are available above. Cleanup and destructive admin actions remain unavailable in this view.
+              </p>
             </CardContent>
           </Card>
         </div>
@@ -932,13 +1112,13 @@ export default function AdminTeamDetailPage() {
         <div className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Recent Team Activity</CardTitle>
-              <CardDescription>Auditability for admin and supervisor roster changes.</CardDescription>
+              <CardTitle>Activity Log</CardTitle>
+              <CardDescription>Recent roster and team management activity for this team.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {recentActivity.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-border p-4 text-sm text-text-secondary">
-                  No roster activity recorded yet.
+                  No team activity recorded yet.
                 </div>
               ) : (
                 recentActivity.map((entry) => (
@@ -961,26 +1141,44 @@ export default function AdminTeamDetailPage() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card variant="subtle">
             <CardHeader>
               <CardTitle>Move Readiness</CardTitle>
-              <CardDescription>Only same-university and same-season target teams are eligible.</CardDescription>
+              <CardDescription>Supporting context for same-season member moves.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 text-sm text-text-secondary">
-              <div className="flex items-start justify-between gap-3 rounded-xl border border-border bg-surface-secondary p-4">
+              <div className="flex items-start justify-between gap-3 rounded-xl border border-border bg-card p-4">
                 <div>
                   <p className="font-medium text-foreground">Target pool</p>
-                  <p>{teamDirectoryLoading ? 'Refreshing team directory...' : `${targetTeamOptions.length} valid destination teams available`}</p>
+                  <p>{teamDirectoryLoading ? 'Refreshing same-season teams...' : `${targetTeamOptions.length} valid destination teams available`}</p>
+                  {!teamDirectoryLoading && targetTeamOptions.length === 0 ? (
+                    <p className="mt-1 text-xs text-text-muted">No same-season destination teams are available.</p>
+                  ) : null}
                 </div>
                 <Badge variant="info">{team.season?.name ?? 'No season'}</Badge>
               </div>
-              <div className="flex items-start justify-between gap-3 rounded-xl border border-border bg-surface-secondary p-4">
+              <div className="flex items-start justify-between gap-3 rounded-xl border border-border bg-card p-4">
                 <div>
                   <p className="font-medium text-foreground">Selected members</p>
                   <p>{selectedMemberIds.length} currently staged for move</p>
+                  {!selectedMemberIds.length ? (
+                    <p className="mt-1 text-xs text-text-muted">Select one or more members to move them.</p>
+                  ) : null}
                 </div>
-                <Badge variant={selectedMemberIds.length > 0 ? 'warning' : 'neutral'}>
-                  {selectedMemberIds.length > 0 ? 'Action ready' : 'Select members'}
+                <Badge
+                  variant={
+                    isRosterLocked
+                      ? 'neutral'
+                      : selectedMemberIds.length > 0 && targetTeamOptions.length > 0
+                        ? 'warning'
+                        : 'neutral'
+                  }
+                >
+                  {isRosterLocked
+                    ? 'Unavailable'
+                    : selectedMemberIds.length > 0 && targetTeamOptions.length > 0
+                      ? 'Action ready'
+                      : 'Select members'}
                 </Badge>
               </div>
             </CardContent>

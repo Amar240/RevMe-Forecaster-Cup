@@ -5,9 +5,15 @@ import { z } from 'zod'
 
 export const dynamic = 'force-dynamic'
 
-const addMemberSchema = z.object({
-  email: z.string().email(),
-})
+const addMemberSchema = z
+  .object({
+    userId: z.string().min(1).optional(),
+    email: z.string().email().optional(),
+  })
+  .refine((value) => value.userId || value.email, {
+    message: 'A student selection is required',
+    path: ['userId'],
+  })
 
 export async function POST(
   request: NextRequest,
@@ -28,6 +34,7 @@ export async function POST(
       actor: user!,
       access: user!.role === 'ADMIN' ? 'admin' : 'supervisor',
       teamId: id,
+      studentId: data.userId,
       email: data.email,
     })
 

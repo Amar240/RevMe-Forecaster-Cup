@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
+import { prisma } from './db'
 import {
   addTeamMember,
   createSeasonWithRounds,
@@ -234,7 +235,7 @@ describe('team import parser and validation', () => {
     expect(parsed.rows[1].members).toHaveLength(0)
   })
 
-  it('validates fallback team name, same-university students, and global membership conflicts', async () => {
+  it('validates fallback team name, same-university students, and same-season membership conflicts only', async () => {
     const submitter = await createUser({
       email: 'submitter@import.test',
       role: 'STUDENT',
@@ -250,6 +251,11 @@ describe('team import parser and validation', () => {
       role: 'STUDENT',
       universityId: university.id,
     })
+    const priorSeasonStudent = await createUser({
+      email: 'prior-season@import.test',
+      role: 'STUDENT',
+      universityId: university.id,
+    })
     const existingTeam = await createTeam({
       name: 'Existing Team',
       displayId: 'T-EXISTING',
@@ -260,12 +266,28 @@ describe('team import parser and validation', () => {
     })
     await addTeamMember(existingTeam.id, assignedStudent.id, true)
 
+    const oldSeason = (await createSeasonWithRounds({ name: 'Previous Import Season' })).season
+    await prisma.season.update({
+      where: { id: oldSeason.id },
+      data: { status: 'COMPLETED' },
+    })
+    const historicalTeam = await createTeam({
+      name: 'Historical Team',
+      displayId: 'T-HISTORICAL',
+      supervisorId: supervisor.id,
+      universityId: university.id,
+      seasonId: oldSeason.id,
+      status: 'ACTIVE',
+    })
+    await addTeamMember(historicalTeam.id, priorSeasonStudent.id, true)
+
     const parsed = await parseTeamImportFile({
       fileName: 'teams.csv',
       fileBuffer: Buffer.from(
         [
           'universityName,teamExternalId,teamName,supervisorEmail,submitterEmail,member1Email',
           'Import University,ok-001,,supervisor@import.test,submitter@import.test,member1@import.test',
+          'Import University,ok-002,,supervisor@import.test,prior-season@import.test,member1@import.test',
           'Import University,bad-001,,supervisor@import.test,assigned@import.test,member1@import.test',
         ].join('\n'),
         'utf8'
@@ -279,9 +301,144 @@ describe('team import parser and validation', () => {
 
     expect(submitter.email).toBe('submitter@import.test')
     expect(member.email).toBe('member1@import.test')
-    expect(validation.summary.validRows).toBe(1)
+    expect(validation.summary.validRows).toBe(2)
     expect(validation.rows[0].teamName).toBe('ok-001')
-    expect(validation.rows[1].errors.join(' ')).toContain('already assigned')
+    expect(validation.rows[1].errors).toEqual([])
+    expect(validation.rows[2].errors.join(' ')).toContain('selected season')
+  })
+
+  it('enforces supervisor team caps per season rather than across history', async () => {
+    const oldSeason = (await createSeasonWithRounds({ name: 'Old Supervisor Cap Season' })).season
+    await prisma.season.update({
+      where: { id: oldSeason.id },
+      data: { status: 'COMPLETED' },
+    })
+
+    for (let index = 0; index < 10; index += 1) {
+      await createTeam({
+        name: `Historical Team ${index}`,
+        supervisorId: supervisor.id,
+        universityId: university.id,
+        seasonId: oldSeason.id,
+        status: 'ACTIVE',
+      })
+    }
+
+    const submitter = await createUser({
+      email: 'season-cap-submitter@import.test',
+      role: 'STUDENT',
+      universityId: university.id,
+    })
+
+    const parsed = await parseTeamImportFile({
+      fileName: 'teams.csv',
+      fileBuffer: Buffer.from(
+        [
+          'universityName,teamExternalId,teamName,supervisorEmail,submitterEmail',
+          'Import University,cap-001,Season Cap Team,supervisor@import.test,season-cap-submitter@import.test',
+        ].join('\n'),
+        'utf8'
+      ),
+    })
+
+    const validation = await validateTeamImport({
+      seasonId: season.id,
+      parsedFile: parsed,
+    })
+
+    expect(submitter.email).toBe('season-cap-submitter@import.test')
+    expect(validation.summary.validRows).toBe(1)
+    expect(validation.rows[0].errors).toEqual([])
+  })
+
+  it('allows reusing a team name from a previous season during import', async () => {
+    const priorSeason = (await createSeasonWithRounds({ name: 'Previous Team Name Season' })).season
+    await prisma.season.update({
+      where: { id: priorSeason.id },
+      data: { status: 'COMPLETED' },
+    })
+
+    await createTeam({
+      name: 'I7',
+      supervisorId: supervisor.id,
+      universityId: university.id,
+      seasonId: priorSeason.id,
+      status: 'ACTIVE',
+    })
+
+    await createUser({
+      email: 'historical-name-submitter@import.test',
+      role: 'STUDENT',
+      universityId: university.id,
+    })
+
+    const parsed = await parseTeamImportFile({
+      fileName: 'teams.csv',
+      fileBuffer: Buffer.from(
+        [
+          'universityName,teamExternalId,teamName,supervisorEmail,submitterEmail',
+          'Import University,historical-name-001,I7,supervisor@import.test,historical-name-submitter@import.test',
+        ].join('\n'),
+        'utf8'
+      ),
+    })
+
+    const validation = await validateTeamImport({
+      seasonId: season.id,
+      parsedFile: parsed,
+    })
+
+    expect(validation.summary.validRows).toBe(1)
+    expect(validation.rows[0].errors).toEqual([])
+  })
+
+  it('rejects same-season duplicate team names and duplicate names inside the same import file', async () => {
+    await createTeam({
+      name: 'I7',
+      supervisorId: supervisor.id,
+      universityId: university.id,
+      seasonId: season.id,
+      status: 'ACTIVE',
+    })
+
+    await createUser({
+      email: 'duplicate-name-a@import.test',
+      role: 'STUDENT',
+      universityId: university.id,
+    })
+    await createUser({
+      email: 'duplicate-name-b@import.test',
+      role: 'STUDENT',
+      universityId: university.id,
+    })
+    await createUser({
+      email: 'duplicate-name-c@import.test',
+      role: 'STUDENT',
+      universityId: university.id,
+    })
+
+    const parsed = await parseTeamImportFile({
+      fileName: 'teams.csv',
+      fileBuffer: Buffer.from(
+        [
+          'universityName,teamExternalId,teamName,supervisorEmail,submitterEmail',
+          'Import University,dup-name-001,I7,supervisor@import.test,duplicate-name-a@import.test',
+          'Import University,dup-name-002,Fire,supervisor@import.test,duplicate-name-b@import.test',
+          'Import University,dup-name-003, fire ,supervisor@import.test,duplicate-name-c@import.test',
+        ].join('\n'),
+        'utf8'
+      ),
+    })
+
+    const validation = await validateTeamImport({
+      seasonId: season.id,
+      parsedFile: parsed,
+    })
+
+    expect(validation.summary.validRows).toBe(0)
+    expect(validation.rows[0].errors.join(' ')).toContain('already exists in this season')
+    expect(validation.rows[1].errors.join(' ')).toContain('appears more than once in this import file')
+    expect(validation.rows[2].errors.join(' ')).toContain('appears more than once in this import file')
   })
 
   it('rejects duplicate identifiers, invalid students, and duplicate emails', async () => {

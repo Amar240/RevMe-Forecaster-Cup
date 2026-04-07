@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { TeamStatus } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { requireUserOrResponse, jsonOk, jsonError, ApiError } from '@/server/http'
+import { countSupervisorTeamsInSeason, findSeasonMembershipConflict } from '@/server/team-membership'
 import { sameUniversity } from '@/server/universities'
 
 export const dynamic = 'force-dynamic'
@@ -162,8 +163,11 @@ export async function POST(request: NextRequest) {
           throw new ApiError('Student and supervisor must belong to the same university', 422, 'INVALID_INPUT')
         }
 
-        const existingTeamsCount = await prisma.team.count({
-          where: { supervisorId: user!.id },
+        const targetSeasonId = joinRequest.seasonId || activeSeason?.id || null
+        const existingTeamsCount = await countSupervisorTeamsInSeason({
+          supervisorId: user!.id,
+          seasonId: targetSeasonId,
+          db: prisma,
         })
 
         if (existingTeamsCount >= 10) {
@@ -177,7 +181,7 @@ export async function POST(request: NextRequest) {
             displayId,
             supervisorId: user!.id,
             universityId: joinRequest.student.universityId || user!.universityId!,
-            seasonId: joinRequest.seasonId || activeSeason?.id || null,
+            seasonId: targetSeasonId,
             status: 'PENDING_APPROVAL',
           },
         })
@@ -224,6 +228,20 @@ export async function POST(request: NextRequest) {
 
       if (team.members.length >= 5) {
         throw new ApiError('Maximum 5 members per team reached', 400, 'CONFLICT')
+      }
+
+      const existingMembership = await findSeasonMembershipConflict({
+        userId: joinRequest.studentId,
+        seasonId: team.seasonId,
+        db: prisma,
+      })
+
+      if (existingMembership) {
+        throw new ApiError(
+          `Student is already assigned to ${existingMembership.team.name} in this season`,
+          409,
+          'CONFLICT'
+        )
       }
 
       await prisma.$transaction([

@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/server/db'
 import { logger } from '@/server/logger'
 import { requireUserOrResponse, jsonError } from '@/server/http'
+import { getCurrentOperationalSeason } from '@/server/season'
+import { getSeasonScopedTeamMemberWhere } from '@/server/team-membership'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,8 +14,7 @@ export async function GET() {
     if (response) return response
     const authUser = user!
 
-    const activeSeason = await prisma.season.findFirst({
-      where: { status: { in: ['ACTIVE', 'PAUSED'] } },
+    const activeSeason = await getCurrentOperationalSeason({
       include: {
         rounds: { orderBy: { number: 'asc' } },
         markets: {
@@ -21,7 +22,6 @@ export async function GET() {
           include: { market: true },
         },
       },
-      orderBy: { createdAt: 'desc' },
     })
 
     if (!activeSeason) {
@@ -93,7 +93,11 @@ export async function GET() {
     }
 
     const teamMember = await prisma.teamMember.findFirst({
-      where: { userId: authUser.id, isSubmitter: true },
+      where: getSeasonScopedTeamMemberWhere({
+        userId: authUser.id,
+        seasonId: activeSeason.id,
+        isSubmitter: true,
+      }),
       include: { team: true },
     })
 
@@ -153,4 +157,3 @@ export async function GET() {
     return jsonError(error, 'Failed to get current round')
   }
 }
-

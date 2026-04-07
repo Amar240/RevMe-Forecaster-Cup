@@ -345,8 +345,7 @@ export default function AdminTeamsPage() {
   const availableSupervisors = supervisors.filter(
     (supervisor) =>
       supervisor.isActive &&
-      supervisor.universityId === teamForm.universityId &&
-      supervisor._count.supervisedTeams < 10
+      supervisor.universityId === teamForm.universityId
   )
 
   const columns = [

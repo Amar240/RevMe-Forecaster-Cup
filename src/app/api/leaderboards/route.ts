@@ -3,6 +3,7 @@ import { prisma } from '@/server/db'
 import { logger } from '@/server/logger'
 import { getSession } from '@/server/auth'
 import { jsonError } from '@/server/http'
+import { getSeasonScopedTeamMemberWhere } from '@/server/team-membership'
 
 export const dynamic = 'force-dynamic'
 
@@ -211,7 +212,10 @@ export async function GET(request: NextRequest) {
     let myTeamId = null
     if (user) {
       const teamMember = await prisma.teamMember.findFirst({
-        where: { userId: user.id },
+        where: getSeasonScopedTeamMemberWhere({
+          userId: user.id,
+          seasonId: activeSeason.id,
+        }),
       })
       myTeamId = teamMember?.teamId || null
     }

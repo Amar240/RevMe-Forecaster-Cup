@@ -1,6 +1,7 @@
 import { requireAdmin, jsonOk, jsonError, ApiError, parseJson } from '@/server/http'
 import { z } from 'zod'
 import { prisma } from '@/lib/db'
+import { countSupervisorTeamsInSeason } from '@/server/team-membership'
 
 export const dynamic = 'force-dynamic'
 
@@ -45,6 +46,7 @@ export async function PATCH(
       where: { id: { in: teamIds } },
       select: {
         id: true,
+        seasonId: true,
         universityId: true,
         supervisorId: true,
       },
@@ -62,12 +64,21 @@ export async function PATCH(
       throw new ApiError('Supervisors can only be assigned teams from their own university', 422, 'INVALID_INPUT')
     }
 
-    const currentTeamCount = await prisma.team.count({
-      where: { supervisorId: params.id },
-    })
+    const requestedTeamsBySeason = new Map<string | null, number>()
+    for (const team of teams) {
+      requestedTeamsBySeason.set(team.seasonId ?? null, (requestedTeamsBySeason.get(team.seasonId ?? null) ?? 0) + 1)
+    }
 
-    if (currentTeamCount + teamIds.length > 10) {
-      throw new ApiError('Maximum 10 teams per supervisor reached', 422, 'CONFLICT')
+    for (const [seasonId, incomingCount] of requestedTeamsBySeason.entries()) {
+      const currentTeamCount = await countSupervisorTeamsInSeason({
+        supervisorId: params.id,
+        seasonId,
+        db: prisma,
+      })
+
+      if (currentTeamCount + incomingCount > 10) {
+        throw new ApiError('Maximum 10 teams per supervisor reached in the selected season', 422, 'CONFLICT')
+      }
     }
 
     const { count } = await prisma.team.updateMany({

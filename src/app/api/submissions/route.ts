@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { logger } from '@/server/logger'
 import { requireUserOrResponse, jsonError } from '@/server/http'
 import { sendSubmissionReceiptEmail } from '@/server/email'
+import { getSeasonScopedTeamMemberWhere } from '@/server/team-membership'
 
 export const dynamic = 'force-dynamic'
 
@@ -51,7 +52,11 @@ export async function POST(request: NextRequest) {
     }
 
     const teamMember = await prisma.teamMember.findFirst({
-      where: { userId: authUser.id, isSubmitter: true },
+      where: getSeasonScopedTeamMemberWhere({
+        userId: authUser.id,
+        seasonId: round.seasonId,
+        isSubmitter: true,
+      }),
       include: { team: { include: { supervisor: true } } },
     })
 
@@ -182,5 +187,4 @@ export async function POST(request: NextRequest) {
     return jsonError(error, 'Failed to submit')
   }
 }
-
 

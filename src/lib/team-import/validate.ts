@@ -1,5 +1,9 @@
 import { prisma } from '@/lib/db'
 import { ApiError } from '@/server/http'
+import {
+  getSeasonScopedMembershipFilter,
+  getSupervisorTeamCountsForSeason,
+} from '@/server/team-membership'
 import { normalizeUniversityName, sameUniversity } from '@/server/universities'
 import { z } from 'zod'
 import type {
@@ -26,6 +30,13 @@ function normalizePerson(person: TeamImportPersonInput): TeamImportPersonInput {
     firstName: person.firstName.trim(),
     lastName: person.lastName.trim(),
   }
+}
+
+function normalizeTeamNameKey(value: string) {
+  return value
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toLowerCase()
 }
 
 function formatName(firstName: string | null | undefined, lastName: string | null | undefined) {
@@ -148,6 +159,9 @@ export async function validateTeamImport(args: {
   const importedExternalIds = Array.from(
     new Set(rows.map((row) => row.teamExternalId.trim()).filter(Boolean))
   )
+  const importedTeamNames = rows
+    .map((row) => row.teamName.trim() || row.teamExternalId.trim())
+    .filter(Boolean)
 
   const existingTeamsByExternalId = importedExternalIds.length
     ? await prisma.team.findMany({
@@ -161,8 +175,22 @@ export async function validateTeamImport(args: {
       })
     : []
 
+  const existingTeamsByName = importedTeamNames.length
+    ? await prisma.team.findMany({
+        where: {
+          seasonId: season.id,
+        },
+        select: {
+          name: true,
+        },
+      })
+    : []
+
   const existingExternalIdSet = new Set(
     existingTeamsByExternalId.map((team) => team.externalTeamId).filter(Boolean) as string[]
+  )
+  const existingTeamNameSet = new Set(
+    existingTeamsByName.map((team) => normalizeTeamNameKey(team.name)).filter(Boolean)
   )
 
   const batchExternalIdCounts = new Map<string, number>()
@@ -171,6 +199,12 @@ export async function validateTeamImport(args: {
       externalTeamId,
       rows.filter((row) => row.teamExternalId.trim() === externalTeamId).length
     )
+  }
+
+  const batchTeamNameCounts = new Map<string, number>()
+  for (const teamName of importedTeamNames) {
+    const teamNameKey = normalizeTeamNameKey(teamName)
+    batchTeamNameCounts.set(teamNameKey, (batchTeamNameCounts.get(teamNameKey) ?? 0) + 1)
   }
 
   const importedEmails = parseEmailList(args.parsedFile)
@@ -219,7 +253,10 @@ export async function validateTeamImport(args: {
   const studentUserIds = users.filter((user) => user.role === 'STUDENT').map((user) => user.id)
   const membershipRows = studentUserIds.length
     ? await prisma.teamMember.findMany({
-        where: { userId: { in: studentUserIds } },
+        where: {
+          userId: { in: studentUserIds },
+          ...getSeasonScopedMembershipFilter({ seasonId: season.id }),
+        },
         select: {
           userId: true,
           team: {
@@ -240,14 +277,11 @@ export async function validateTeamImport(args: {
     }
   }
 
-  const supervisorCounts = await prisma.team.groupBy({
-    by: ['supervisorId'],
-    _count: { _all: true },
+  const existingSupervisorTeamCounts = await getSupervisorTeamCountsForSeason({
+    seasonId: season.id,
+    supervisorIds: supervisors.map((supervisor) => supervisor.id),
+    db: prisma,
   })
-
-  const existingSupervisorTeamCounts = new Map(
-    supervisorCounts.map((entry) => [entry.supervisorId, entry._count._all])
-  )
 
   const acceptedSupervisorBatchCounts = new Map<string, number>()
   const previewRows: TeamImportPreviewRow[] = []
@@ -287,6 +321,18 @@ export async function validateTeamImport(args: {
       }
       if (existingExternalIdSet.has(externalTeamId)) {
         errors.push('Team identifier is already used in the selected season')
+      }
+    }
+
+    if (!finalTeamName) {
+      errors.push('Team name is required')
+    } else {
+      const teamNameKey = normalizeTeamNameKey(finalTeamName)
+      if ((batchTeamNameCounts.get(teamNameKey) ?? 0) > 1) {
+        errors.push('Team name appears more than once in this import file')
+      }
+      if (existingTeamNameSet.has(teamNameKey)) {
+        errors.push('A team with this name already exists in this season')
       }
     }
 
@@ -364,13 +410,10 @@ export async function validateTeamImport(args: {
         )
       }
 
-      // Cross-season reuse is a desired future rule, but current team lookups still
-      // resolve membership globally across the app. Keep imports aligned with that
-      // one-team-per-student behavior until those runtime lookups become season-aware.
       const existingMembership = existingMembershipsByUserId.get(entry.user.id)
       if (existingMembership) {
         errors.push(
-          `Student is already assigned to ${existingMembership.team.name} (${existingMembership.team.displayId})`
+          `Student is already assigned to ${existingMembership.team.name} (${existingMembership.team.displayId}) in the selected season`
         )
       }
     }
