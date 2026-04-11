@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireAdminOrResponse, jsonOk, jsonError } from '@/server/http'
+import { getCurrentOperationalSeason } from '@/server/season'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,20 +14,19 @@ export async function GET(request: NextRequest) {
     const supervisorId = searchParams.get('supervisorId')
     const format = searchParams.get('format') || 'csv'
 
-    const activeSeason = await prisma.season.findFirst({
-      where: { status: 'ACTIVE' },
+    const operationalSeason = await getCurrentOperationalSeason({
       include: {
         rounds: { orderBy: { number: 'asc' } },
         markets: { where: { isActive: true }, include: { market: true } },
       },
     })
 
-    if (!activeSeason) {
-      return jsonError('No active season', 'No active season found')
+    if (!operationalSeason) {
+      return jsonError('No operational season found')
     }
 
     const whereClause: any = {
-      seasonId: activeSeason.id,
+      seasonId: operationalSeason.id,
       status: { in: ['ACTIVE', 'DISQUALIFIED'] },
     }
     if (supervisorId) {
@@ -39,11 +39,11 @@ export async function GET(request: NextRequest) {
         supervisor: { select: { firstName: true, lastName: true, email: true } },
         university: { select: { name: true } },
         submissions: {
-          where: { round: { seasonId: activeSeason.id } },
+          where: { round: { seasonId: operationalSeason.id } },
           include: { round: true },
         },
         warnings: {
-          where: { round: { seasonId: activeSeason.id } },
+          where: { round: { seasonId: operationalSeason.id } },
           include: { round: true },
         },
       },
@@ -51,14 +51,14 @@ export async function GET(request: NextRequest) {
     })
 
     const scoreAggregates = await prisma.scoreAggregate.findMany({
-      where: { seasonId: activeSeason.id, scopeType: 'SEASON' },
+      where: { seasonId: operationalSeason.id, scopeType: 'SEASON' },
       orderBy: { mape: 'asc' },
     })
 
     const rankMap = new Map<string, number>()
     scoreAggregates.forEach((sa, i) => rankMap.set(sa.teamId, i + 1))
 
-    const rounds = activeSeason.rounds
+    const rounds = operationalSeason.rounds
     const headers = [
       'Team Name',
       'University',

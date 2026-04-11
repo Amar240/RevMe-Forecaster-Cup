@@ -1,6 +1,7 @@
 import { prisma } from '@/server/db'
 import type { Role } from '@prisma/client'
 import { requireUserOrResponse, jsonOk, jsonError, ApiError } from '@/server/http'
+import { getCurrentOperationalSeason } from '@/server/season'
 import { getSeasonScopedTeamMemberWhere } from '@/server/team-membership'
 
 export const dynamic = 'force-dynamic'
@@ -15,15 +16,14 @@ export async function GET(request: Request) {
     const teamId = searchParams.get('teamId')
     const roundId = searchParams.get('roundId')
 
-    const activeSeason = await prisma.season.findFirst({
-      where: { status: 'ACTIVE' },
+    const operationalSeason = await getCurrentOperationalSeason({
       include: {
         rounds: { orderBy: { number: 'asc' } },
         markets: { where: { isActive: true }, include: { market: true } },
       },
     })
 
-    if (!activeSeason) throw new ApiError('No active season', 404, 'NOT_FOUND')
+    if (!operationalSeason) throw new ApiError('No operational season found', 404, 'NOT_FOUND')
 
     let targetTeamId = teamId
     let allowedTeamIds: string[] = []
@@ -35,13 +35,13 @@ export async function GET(request: Request) {
 
     if (adminRoles.includes(session.role as Role)) {
       teams = await prisma.team.findMany({
-        where: { seasonId: activeSeason.id, status: 'APPROVED' },
+        where: { seasonId: operationalSeason.id, status: 'APPROVED' },
         select: { id: true, name: true }, orderBy: { name: 'asc' },
       })
       allowedTeamIds = teams.map((t) => t.id)
     } else if (supervisorRoles.includes(session.role as Role)) {
       teams = await prisma.team.findMany({
-        where: { supervisorId: session.id, seasonId: activeSeason.id },
+        where: { supervisorId: session.id, seasonId: operationalSeason.id },
         select: { id: true, name: true }, orderBy: { name: 'asc' },
       })
       allowedTeamIds = teams.map((t) => t.id)
@@ -50,7 +50,7 @@ export async function GET(request: Request) {
       const member = await prisma.teamMember.findFirst({
         where: getSeasonScopedTeamMemberWhere({
           userId: session.id,
-          seasonId: activeSeason.id,
+          seasonId: operationalSeason.id,
         }),
         include: { team: true },
       })
@@ -60,7 +60,7 @@ export async function GET(request: Request) {
       teams = [{ id: member.teamId, name: member.team.name }]
     }
 
-    const where: { seasonId: string; teamId?: string | { in: string[] }; roundId?: string } = { seasonId: activeSeason.id }
+    const where: { seasonId: string; teamId?: string | { in: string[] }; roundId?: string } = { seasonId: operationalSeason.id }
     if (targetTeamId) where.teamId = targetTeamId
     else if (allowedTeamIds.length > 0) where.teamId = { in: allowedTeamIds }
     if (roundId) where.roundId = roundId
@@ -75,12 +75,12 @@ export async function GET(request: Request) {
       orderBy: [{ round: { number: 'asc' } }, { market: { name: 'asc' } }, { metric: 'asc' }, { weekOffset: 'asc' }],
     })
 
-    const rounds = activeSeason.rounds.map((r) => ({
+    const rounds = operationalSeason.rounds.map((r) => ({
       id: r.id, number: r.number, isFinal: r.isFinal,
       label: r.isFinal ? `Round ${r.number} (Final)` : `Round ${r.number}`,
     }))
 
-    const markets = activeSeason.markets.map((sm) => ({ id: sm.market.id, name: sm.market.name }))
+    const markets = operationalSeason.markets.map((sm) => ({ id: sm.market.id, name: sm.market.name }))
 
     const formatted = predictionErrors.map((pe) => ({
       id: pe.id, roundId: pe.roundId, roundNumber: pe.round.number,
@@ -92,7 +92,7 @@ export async function GET(request: Request) {
     }))
 
     return jsonOk({
-      seasonName: activeSeason.name, rounds, markets, teams,
+      seasonName: operationalSeason.name, rounds, markets, teams,
       predictions: formatted, selectedTeamId: targetTeamId,
       canSelectTeam: adminRoles.includes(session.role as Role) || supervisorRoles.includes(session.role as Role),
     })

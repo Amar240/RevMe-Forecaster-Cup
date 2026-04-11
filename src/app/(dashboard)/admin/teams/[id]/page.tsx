@@ -19,6 +19,12 @@ import { csrfFetch } from '@/lib/csrf'
 import { clientLogger } from '@/lib/client-logger'
 import { usePermissions } from '@/hooks/usePermissions'
 import { teamStatusMeta } from '@/lib/status-metadata'
+import {
+  formatPersonOptionLabel,
+  getMinimumRosterRequirementMessage,
+  getRosterRestrictionMessage,
+  isRosterBlockedStatus,
+} from '@/features/teams/roster-ui'
 import { AccessDenied } from '@/components/ui/access-denied'
 import { AlertBanner } from '@/components/ui/alert-banner'
 import { Badge } from '@/components/ui/badge'
@@ -95,9 +101,6 @@ interface EligibleSupervisorResult {
   lastName: string
 }
 
-const blockedAssignmentStatuses = new Set(['REJECTED', 'DISQUALIFIED', 'ARCHIVED'])
-const currentManagedStatuses = new Set(['PENDING_APPROVAL', 'APPROVED', 'ACTIVE'])
-
 const actionLabels: Record<string, string> = {
   TEAM_RENAMED: 'Team renamed',
   TEAM_MEMBER_ADDED: 'Member added',
@@ -146,19 +149,6 @@ function formatAuditMessage(entry: AuditEntry) {
   }
 }
 
-function getRosterRestrictionMessage(status: TeamSummary['status']) {
-  switch (status) {
-    case 'ARCHIVED':
-      return 'Member changes are unavailable while this team is archived.'
-    case 'REJECTED':
-      return 'Member changes are unavailable while this team is rejected.'
-    case 'DISQUALIFIED':
-      return 'Member changes are unavailable while this team is disqualified.'
-    default:
-      return ''
-  }
-}
-
 function getTeamStatusBanner(team: TeamSummary): {
   variant: 'info' | 'success' | 'warning' | 'error'
   title: string
@@ -198,7 +188,7 @@ function getTeamStatusBanner(team: TeamSummary): {
         variant: 'info',
         title: 'Archived team',
         message:
-          'This team is archived. Roster updates, submitter changes, and member moves are unavailable while the team remains visible for reference.',
+          'This team is archived. Roster updates, submitter changes, and member moves are unavailable while the team remains available to review.',
       }
     case 'REJECTED':
       return {
@@ -359,7 +349,7 @@ export default function AdminTeamDetailPage() {
   }, [hasRosterAccess, permLoading, refreshTeamAndDirectory])
 
   useEffect(() => {
-    if (!team || blockedAssignmentStatuses.has(team.status) || team.members.length >= 5) {
+    if (!team || isRosterBlockedStatus(team.status) || team.members.length >= 5) {
       setEligibleStudents([])
       setSelectedStudentId('')
       setEligibleStudentsLoaded(false)
@@ -392,7 +382,7 @@ export default function AdminTeamDetailPage() {
   }, [team])
 
   useEffect(() => {
-    if (team && blockedAssignmentStatuses.has(team.status) && selectedMemberIds.length > 0) {
+    if (team && isRosterBlockedStatus(team.status) && selectedMemberIds.length > 0) {
       setSelectedMemberIds([])
     }
   }, [selectedMemberIds.length, team])
@@ -414,15 +404,13 @@ export default function AdminTeamDetailPage() {
 
   const teamStatus = team ? teamStatusMeta[team.status] : null
   const statusBanner = team ? getTeamStatusBanner(team) : null
-  const isRosterLocked = team ? blockedAssignmentStatuses.has(team.status) : false
+  const isRosterLocked = team ? isRosterBlockedStatus(team.status) : false
   const rosterRestrictionMessage = team ? getRosterRestrictionMessage(team.status) : ''
   const isAtMemberCap = team ? team.members.length >= 5 : false
   const canAddMembers = Boolean(team && !isRosterLocked && !isAtMemberCap)
   const moveSelectionDisabled = !team || isRosterLocked || team.members.length === 0
   const allMembersSelected = Boolean(team && team.members.length > 0 && selectedMemberIds.length === team.members.length)
-  const singleManagedMemberRemovalLocked = Boolean(
-    team && team.members.length === 1 && currentManagedStatuses.has(team.status)
-  )
+  const minimumRosterRequirementMessage = team ? getMinimumRosterRequirementMessage(team.status, team.members.length) : ''
 
   const replacementOptions = useMemo(() => {
     if (!team || !memberToRemove) return []
@@ -448,7 +436,7 @@ export default function AdminTeamDetailPage() {
         entry.id !== team.id &&
         entry.university.id === team.university.id &&
         entry.season?.id === team.season?.id &&
-        !blockedAssignmentStatuses.has(entry.status)
+        !isRosterBlockedStatus(entry.status)
     )
   }, [team, teamDirectory])
 
@@ -466,11 +454,11 @@ export default function AdminTeamDetailPage() {
     return [
       ...selectedTargetTeam.members.map((member) => ({
         id: member.id,
-        label: `${getPersonLabel(member.user)} (${member.user.email})`,
+        label: formatPersonOptionLabel(member.user),
       })),
       ...selectedMembers.map((member) => ({
         id: member.id,
-        label: `${getPersonLabel(member.user)} (${member.user.email})`,
+        label: formatPersonOptionLabel(member.user),
       })),
     ]
   }, [selectedMembers, selectedTargetTeam])
@@ -529,8 +517,8 @@ export default function AdminTeamDetailPage() {
     if (isRosterLocked) {
       return rosterRestrictionMessage
     }
-    if (singleManagedMemberRemovalLocked && team?.members[0]?.id === member.id) {
-      return 'This member cannot be removed because this team must keep at least one member in its current status.'
+    if (team?.members.length === 1 && team.members[0]?.id === member.id) {
+      return minimumRosterRequirementMessage
     }
     return ''
   }
@@ -749,7 +737,7 @@ export default function AdminTeamDetailPage() {
     return (
       <AccessDenied
         title="Access Denied"
-        message="Full admin access is required to manage team rosters and structural team operations."
+        message="Full admin access is required to manage teams and rosters."
       />
     )
   }
@@ -989,7 +977,7 @@ export default function AdminTeamDetailPage() {
                     <SelectContent>
                       {eligibleStudents.map((student) => (
                         <SelectItem key={student.id} value={student.id}>
-                          {getPersonLabel(student)} ({student.email})
+                          {formatPersonOptionLabel(student)}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -1069,7 +1057,7 @@ export default function AdminTeamDetailPage() {
                     <SelectContent>
                       {eligibleSupervisors.map((supervisor) => (
                         <SelectItem key={supervisor.id} value={supervisor.id}>
-                          {getPersonLabel(supervisor)} ({supervisor.email})
+                          {formatPersonOptionLabel(supervisor)}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -1098,12 +1086,12 @@ export default function AdminTeamDetailPage() {
 
           <Card variant="subtle">
             <CardHeader>
-              <CardTitle>Additional Admin Actions</CardTitle>
-              <CardDescription>Additional admin cleanup actions are not available in this version yet.</CardDescription>
+              <CardTitle>More Actions</CardTitle>
+              <CardDescription>Additional team actions are not available on this page.</CardDescription>
             </CardHeader>
             <CardContent>
               <p className="text-sm text-text-secondary">
-                Team settings and roster controls are available above. Cleanup and destructive admin actions remain unavailable in this view.
+                Use the controls above to manage the roster, supervisor, and team settings.
               </p>
             </CardContent>
           </Card>
@@ -1213,7 +1201,7 @@ export default function AdminTeamDetailPage() {
                     <SelectContent>
                       {replacementOptions.map((member) => (
                         <SelectItem key={member.id} value={member.id}>
-                          {getPersonLabel(member.user)} ({member.user.email})
+                          {formatPersonOptionLabel(member.user)}
                         </SelectItem>
                       ))}
                     </SelectContent>

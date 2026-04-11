@@ -1,99 +1,38 @@
-import { prisma } from '@/lib/db'
 import { requireAdminOrResponse, jsonOk, jsonError } from '@/server/http'
+import { getScoringReadinessSummary } from '@/server/scoring-readiness'
+import { getCurrentOperationalSeason } from '@/server/season'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
   try {
-    const { user, response } = await requireAdminOrResponse('scoring:run')
+    const { response } = await requireAdminOrResponse('scoring:run')
     if (response) return response
 
-    const activeSeason = await prisma.season.findFirst({
-      where: { status: 'ACTIVE' },
-      include: {
-        rounds: { 
-          orderBy: { number: 'asc' },
-          include: { _count: { select: { submissions: true, actuals: true } } },
-        },
-        markets: { where: { isActive: true }, include: { market: true } },
-      },
+    const operationalSeason = await getCurrentOperationalSeason({
+      select: { id: true },
     })
 
-    if (!activeSeason) return jsonOk({ ready: false, reason: 'No active season', checks: [] })
+    if (!operationalSeason) return jsonOk({ ready: false, reason: 'No operational season', checks: [] })
 
-    const activeTeams = await prisma.team.count({ where: { seasonId: activeSeason.id, status: 'ACTIVE' } })
-    const marketCount = activeSeason.markets.length
+    const summary = await getScoringReadinessSummary({
+      seasonId: operationalSeason.id,
+      scope: 'SEASON',
+    })
 
-    const now = new Date()
-    const closedRounds = activeSeason.rounds.filter(r => new Date(r.closesAt) <= now)
-
-    const checks = []
-    let allReady = true
-    let totalWarningsExpected = 0
-    let totalDQExpected = 0
-
-    for (const round of closedRounds) {
-      const actualsCount = await prisma.actual.count({
-        where: { roundId: round.id, isVoided: false },
-      })
-      const expectedActuals = marketCount * 2 * (round.isFinal ? 1 : 2)
-      const actualsComplete = actualsCount >= expectedActuals
-
-      const submissionCount = await prisma.submission.count({
-        where: { roundId: round.id },
-      })
-      const submittedTeamIds = await prisma.submission.findMany({
-        where: { roundId: round.id },
-        select: { teamId: true },
-        distinct: ['teamId'],
-      })
-      const missingTeams = activeTeams - submittedTeamIds.length
-
-      const existingWarnings = await prisma.warning.count({
-        where: { roundId: round.id },
-      })
-
-      const aggregatesExist = await prisma.scoreAggregate.count({
-        where: { seasonId: activeSeason.id, roundId: round.id },
-      })
-      const isScored = aggregatesExist > 0 && actualsCount === expectedActuals
-
-      if (missingTeams > 0 && existingWarnings === 0) {
-        totalWarningsExpected += missingTeams
-      }
-
-      if (!actualsComplete) allReady = false
-
-      checks.push({
-        roundNumber: round.number,
-        roundId: round.id,
-        isFinal: round.isFinal,
-        actualsUploaded: actualsCount,
-        actualsExpected: expectedActuals,
-        actualsComplete,
-        teamsSubmitted: submittedTeamIds.length,
-        totalActiveTeams: activeTeams,
-        missingTeams,
-        existingWarnings,
-        isScored,
-      })
+    if (!summary) {
+      return jsonOk({ ready: false, reason: 'No operational season', checks: [] })
     }
 
-    const teamsNearDQ = await prisma.team.findMany({
-      where: { seasonId: activeSeason.id, status: 'ACTIVE' },
-      include: { _count: { select: { warnings: true } } },
-    })
-    totalDQExpected = teamsNearDQ.filter(t => t._count.warnings >= 2).length
-
     return jsonOk({
-      ready: allReady,
-      reason: allReady ? 'All checks passed' : 'Some rounds have incomplete actuals',
-      seasonName: activeSeason.name,
-      activeTeams,
-      marketCount,
-      totalWarningsExpected,
-      teamsAtRiskOfDQ: totalDQExpected,
-      checks,
+      ready: summary.ready,
+      reason: summary.ready ? 'All checks passed' : 'Some rounds have incomplete actuals',
+      seasonName: summary.seasonName,
+      activeTeams: summary.activeTeams,
+      marketCount: summary.marketCount,
+      totalWarningsExpected: summary.totalWarningsExpected,
+      teamsAtRiskOfDQ: summary.teamsAtRiskOfDQ,
+      checks: summary.checks,
     })
   } catch (error) {
     return jsonError(error, 'Failed to run preflight check')

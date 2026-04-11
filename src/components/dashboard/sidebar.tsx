@@ -110,6 +110,7 @@ const adminNavGroups: NavGroup[] = [
     label: 'Growth',
     items: [
       { name: 'Leaderboards', href: '/leaderboards', icon: Trophy },
+      { name: 'Markets', href: '/admin/markets', icon: MapPin },
       { name: 'Market Info', href: '/admin/market-info', icon: MapPin },
       { name: 'Demo Requests', href: '/admin/demo-requests', icon: Mail },
     ],
@@ -155,6 +156,7 @@ const subAdminNavGroups: NavGroup[] = [
     label: 'Growth',
     items: [
       { name: 'Leaderboards', href: '/leaderboards', icon: Trophy },
+      { name: 'Markets', href: '/admin/markets', icon: MapPin },
       { name: 'Market Info', href: '/admin/market-info', icon: MapPin },
       { name: 'Demo Requests', href: '/admin/demo-requests', icon: Mail },
     ],

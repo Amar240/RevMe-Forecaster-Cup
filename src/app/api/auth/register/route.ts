@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
         lastName: user.lastName,
         role: user.role,
       },
-    })
+    }, 201)
   } catch (error) {
     return jsonError(error, 'Registration failed')
   }

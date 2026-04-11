@@ -74,6 +74,13 @@ enum SeasonStatus {
   COMPLETED
 }
 
+enum ArchiveStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
 enum WarningType {
   MISSED_SUBMISSION
   LATE_SUBMISSION
@@ -156,6 +163,7 @@ model User {
   roundsScored             Round[]          @relation("RoundScorer")
   marketInfosUpdated       MarketInfo[]     @relation("MarketInfoUpdatedBy")
   marketRoundUpdates       MarketRoundUpdate[] @relation("MarketRoundUpdateCreator")
+  seasonArchives           SeasonArchive[]
 
   @@index([email])
   @@index([role])
@@ -243,6 +251,28 @@ model Season {
   joinRequests       JoinRequest[]
   marketInfos        MarketInfo[]
   marketRoundUpdates MarketRoundUpdate[]
+  archives           SeasonArchive[]
+}
+
+model SeasonArchive {
+  id             String        @id @default(cuid())
+  seasonId       String
+  season         Season        @relation(fields: [seasonId], references: [id])
+  status         ArchiveStatus @default(PENDING)
+  version        Int           @default(1)
+  s3Bucket       String?
+  s3Prefix       String?
+  fileManifest   Json?
+  totalSizeBytes Int?
+  errorMessage   String?
+  triggeredById  String
+  triggeredBy    User          @relation(fields: [triggeredById], references: [id])
+  startedAt      DateTime      @default(now())
+  completedAt    DateTime?
+  createdAt      DateTime      @default(now())
+
+  @@unique([seasonId, version])
+  @@index([seasonId])
 }
 
 model Market {

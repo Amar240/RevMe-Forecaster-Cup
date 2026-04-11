@@ -240,7 +240,7 @@ export default function AdminUsersPage() {
     return (
       <AccessDenied
         title="Access Denied"
-        message="You do not have permission to access User Management. Please contact an administrator for access."
+        message="You do not have permission to manage users. Contact your administrator if you need access."
       />
     )
   }
@@ -379,18 +379,26 @@ export default function AdminUsersPage() {
               <LogOut className="mr-2 h-4 w-4" />
               Force Logout
             </DropdownMenuItem>
+            <DropdownMenuSeparator />
             {user.canDelete ? (
+              <DropdownMenuItem
+                className="text-error focus:text-error"
+                onClick={() => setDeleteTarget(user)}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete User
+              </DropdownMenuItem>
+            ) : (
               <>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  className="text-error focus:text-error"
-                  onClick={() => setDeleteTarget(user)}
-                >
+                <DropdownMenuItem disabled>
                   <Trash2 className="mr-2 h-4 w-4" />
-                  Delete User
+                  Delete unavailable
                 </DropdownMenuItem>
+                <div className="px-2.5 py-2 text-xs text-text-muted">
+                  {user.deleteBlockedReason || 'This account cannot be deleted from this page.'}
+                </div>
               </>
-            ) : null}
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       ),

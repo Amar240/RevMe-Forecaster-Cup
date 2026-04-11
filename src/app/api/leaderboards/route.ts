@@ -3,6 +3,7 @@ import { prisma } from '@/server/db'
 import { logger } from '@/server/logger'
 import { getSession } from '@/server/auth'
 import { jsonError } from '@/server/http'
+import { getCurrentOperationalSeason } from '@/server/season'
 import { getSeasonScopedTeamMemberWhere } from '@/server/team-membership'
 
 export const dynamic = 'force-dynamic'
@@ -20,11 +21,11 @@ export async function GET(request: NextRequest) {
     const isCombined = metricParam === 'COMBINED'
     const metric = metricParam === 'ADR' ? 'ADR' : 'OCCUPANCY'
 
-    const activeSeason = await prisma.season.findFirst({
-      where: { status: 'ACTIVE' },
+    const operationalSeason = await getCurrentOperationalSeason({
+      select: { id: true, name: true },
     })
 
-    if (!activeSeason) {
+    if (!operationalSeason) {
       return NextResponse.json({ leaderboard: [], seasonName: '', rounds: [] })
     }
 
@@ -35,7 +36,7 @@ export async function GET(request: NextRequest) {
     // Non-admin users only see rounds where leaderboard has been published
     const rounds = await prisma.round.findMany({
       where: {
-        seasonId: activeSeason.id,
+        seasonId: operationalSeason.id,
         ...(isAdmin ? {} : { leaderboardVisible: true }),
       },
       orderBy: { number: 'asc' },
@@ -60,7 +61,7 @@ export async function GET(request: NextRequest) {
     if (isCombined) {
       const allAggregates = await prisma.scoreAggregate.findMany({
         where: {
-          seasonId: activeSeason.id,
+          seasonId: operationalSeason.id,
           scopeType: 'SEASON',
         },
         include: {
@@ -134,7 +135,7 @@ export async function GET(request: NextRequest) {
     } else {
       const aggregates = await prisma.scoreAggregate.findMany({
         where: {
-          seasonId: activeSeason.id,
+          seasonId: operationalSeason.id,
           metric,
           scopeType: roundIdParam ? 'ROUND' : 'SEASON',
           ...(roundIdParam ? { roundId: roundIdParam } : {}),
@@ -149,7 +150,7 @@ export async function GET(request: NextRequest) {
 
       const roundAggregates = await prisma.scoreAggregate.findMany({
         where: {
-          seasonId: activeSeason.id,
+          seasonId: operationalSeason.id,
           metric,
           scopeType: 'ROUND',
         },
@@ -214,7 +215,7 @@ export async function GET(request: NextRequest) {
       const teamMember = await prisma.teamMember.findFirst({
         where: getSeasonScopedTeamMemberWhere({
           userId: user.id,
-          seasonId: activeSeason.id,
+          seasonId: operationalSeason.id,
         }),
       })
       myTeamId = teamMember?.teamId || null
@@ -226,7 +227,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       leaderboard,
-      seasonName: activeSeason.name,
+      seasonName: operationalSeason.name,
       myTeamId,
       metric,
       expectedErrors,

@@ -1,6 +1,7 @@
 import { TeamStatus } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { requireUserOrResponse, jsonOk, jsonError, ApiError } from '@/server/http'
+import { getCurrentOperationalSeason } from '@/server/season'
 import { sameUniversity } from '@/server/universities'
 
 export const dynamic = 'force-dynamic'
@@ -40,16 +41,19 @@ export async function GET(request: Request) {
       return jsonOk({ teams: [] })
     }
 
-    const activeSeason = await prisma.season.findFirst({
-      where: { status: 'ACTIVE' },
+    const operationalSeason = await getCurrentOperationalSeason({
       select: { id: true },
     })
+
+    if (!operationalSeason) {
+      return jsonOk({ teams: [] })
+    }
 
     const teams = await prisma.team.findMany({
       where: {
         supervisorId,
         status: { in: joinableTeamStatuses },
-        ...(activeSeason?.id ? { seasonId: activeSeason.id } : {}),
+        seasonId: operationalSeason.id,
       },
       include: {
         university: {

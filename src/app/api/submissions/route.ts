@@ -21,6 +21,43 @@ const submissionSchema = z.object({
   ),
 })
 
+function getRoundSubmissionGate(round: {
+  status: string
+  closesAt: Date
+}) {
+  const now = new Date()
+
+  if (round.status === 'UPCOMING') {
+    return {
+      message: 'This round has not opened for submissions yet.',
+      status: 422,
+    }
+  }
+
+  if (round.status === 'PAUSED') {
+    return {
+      message: 'This round is temporarily paused. Submissions will resume when the round is reopened.',
+      status: 422,
+    }
+  }
+
+  if (round.status === 'CLOSED' || new Date(round.closesAt) < now) {
+    return {
+      message: 'This round is closed. Submissions are no longer accepted.',
+      status: 422,
+    }
+  }
+
+  if (round.status !== 'OPEN') {
+    return {
+      message: 'This round is not open for submissions.',
+      status: 422,
+    }
+  }
+
+  return null
+}
+
 export async function POST(request: NextRequest) {
   try {
     const { user, response } = await requireUserOrResponse()
@@ -43,12 +80,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: 'Season is not active' }, { status: 400 })
     }
 
-    if (round.status !== 'OPEN') {
-      return NextResponse.json({ message: 'Round is not open' }, { status: 400 })
-    }
-
-    if (new Date(round.closesAt) < new Date()) {
-      return NextResponse.json({ message: 'Round is closed' }, { status: 400 })
+    const roundGate = getRoundSubmissionGate(round)
+    if (roundGate) {
+      return NextResponse.json({ message: roundGate.message }, { status: roundGate.status })
     }
 
     const teamMember = await prisma.teamMember.findFirst({
@@ -187,4 +221,3 @@ export async function POST(request: NextRequest) {
     return jsonError(error, 'Failed to submit')
   }
 }
-

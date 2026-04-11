@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { csrfFetch } from '@/lib/csrf'
 
 import { clientLogger } from '@/lib/client-logger'
@@ -327,9 +328,19 @@ useEffect(() => {
     return (
       <div className="p-8">
         <Card>
-          <CardContent className="flex items-center gap-3 py-8">
-            <AlertCircle className="h-5 w-5 text-amber-500" />
-            <p>No active season found. Create a season first.</p>
+          <CardContent className="flex flex-col gap-4 py-8 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="mt-0.5 h-5 w-5 text-amber-500" />
+              <div className="space-y-1">
+                <p className="font-medium text-foreground">No operational season is available.</p>
+                <p className="text-sm text-text-secondary">
+                  Create, activate, or resume a season before managing market information.
+                </p>
+              </div>
+            </div>
+            <Button asChild>
+              <Link href="/admin/season">Go to Season Management</Link>
+            </Button>
           </CardContent>
         </Card>
       </div>
@@ -350,40 +361,55 @@ useEffect(() => {
         <AlertBanner variant="success" className="mb-4">{success}</AlertBanner>
       )}
 
-      <div className="grid grid-cols-12 gap-6">
-        <div className="col-span-3">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium">Markets</CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="space-y-1">
-                {markets.map((market) => {
-                  const hasInfo = marketInfos.some((m) => m.marketId === market.id)
-                  return (
-                    <button
-                      key={market.id}
-                      onClick={() => setSelectedMarketId(market.id)}
-                      className={`w-full flex items-center justify-between px-4 py-2 text-left text-sm hover:bg-gray-50 ${
-                        selectedMarketId === market.id ? 'bg-blue-50 text-blue-700' : ''
-                      }`}
-                    >
-                      <span>{market.name}</span>
-                      <span className="flex items-center gap-2">
-                        {hasInfo && <span className="w-2 h-2 bg-green-500 rounded-full" />}
-                        <ChevronRight className="h-4 w-4 text-gray-400" />
-                      </span>
-                    </button>
-                  )
-                })}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+      {markets.length === 0 ? (
+        <Card>
+          <CardContent className="flex flex-col gap-4 py-8 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-1">
+              <p className="font-medium text-foreground">No markets are linked to this season yet.</p>
+              <p className="text-sm text-text-secondary">
+                Add season markets in Season Management, then return here to manage market notes and updates.
+              </p>
+            </div>
+            <Button asChild variant="outline">
+              <Link href="/admin/season">Manage Season Markets</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-12 gap-6">
+          <div className="col-span-3">
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-medium">Markets</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="space-y-1">
+                  {markets.map((market) => {
+                    const hasInfo = marketInfos.some((m) => m.marketId === market.id)
+                    return (
+                      <button
+                        key={market.id}
+                        onClick={() => setSelectedMarketId(market.id)}
+                        className={`w-full flex items-center justify-between px-4 py-2 text-left text-sm hover:bg-gray-50 ${
+                          selectedMarketId === market.id ? 'bg-blue-50 text-blue-700' : ''
+                        }`}
+                      >
+                        <span>{market.name}</span>
+                        <span className="flex items-center gap-2">
+                          {hasInfo && <span className="w-2 h-2 bg-green-500 rounded-full" />}
+                          <ChevronRight className="h-4 w-4 text-gray-400" />
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
 
-        <div className="col-span-9 space-y-6">
-          {selectedMarket && (
-            <>
+          <div className="col-span-9 space-y-6">
+            {selectedMarket && (
+              <>
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between">
                   <div>
@@ -702,14 +728,13 @@ useEffect(() => {
                   )}
                 </CardContent>
               </Card>
-            </>
-          )}
+              </>
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }
-
-
 
 

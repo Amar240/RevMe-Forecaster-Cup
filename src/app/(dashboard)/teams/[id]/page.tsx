@@ -21,6 +21,12 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { PageLoader } from '@/components/ui/page-loader'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+  formatPersonOptionLabel,
+  getMinimumRosterRequirementMessage,
+  getRosterRestrictionMessage,
+  isRosterBlockedStatus,
+} from '@/features/teams/roster-ui'
 import { teamStatusMeta } from '@/lib/status-metadata'
 
 interface TeamMember {
@@ -50,8 +56,6 @@ interface EligibleStudentResult {
   lastName: string
 }
 
-const blockedAssignmentStatuses = new Set(['REJECTED', 'DISQUALIFIED', 'ARCHIVED'])
-
 function getPersonLabel(person: {
   firstName?: string | null
   lastName?: string | null
@@ -59,19 +63,6 @@ function getPersonLabel(person: {
 }) {
   const fullName = [person.firstName, person.lastName].filter(Boolean).join(' ').trim()
   return fullName || person.email
-}
-
-function getRosterRestrictionMessage(status: string) {
-  switch (status) {
-    case 'ARCHIVED':
-      return 'Member changes are unavailable while this team is archived.'
-    case 'REJECTED':
-      return 'Member changes are unavailable while this team is rejected.'
-    case 'DISQUALIFIED':
-      return 'Member changes are unavailable while this team is disqualified.'
-    default:
-      return ''
-  }
 }
 
 export default function TeamDetailPage() {
@@ -144,7 +135,7 @@ export default function TeamDetailPage() {
   }, [fetchTeam])
 
   useEffect(() => {
-    if (!team || !viewerCanManage || blockedAssignmentStatuses.has(team.status) || team.members.length >= 5) {
+    if (!team || !viewerCanManage || isRosterBlockedStatus(team.status) || team.members.length >= 5) {
       setEligibleStudents([])
       setSelectedStudentId('')
       setEligibleStudentsLoaded(false)
@@ -169,10 +160,18 @@ export default function TeamDetailPage() {
     return team.members.filter((member) => member.id !== memberToRemove.id)
   }, [memberToRemove, team])
 
-  const isRosterLocked = team ? blockedAssignmentStatuses.has(team.status) : false
+  const isRosterLocked = team ? isRosterBlockedStatus(team.status) : false
   const rosterRestrictionMessage = team ? getRosterRestrictionMessage(team.status) : ''
+  const minimumRosterRequirementMessage = team ? getMinimumRosterRequirementMessage(team.status, team.members.length) : ''
   const isAtMemberCap = team ? team.members.length >= 5 : false
   const canAddMembers = viewerCanManage && !isRosterLocked && !isAtMemberCap
+  const rosterActionHelperText = useMemo(() => {
+    if (!team) return ''
+    if (isRosterLocked) {
+      return rosterRestrictionMessage
+    }
+    return minimumRosterRequirementMessage
+  }, [isRosterLocked, minimumRosterRequirementMessage, rosterRestrictionMessage, team])
   const addMemberHelperText = useMemo(() => {
     if (!team) return ''
     if (isRosterLocked) {
@@ -194,6 +193,18 @@ export default function TeamDetailPage() {
     searchingStudents,
     team,
   ])
+  const getRemoveDisabledReason = useCallback(
+    (member: TeamMember) => {
+      if (isRosterLocked) {
+        return rosterRestrictionMessage
+      }
+      if (team?.members.length === 1 && team.members[0]?.id === member.id) {
+        return minimumRosterRequirementMessage
+      }
+      return ''
+    },
+    [isRosterLocked, minimumRosterRequirementMessage, rosterRestrictionMessage, team]
+  )
 
   const handleRenameTeam = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -372,6 +383,7 @@ export default function TeamDetailPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {rosterActionHelperText ? <p className="mb-4 text-sm text-text-secondary">{rosterActionHelperText}</p> : null}
           {team.members.length === 0 ? (
             <div className="rounded-xl border border-dashed border-border bg-surface-secondary px-4 py-6 text-center text-text-secondary">
               No members yet
@@ -401,34 +413,46 @@ export default function TeamDetailPage() {
                         Submitter
                       </Badge>
                     ) : viewerCanManage ? (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleSetSubmitter(member.id)}
-                        disabled={submitterLoading === member.id}
-                        title="Make submitter"
-                      >
-                        {submitterLoading === member.id ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Crown className="h-4 w-4" />
-                        )}
-                      </Button>
+                      <div className="flex flex-col items-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleSetSubmitter(member.id)}
+                          disabled={isRosterLocked || submitterLoading === member.id}
+                        >
+                          {submitterLoading === member.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            'Make submitter'
+                          )}
+                        </Button>
+                        {isRosterLocked ? (
+                          <p className="max-w-[13rem] text-right text-xs text-text-muted">{rosterRestrictionMessage}</p>
+                        ) : null}
+                      </div>
                     ) : null}
                     {viewerCanManage ? (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openRemoveDialog(member)}
-                        className="text-error hover:bg-error-background hover:text-error"
-                        disabled={removeLoading === member.id}
-                      >
-                        {removeLoading === member.id ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <UserMinus className="h-4 w-4" />
-                        )}
-                      </Button>
+                      <div className="flex flex-col items-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => openRemoveDialog(member)}
+                          className="text-error hover:bg-error-background hover:text-error"
+                          disabled={Boolean(getRemoveDisabledReason(member)) || removeLoading === member.id}
+                        >
+                          {removeLoading === member.id ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          ) : (
+                            <UserMinus className="mr-2 h-4 w-4" />
+                          )}
+                          Remove
+                        </Button>
+                        {!isRosterLocked && getRemoveDisabledReason(member) ? (
+                          <p className="max-w-[13rem] text-right text-xs text-text-muted">
+                            {getRemoveDisabledReason(member)}
+                          </p>
+                        ) : null}
+                      </div>
                     ) : null}
                   </div>
                 </div>
@@ -441,7 +465,7 @@ export default function TeamDetailPage() {
       {viewerCanManage && (
         <Card>
           <CardHeader>
-            <CardTitle>Add Member</CardTitle>
+            <CardTitle>Add Existing Student</CardTitle>
             <CardDescription>
               Add a registered student from the same university who is not already assigned in this season.
             </CardDescription>
@@ -478,7 +502,7 @@ export default function TeamDetailPage() {
                   <SelectContent>
                     {eligibleStudents.map((student) => (
                       <SelectItem key={student.id} value={student.id}>
-                        {getPersonLabel(student)} ({student.email})
+                        {formatPersonOptionLabel(student)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -495,7 +519,7 @@ export default function TeamDetailPage() {
                 ) : (
                   <>
                     <UserPlus className="mr-2 h-4 w-4" />
-                    Add Member
+                    Add member
                   </>
                 )}
               </Button>
@@ -529,7 +553,7 @@ export default function TeamDetailPage() {
                     <SelectContent>
                       {replacementOptions.map((member) => (
                         <SelectItem key={member.id} value={member.id}>
-                          {member.user.firstName} {member.user.lastName} ({member.user.email})
+                          {formatPersonOptionLabel(member.user)}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -558,7 +582,7 @@ export default function TeamDetailPage() {
                   Boolean(memberToRemove?.isSubmitter && replacementOptions.length > 0 && !replacementMemberId)
                 }
               >
-                {removeLoading === memberToRemove?.id ? 'Removing...' : 'Remove Member'}
+                {removeLoading === memberToRemove?.id ? 'Removing...' : 'Remove member'}
               </Button>
             </div>
           </div>

@@ -5,6 +5,9 @@ export interface RoundInfo {
   status: string
 }
 
+// Progression maps are keyed by round id. Use the `rounds` array for display labels like R1 and R2.
+export type LeaderboardRoundProgression = Record<string, number>
+
 export interface LeaderboardEntry {
   rank: number
   teamId: string
@@ -14,8 +17,8 @@ export interface LeaderboardEntry {
   universityId: string
   mape: number | null
   nErrors: number | null
-  roundScores: Record<string, number>
-  cumulativeScores: Record<string, number>
+  roundScores: LeaderboardRoundProgression
+  cumulativeScores: LeaderboardRoundProgression
   occupancyMape?: number | null
   adrMape?: number | null
 }

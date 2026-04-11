@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireAdminOrResponse, jsonOk, jsonError } from '@/server/http'
+import { getCurrentOperationalSeason } from '@/server/season'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,11 +14,11 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const includeVoided = searchParams.get('includeVoided') === 'true'
 
-    const activeSeason = await prisma.season.findFirst({
-      where: { status: 'ACTIVE' },
+    const operationalSeason = await getCurrentOperationalSeason({
+      select: { id: true },
     })
 
-    if (!activeSeason) {
+    if (!operationalSeason) {
       return jsonOk({ actuals: [] })
     }
 
@@ -26,7 +27,7 @@ export async function GET(request: NextRequest) {
       isVoided?: boolean
     }
 
-    const where: WhereClause = { seasonId: activeSeason.id }
+    const where: WhereClause = { seasonId: operationalSeason.id }
     if (!includeVoided) where.isVoided = false
 
     const actuals = await prisma.actual.findMany({

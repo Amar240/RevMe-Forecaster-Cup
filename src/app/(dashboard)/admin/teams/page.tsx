@@ -305,7 +305,7 @@ export default function AdminTeamsPage() {
     return (
       <AccessDenied
         title="Access Denied"
-        message="Full admin access is required to manage team rosters and structural team operations."
+        message="Full admin access is required to manage teams and rosters."
       />
     )
   }
@@ -479,7 +479,7 @@ export default function AdminTeamsPage() {
           <p className="text-text-secondary">
             {resolvedSeason
               ? `${resolvedSeason.name} (${resolvedSeason.status}) · ${summary.activeTeams} active, ${summary.pendingTeams} pending, ${summary.disqualifiedTeams} disqualified`
-              : 'No active or paused season available'}
+              : 'No operational season available'}
           </p>
         </div>
         <div className="flex flex-col gap-3 sm:flex-row">
@@ -489,20 +489,43 @@ export default function AdminTeamsPage() {
               Download Template
             </a>
           </Button>
-          <Button asChild variant="outline">
-            <Link href="/admin/teams/import">
+          {resolvedSeason ? (
+            <Button asChild variant="outline">
+              <Link href="/admin/teams/import">
+                <Upload className="mr-2 h-4 w-4" />
+                Bulk Import
+              </Link>
+            </Button>
+          ) : (
+            <Button variant="outline" disabled>
               <Upload className="mr-2 h-4 w-4" />
               Bulk Import
-            </Link>
-          </Button>
-          <Button onClick={() => void openCreateDialog()}>
+            </Button>
+          )}
+          <Button onClick={() => void openCreateDialog()} disabled={!resolvedSeason}>
             <Plus className="mr-2 h-4 w-4" />
             Add Team
           </Button>
         </div>
       </div>
 
-      {isAtRiskFilter && (
+      {!resolvedSeason && (
+        <Card className="border-dashed border-border">
+          <CardContent className="flex flex-col gap-4 py-8 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-1">
+              <p className="font-medium text-foreground">No operational season is available.</p>
+              <p className="text-sm text-text-secondary">
+                Create, activate, or resume a season before adding or importing teams.
+              </p>
+            </div>
+            <Button asChild>
+              <Link href="/admin/season">Go to Season Management</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {resolvedSeason && isAtRiskFilter && (
         <Card className="border-warning/20 bg-warning-background/70">
           <CardContent className="flex items-center justify-between gap-3 py-4">
             <div>
@@ -516,84 +539,88 @@ export default function AdminTeamsPage() {
         </Card>
       )}
 
-      <div className="grid md:grid-cols-4 gap-6">
-        <Card variant="metric">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-text-secondary">Total Teams</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold">{totalTeams}</p>
-          </CardContent>
-        </Card>
-        <Card variant="metric" className="border-success/20 bg-success-background/60">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-text-secondary">Active</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold text-success">{summary.activeTeams}</p>
-          </CardContent>
-        </Card>
-        <Card variant="metric" className="border-warning/20 bg-warning-background/60">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-text-secondary">Pending</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold text-warning">{summary.pendingTeams}</p>
-          </CardContent>
-        </Card>
-        <Card variant="metric" className="border-error/20 bg-error-background/60">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-text-secondary">Disqualified</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold text-error">{summary.disqualifiedTeams}</p>
-          </CardContent>
-        </Card>
-      </div>
+      {resolvedSeason && (
+        <>
+          <div className="grid md:grid-cols-4 gap-6">
+            <Card variant="metric">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-text-secondary">Total Teams</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-3xl font-bold">{totalTeams}</p>
+              </CardContent>
+            </Card>
+            <Card variant="metric" className="border-success/20 bg-success-background/60">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-text-secondary">Active</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-3xl font-bold text-success">{summary.activeTeams}</p>
+              </CardContent>
+            </Card>
+            <Card variant="metric" className="border-warning/20 bg-warning-background/60">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-text-secondary">Pending</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-3xl font-bold text-warning">{summary.pendingTeams}</p>
+              </CardContent>
+            </Card>
+            <Card variant="metric" className="border-error/20 bg-error-background/60">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-text-secondary">Disqualified</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-3xl font-bold text-error">{summary.disqualifiedTeams}</p>
+              </CardContent>
+            </Card>
+          </div>
 
-      {visibleTeams.length === 0 ? (
-        <Card>
-          <CardContent className="py-12 text-center">
-            <Users className="mx-auto mb-4 h-12 w-12 text-text-muted" />
-            <h3 className="mb-2 text-lg font-medium text-foreground">
-              {isAtRiskFilter ? 'No At-Risk Teams' : 'No Teams Yet'}
-            </h3>
-            <p className="text-text-secondary">
-              {isAtRiskFilter
-                ? 'No teams currently have warning-based disqualification risk.'
-                : 'Teams will appear here once supervisors create them.'}
-            </p>
-          </CardContent>
-        </Card>
-      ) : (
-        <Card>
-          <CardHeader>
-            <CardTitle>Teams</CardTitle>
-          </CardHeader>
-          <CardContent>
-          <DataTable
-            data={visibleTeams}
-              columns={columns}
-              searchKeys={['name', 'displayId', 'university.name']}
-              searchPlaceholder="Search by team name or university..."
-              pageSize={20}
-              filters={[
-                {
-                  key: 'status',
-                  label: 'Status',
-                  options: [
-                    { value: 'ACTIVE', label: 'Active' },
-                    { value: 'PENDING_APPROVAL', label: 'Pending Approval' },
-                    { value: 'APPROVED', label: 'Approved' },
-                    { value: 'DRAFT', label: 'Draft' },
-                    { value: 'REJECTED', label: 'Rejected' },
-                    { value: 'DISQUALIFIED', label: 'Disqualified' },
-                  ],
-                },
-              ]}
-          />
-        </CardContent>
-      </Card>
+          {visibleTeams.length === 0 ? (
+            <Card>
+              <CardContent className="py-12 text-center">
+                <Users className="mx-auto mb-4 h-12 w-12 text-text-muted" />
+                <h3 className="mb-2 text-lg font-medium text-foreground">
+                  {isAtRiskFilter ? 'No At-Risk Teams' : 'No Teams Yet'}
+                </h3>
+                <p className="text-text-secondary">
+                  {isAtRiskFilter
+                    ? 'No teams currently have warning-based disqualification risk.'
+                    : 'Teams will appear here once supervisors create them.'}
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <CardHeader>
+                <CardTitle>Teams</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <DataTable
+                  data={visibleTeams}
+                  columns={columns}
+                  searchKeys={['name', 'displayId', 'university.name']}
+                  searchPlaceholder="Search by team name or university..."
+                  pageSize={20}
+                  filters={[
+                    {
+                      key: 'status',
+                      label: 'Status',
+                      options: [
+                        { value: 'ACTIVE', label: 'Active' },
+                        { value: 'PENDING_APPROVAL', label: 'Pending Approval' },
+                        { value: 'APPROVED', label: 'Approved' },
+                        { value: 'DRAFT', label: 'Draft' },
+                        { value: 'REJECTED', label: 'Rejected' },
+                        { value: 'DISQUALIFIED', label: 'Disqualified' },
+                      ],
+                    },
+                  ]}
+                />
+              </CardContent>
+            </Card>
+          )}
+        </>
       )}
 
       <Dialog open={showDisqualifyDialog} onOpenChange={setShowDisqualifyDialog}>

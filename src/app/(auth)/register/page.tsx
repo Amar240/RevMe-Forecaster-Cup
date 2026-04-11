@@ -30,30 +30,26 @@ export default function RegisterPage() {
   })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [universityOptions, setUniversityOptions] = useState<string[]>([])
+  const [universities, setUniversities] = useState<{ id: string; name: string }[]>([])
+  const [selectedUniversity, setSelectedUniversity] = useState('')
+  const [customUniversityName, setCustomUniversityName] = useState('')
 
   useEffect(() => {
-    const query = formData.universityName.trim()
-    if (query.length < 2) {
-      setUniversityOptions([])
-      return
-    }
-
     let cancelled = false
 
     void (async () => {
       try {
-        const res = await fetch(`/api/universities?query=${encodeURIComponent(query)}`, {
+        const res = await fetch('/api/universities', {
           credentials: 'same-origin',
         })
-        const data = await res.json() as { universities?: { name: string }[] }
+        const data = await res.json() as { universities?: { id: string; name: string }[] }
 
         if (!cancelled) {
-          setUniversityOptions((data.universities || []).map((university) => university.name))
+          setUniversities(data.universities || [])
         }
       } catch {
         if (!cancelled) {
-          setUniversityOptions([])
+          setUniversities([])
         }
       }
     })()
@@ -61,7 +57,7 @@ export default function RegisterPage() {
     return () => {
       cancelled = true
     }
-  }, [formData.universityName])
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -149,23 +145,48 @@ export default function RegisterPage() {
           </div>
 
           <div className="space-y-2">
-              <Label htmlFor="universityName" className="text-sm font-medium text-text-secondary">University</Label>
+            <Label htmlFor="universityName" className="text-sm font-medium text-text-secondary">University</Label>
+            <select
+              id="universityName"
+              value={selectedUniversity}
+              onChange={(e) => {
+                const value = e.target.value
+                setSelectedUniversity(value)
+                if (value === 'other') {
+                  setFormData({ ...formData, universityName: customUniversityName })
+                  return
+                }
+                setCustomUniversityName('')
+                setFormData({ ...formData, universityName: value })
+              }}
+              className="flex h-11 w-full rounded-md border border-input bg-card px-3.5 py-2 text-[15px] text-foreground shadow-sm transition-[border-color,box-shadow,background-color] focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
+              required
+            >
+              <option value="" disabled>
+                Select your university
+              </option>
+              {universities.map((university) => (
+                <option key={university.id} value={university.name}>
+                  {university.name}
+                </option>
+              ))}
+              <option value="other">Other</option>
+            </select>
+            {selectedUniversity === 'other' && (
               <Input
-                id="universityName"
-                placeholder="Your university name"
-                list="university-suggestions"
-                value={formData.universityName}
-                onChange={(e) => setFormData({ ...formData, universityName: e.target.value })}
+                placeholder="Enter your university name"
+                value={customUniversityName}
+                onChange={(e) => {
+                  const value = e.target.value
+                  setCustomUniversityName(value)
+                  setFormData({ ...formData, universityName: value })
+                }}
                 required
               />
-              <datalist id="university-suggestions">
-                {universityOptions.map((universityName) => (
-                  <option key={universityName} value={universityName} />
-                ))}
-              </datalist>
-              <p className="text-xs text-text-muted">
-                Existing universities are suggested as you type. A new one will only be created if no normalized match exists.
-              </p>
+            )}
+            <p className="text-xs text-text-muted">
+              Select your university from the list. Choose Other if yours is not listed.
+            </p>
           </div>
 
           <div className="space-y-2">

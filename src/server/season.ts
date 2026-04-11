@@ -78,18 +78,14 @@ export async function createSeason(user: User | null, data: CreateSeasonInput) {
     throw new ApiError('End date must be after start date', 400, 'INVALID_INPUT')
   }
 
-  let nashville = await prisma.market.findUnique({ where: { name: 'Nashville CBD' } })
-  let dubai = await prisma.market.findUnique({ where: { name: 'Dubai' } })
-  let hamburg = await prisma.market.findUnique({ where: { name: 'Hamburg' } })
+  const existingMarkets = await prisma.market.findMany({
+    where: {
+      id: { in: data.marketIds },
+    },
+  })
 
-  if (!nashville) {
-    nashville = await prisma.market.create({ data: { name: 'Nashville CBD' } })
-  }
-  if (!dubai) {
-    dubai = await prisma.market.create({ data: { name: 'Dubai' } })
-  }
-  if (!hamburg) {
-    hamburg = await prisma.market.create({ data: { name: 'Hamburg' } })
+  if (existingMarkets.length !== data.marketIds.length) {
+    throw new ApiError('One or more market IDs are invalid', 400, 'INVALID_INPUT')
   }
 
   const season = await prisma.season.create({
@@ -103,11 +99,11 @@ export async function createSeason(user: User | null, data: CreateSeasonInput) {
   })
 
   await prisma.seasonMarket.createMany({
-    data: [
-      { seasonId: season.id, marketId: nashville.id, isActive: true },
-      { seasonId: season.id, marketId: dubai.id, isActive: true },
-      { seasonId: season.id, marketId: hamburg.id, isActive: true },
-    ],
+    data: data.marketIds.map((marketId) => ({
+      seasonId: season.id,
+      marketId,
+      isActive: true,
+    })),
   })
 
   for (let i = 1; i <= TOTAL_ROUNDS; i++) {

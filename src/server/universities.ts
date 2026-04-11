@@ -40,6 +40,40 @@ export function sameUniversity(left: UniversityRecord | null | undefined, right:
   return Boolean(leftNormalized && rightNormalized && leftNormalized === rightNormalized)
 }
 
+export function getUniversityDeleteEligibility(args: {
+  userCount: number
+  teamCount: number
+}) {
+  const { userCount, teamCount } = args
+
+  if (userCount === 0 && teamCount === 0) {
+    return {
+      canDelete: true,
+      deleteBlockedReason: null,
+    }
+  }
+
+  if (userCount > 0 && teamCount > 0) {
+    return {
+      canDelete: false,
+      deleteBlockedReason:
+        'Universities with linked users or teams cannot be deleted. Move or remove those records first.',
+    }
+  }
+
+  if (userCount > 0) {
+    return {
+      canDelete: false,
+      deleteBlockedReason: 'Universities with linked users cannot be deleted. Move or remove those users first.',
+    }
+  }
+
+  return {
+    canDelete: false,
+    deleteBlockedReason: 'Universities with linked teams cannot be deleted. Keep the university for history or move those teams first.',
+  }
+}
+
 function getUniversityKey(record: UniversityRecord) {
   if (record.normalizedName?.trim()) {
     return normalizeUniversityName(record.normalizedName)

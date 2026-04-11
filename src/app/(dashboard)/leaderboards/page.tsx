@@ -147,13 +147,16 @@ export default function LeaderboardsPage() {
 
   const universityLeaderboard = getUniversityLeaderboard()
   const top3 = viewMode === 'team' ? currentLeaderboard.slice(0, 3) : universityLeaderboard.slice(0, 3)
+  const hasOperationalSeason = Boolean(seasonName)
 
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-semibold text-foreground">Leaderboards</h1>
-          <p className="text-text-secondary">{seasonName || 'No active season'} rankings</p>
+          <p className="text-text-secondary">
+            {hasOperationalSeason ? `${seasonName} rankings` : 'No operational season available'}
+          </p>
         </div>
         <div className="flex items-center space-x-2 rounded-lg border border-border bg-surface-secondary p-1">
           <button
@@ -183,8 +186,14 @@ export default function LeaderboardsPage() {
             <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-muted">
               <Trophy className="h-8 w-8 text-muted-foreground" />
             </div>
-            <h3 className="mb-2 text-xl font-semibold text-foreground">No Scores Yet</h3>
-            <p className="text-text-secondary">Leaderboards will appear after scores are calculated.</p>
+            <h3 className="mb-2 text-xl font-semibold text-foreground">
+              {hasOperationalSeason ? 'No Scores Yet' : 'No Operational Season Yet'}
+            </h3>
+            <p className="text-text-secondary">
+              {hasOperationalSeason
+                ? 'Leaderboards will appear after scores are calculated.'
+                : 'Leaderboards will appear after a season is activated or resumed and scores are published.'}
+            </p>
           </CardContent>
         </Card>
       ) : (

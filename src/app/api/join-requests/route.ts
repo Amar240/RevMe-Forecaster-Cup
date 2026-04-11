@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { TeamStatus } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { requireUserOrResponse, jsonOk, jsonError, ApiError, parseJson } from '@/server/http'
+import { getCurrentOperationalSeason } from '@/server/season'
 import { findSeasonMembershipConflict } from '@/server/team-membership'
 import { sameUniversity } from '@/server/universities'
 import { z } from 'zod'
@@ -83,30 +84,30 @@ export async function POST(request: NextRequest) {
       throw new ApiError('Add your university before sending a join request.', 422, 'INVALID_INPUT')
     }
 
-    const activeSeason = await prisma.season.findFirst({
-      where: { status: 'ACTIVE' },
+    const operationalSeason = await getCurrentOperationalSeason({
+      select: { id: true },
     })
 
-    const existingMembership = activeSeason
-      ? await findSeasonMembershipConflict({
-          userId: user!.id,
-          seasonId: activeSeason.id,
-        })
-      : null
+    if (!operationalSeason) {
+      throw new ApiError('No operational season is available for join requests.', 422, 'INVALID_INPUT')
+    }
+
+    const existingMembership = await findSeasonMembershipConflict({
+      userId: user!.id,
+      seasonId: operationalSeason.id,
+    })
 
     if (existingMembership) {
       throw new ApiError('You are already a member of a team in the current season', 400, 'CONFLICT')
     }
 
-    const pendingRequest = activeSeason
-      ? await prisma.joinRequest.findFirst({
-          where: {
-            studentId: user!.id,
-            status: 'PENDING',
-            seasonId: activeSeason.id,
-          },
-        })
-      : null
+    const pendingRequest = await prisma.joinRequest.findFirst({
+      where: {
+        studentId: user!.id,
+        status: 'PENDING',
+        seasonId: operationalSeason.id,
+      },
+    })
 
     if (pendingRequest) {
       throw new ApiError('You already have a pending join request for the current season', 400, 'CONFLICT')
@@ -173,8 +174,8 @@ export async function POST(request: NextRequest) {
         throw new ApiError('Selected team must belong to your university.', 422, 'INVALID_INPUT')
       }
 
-      if (activeSeason?.id && selectedTeam.seasonId !== activeSeason.id) {
-        throw new ApiError('Selected team must belong to the active season.', 422, 'INVALID_INPUT')
+      if (selectedTeam.seasonId !== operationalSeason.id) {
+        throw new ApiError('Selected team must belong to the current season.', 422, 'INVALID_INPUT')
       }
 
       if (!joinableTeamStatuses.includes(selectedTeam.status)) {
@@ -192,7 +193,7 @@ export async function POST(request: NextRequest) {
         supervisorId: supervisor.id,
         supervisorEmailEntered: supervisor.email,
         teamId: body.teamId || null,
-        seasonId: activeSeason?.id || null,
+        seasonId: operationalSeason.id,
         message: body.message || null,
         status: 'PENDING',
       },

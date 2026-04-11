@@ -4,6 +4,8 @@ import { prisma } from '@/lib/db'
 import { logAuditAction } from '@/lib/audit'
 import { normalizeScoringScope } from '@/lib/scoring-admin'
 import { requireAdminOrResponse, jsonOk, jsonError, ApiError } from '@/server/http'
+import { formatIncompleteActualsMessage, getScoringReadinessSummary } from '@/server/scoring-readiness'
+import { getCurrentOperationalSeason } from '@/server/season'
 
 export const dynamic = 'force-dynamic'
 
@@ -50,9 +52,34 @@ export async function POST(request: NextRequest) {
 
     let targetSeasonId = seasonId
     if (!targetSeasonId) {
-      const activeSeason = await prisma.season.findFirst({ where: { status: 'ACTIVE' } })
-      if (!activeSeason) throw new ApiError('No active season found', 400, 'INVALID_INPUT')
-      targetSeasonId = activeSeason.id
+      const operationalSeason = await getCurrentOperationalSeason({
+        select: { id: true },
+      })
+      if (!operationalSeason) throw new ApiError('No operational season found', 400, 'INVALID_INPUT')
+      targetSeasonId = operationalSeason.id
+    }
+
+    const readiness = await getScoringReadinessSummary({
+      seasonId: targetSeasonId,
+      scope,
+      roundId,
+    })
+    const incompleteChecks = readiness?.checks.filter((check) => !check.actualsComplete) ?? []
+
+    if (incompleteChecks.length > 0) {
+      throw new ApiError(
+        formatIncompleteActualsMessage(incompleteChecks),
+        422,
+        'INVALID_INPUT',
+        {
+          rounds: incompleteChecks.map((check) => ({
+            roundId: check.roundId,
+            roundNumber: check.roundNumber,
+            actualsUploaded: check.actualsUploaded,
+            actualsExpected: check.actualsExpected,
+          })),
+        }
+      )
     }
 
     const result = await runScoring(targetSeasonId, user!.id, scope, roundId)

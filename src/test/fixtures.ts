@@ -102,9 +102,21 @@ export async function createSeasonWithRounds(params?: {
 }
 
 export async function createMarkets(seasonId: string) {
-  const nashville = await prisma.market.create({ data: { name: 'Nashville CBD' } })
-  const dubai = await prisma.market.create({ data: { name: 'Dubai' } })
-  const hamburg = await prisma.market.create({ data: { name: 'Hamburg' } })
+  const nashville = await prisma.market.upsert({
+    where: { name: 'Nashville CBD' },
+    update: {},
+    create: { name: 'Nashville CBD' },
+  })
+  const dubai = await prisma.market.upsert({
+    where: { name: 'Dubai' },
+    update: {},
+    create: { name: 'Dubai' },
+  })
+  const hamburg = await prisma.market.upsert({
+    where: { name: 'Hamburg' },
+    update: {},
+    create: { name: 'Hamburg' },
+  })
 
   await prisma.seasonMarket.createMany({
     data: [

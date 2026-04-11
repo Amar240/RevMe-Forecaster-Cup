@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/db'
 import { z } from 'zod'
 import { requireAdminOrResponse, jsonOk, jsonError } from '@/server/http'
+import { getCurrentOperationalSeason } from '@/server/season'
 
 export const dynamic = 'force-dynamic'
 
@@ -149,11 +150,11 @@ export async function GET(request: NextRequest) {
     const pageSize = Math.min(200, Math.max(20, parseInt(searchParams.get('pageSize') || '50', 10)))
     const skip = (page - 1) * pageSize
 
-    const activeSeason = await prisma.season.findFirst({
-      where: { status: 'ACTIVE' },
+    const operationalSeason = await getCurrentOperationalSeason({
+      select: { id: true },
     })
 
-    if (!activeSeason) {
+    if (!operationalSeason) {
       return jsonOk({ actuals: [], rounds: [] })
     }
 
@@ -163,7 +164,7 @@ export async function GET(request: NextRequest) {
       isVoided?: boolean
     }
 
-    const where: WhereClause = { seasonId: activeSeason.id }
+    const where: WhereClause = { seasonId: operationalSeason.id }
     if (roundId) where.roundId = roundId
     if (!includeVoided) where.isVoided = false
 
@@ -181,7 +182,7 @@ export async function GET(request: NextRequest) {
         take: pageSize,
       }),
       prisma.round.findMany({
-        where: { seasonId: activeSeason.id },
+        where: { seasonId: operationalSeason.id },
         orderBy: { number: 'asc' },
         select: {
           id: true,

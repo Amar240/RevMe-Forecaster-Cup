@@ -111,16 +111,31 @@ export default async function DashboardPage() {
                 <CardTitle>My Teams</CardTitle>
                 <CardDescription>Teams you supervise</CardDescription>
               </div>
-              <Link href="/teams/new">
-                <Button>Create Team</Button>
-              </Link>
+              {operationalSeason ? (
+                <Link href="/teams/new">
+                  <Button>Create Team</Button>
+                </Link>
+              ) : (
+                <Button disabled>Create Team</Button>
+              )}
             </div>
           </CardHeader>
           <CardContent>
             {supervisorTeams.length === 0 ? (
-              <p className="py-8 text-center text-text-secondary">
-                You haven&apos;t created any teams yet. Create your first team to get started.
-              </p>
+              <div className="py-8 text-center">
+                <p className="text-text-secondary">
+                  {operationalSeason
+                    ? 'You haven\'t created any teams yet. Create your first team to get started.'
+                    : 'An admin needs to create, activate, or resume a season before you can create teams.'}
+                </p>
+                {operationalSeason && (
+                  <div className="mt-4">
+                    <Link href="/teams/new">
+                      <Button>Create Team</Button>
+                    </Link>
+                  </div>
+                )}
+              </div>
             ) : (
               <div className="space-y-3">
                 {supervisorTeams.map((team) => (
@@ -347,10 +362,26 @@ export default async function DashboardPage() {
         <Card className="border-2 border-dashed border-border">
           <CardContent className="py-12 text-center">
             <Users className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
-            <h3 className="mb-2 text-xl font-semibold text-foreground">Not Assigned to a Team</h3>
+            <h3 className="mb-2 text-xl font-semibold text-foreground">
+              {operationalSeason ? 'Not Assigned to a Team' : 'No Operational Season Yet'}
+            </h3>
             <p className="mx-auto max-w-md text-text-secondary">
-              Your supervisor needs to add you to a team. Make sure they have your email address: <span className="font-medium">{user.email}</span>
+              {operationalSeason ? (
+                <>
+                  Your supervisor needs to add you to a team. Make sure they have your email address:{' '}
+                  <span className="font-medium">{user.email}</span>
+                </>
+              ) : (
+                'An admin needs to activate or resume a season before teams and submissions open.'
+              )}
             </p>
+            {operationalSeason && (
+              <div className="mt-4">
+                <Link href="/join-team">
+                  <Button>Find a Team</Button>
+                </Link>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

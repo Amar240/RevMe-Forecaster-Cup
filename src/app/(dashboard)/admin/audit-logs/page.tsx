@@ -178,7 +178,7 @@ export default function AdminAuditLogsPage() {
     return (
       <AccessDenied
         title="Access Denied"
-        message="You do not have permission to view audit logs."
+        message="You do not have permission to view activity history."
       />
     )
   }

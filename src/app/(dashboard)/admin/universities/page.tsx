@@ -23,6 +23,8 @@ interface University {
   name: string
   country: string | null
   _count: { users: number; teams: number }
+  canDelete: boolean
+  deleteBlockedReason: string | null
 }
 
 export default function AdminUniversitiesPage() {
@@ -32,7 +34,7 @@ export default function AdminUniversitiesPage() {
   const [formData, setFormData] = useState({ name: '', country: '' })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<University | null>(null)
 
   useEffect(() => {
     fetchUniversities()
@@ -82,10 +84,20 @@ export default function AdminUniversitiesPage() {
 
   const executeDelete = async (id: string) => {
     try {
-      await csrfFetch(`/api/admin/universities/${id}`, { method: 'DELETE' })
-      fetchUniversities()
-    } catch {
-      setError('Failed to delete university')
+      setError('')
+      const res = await csrfFetch(`/api/admin/universities/${id}`, { method: 'DELETE' })
+      const data = await res.json().catch(() => ({})) as { message?: string }
+
+      if (!res.ok) {
+        throw new Error(data.message || 'Failed to delete university')
+      }
+
+      toast.success(data.message || 'University deleted successfully')
+      void fetchUniversities()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to delete university'
+      setError(message)
+      toast.error(message)
     } finally {
       setDeleteTarget(null)
     }
@@ -188,14 +200,21 @@ export default function AdminUniversitiesPage() {
             key: 'actions',
             header: 'Actions',
             render: (uni: University) => (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setDeleteTarget(uni.id)}
-                className="text-error hover:bg-error-background hover:text-error"
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
+              <div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setDeleteTarget(uni)}
+                  disabled={!uni.canDelete}
+                  className="text-error hover:bg-error-background hover:text-error"
+                  title={uni.canDelete ? 'Delete university' : uni.deleteBlockedReason ?? 'This university cannot be deleted.'}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+                {!uni.canDelete && uni.deleteBlockedReason ? (
+                  <p className="mt-2 max-w-xs text-xs text-text-muted">{uni.deleteBlockedReason}</p>
+                ) : null}
+              </div>
             ),
           },
         ]}
@@ -208,10 +227,14 @@ export default function AdminUniversitiesPage() {
         open={deleteTarget !== null}
         onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}
         title="Delete University"
-        description="Are you sure you want to delete this university?"
+        description={
+          deleteTarget
+            ? `Delete ${deleteTarget.name}? Only empty universities can be deleted. This permanently removes the university record.`
+            : 'Only empty universities can be deleted. This permanently removes the university record.'
+        }
         confirmLabel="Delete"
         variant="destructive"
-        onConfirm={() => { if (deleteTarget) executeDelete(deleteTarget) }}
+        onConfirm={() => { if (deleteTarget) void executeDelete(deleteTarget.id) }}
       />
     </div>
   )

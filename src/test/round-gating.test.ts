@@ -32,7 +32,9 @@ describe('Round gating and locked submissions', () => {
       body: { roundId: rounds[0].id, submissions: [] },
     })
     const res = await submitForecast(req)
-    expect(res.status).toBe(400)
+    expect(res.status).toBe(422)
+    const data = await res.json()
+    expect(data.message).toBe('This round has not opened for submissions yet.')
   })
 
   it('accepts submission when round is open and locks subsequent submissions', async () => {

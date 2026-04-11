@@ -37,9 +37,6 @@ export async function GET(request: NextRequest) {
       seen.add(normalizedName)
       options.push({ id: university.id, name: university.name })
 
-      if (options.length >= 12) {
-        break
-      }
     }
 
     return jsonOk({ universities: options })

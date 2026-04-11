@@ -294,7 +294,7 @@ export default function AdminSupervisorsPage() {
     return (
       <AccessDenied
         title="Access Denied"
-        message="Admin access is required to manage supervisors."
+        message="Admin access is required to manage supervisor accounts."
       />
     )
   }

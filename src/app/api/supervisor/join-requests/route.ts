@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { TeamStatus } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { requireUserOrResponse, jsonOk, jsonError, ApiError } from '@/server/http'
+import { getCurrentOperationalSeason } from '@/server/season'
 import { countSupervisorTeamsInSeason, findSeasonMembershipConflict } from '@/server/team-membership'
 import { sameUniversity } from '@/server/universities'
 
@@ -125,8 +126,8 @@ export async function POST(request: NextRequest) {
       let targetTeamId = teamId || joinRequest.teamId
 
       if (!targetTeamId && teamName) {
-        const activeSeason = await prisma.season.findFirst({
-          where: { status: 'ACTIVE' },
+        const operationalSeason = await getCurrentOperationalSeason({
+          select: { id: true },
         })
 
         const studentWithUniversity = await prisma.user.findUnique({
@@ -163,7 +164,10 @@ export async function POST(request: NextRequest) {
           throw new ApiError('Student and supervisor must belong to the same university', 422, 'INVALID_INPUT')
         }
 
-        const targetSeasonId = joinRequest.seasonId || activeSeason?.id || null
+        const targetSeasonId = joinRequest.seasonId || operationalSeason?.id || null
+        if (!targetSeasonId) {
+          throw new ApiError('No operational season is available for creating a team.', 422, 'INVALID_INPUT')
+        }
         const existingTeamsCount = await countSupervisorTeamsInSeason({
           supervisorId: user!.id,
           seasonId: targetSeasonId,

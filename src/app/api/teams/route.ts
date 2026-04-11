@@ -68,23 +68,23 @@ export async function POST(request: NextRequest) {
       where: { id: user!.universityId },
     })
 
-    const activeSeason = await prisma.season.findFirst({
-      where: { status: 'ACTIVE' },
+    const operationalSeason = await getCurrentOperationalSeason({
+      select: { id: true },
     })
 
-    if (!activeSeason) {
-      throw new ApiError('No active season for team registration', 422, 'INVALID_INPUT')
+    if (!operationalSeason) {
+      throw new ApiError('No operational season is available for team registration', 422, 'INVALID_INPUT')
     }
 
     await ensureUniqueTeamName({
-      seasonId: activeSeason.id,
+      seasonId: operationalSeason.id,
       name: teamName,
       db: prisma,
     })
 
     const teamCount = await countSupervisorTeamsInSeason({
       supervisorId: user!.id,
-      seasonId: activeSeason.id,
+      seasonId: operationalSeason.id,
       db: prisma,
     })
 
@@ -104,7 +104,7 @@ export async function POST(request: NextRequest) {
         displayId,
         supervisorId: user!.id,
         universityId: user!.universityId,
-        seasonId: activeSeason.id,
+        seasonId: operationalSeason.id,
       },
       include: {
         university: true,

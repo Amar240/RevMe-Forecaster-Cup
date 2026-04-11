@@ -1,7 +1,12 @@
 import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireAdminOrResponse, jsonOk, jsonError, parseJson, ApiError } from '@/server/http'
-import { findUniversityByNormalizedName, formatUniversityDisplayName, resolveOrCreateUniversity } from '@/server/universities'
+import {
+  findUniversityByNormalizedName,
+  formatUniversityDisplayName,
+  getUniversityDeleteEligibility,
+  resolveOrCreateUniversity,
+} from '@/server/universities'
 import { z } from 'zod'
 
 export const dynamic = 'force-dynamic'
@@ -21,7 +26,15 @@ export async function GET() {
       orderBy: { name: 'asc' },
     })
 
-    return jsonOk({ universities })
+    return jsonOk({
+      universities: universities.map((university) => ({
+        ...university,
+        ...getUniversityDeleteEligibility({
+          userCount: university._count.users,
+          teamCount: university._count.teams,
+        }),
+      })),
+    })
   } catch (error) {
     return jsonError(error, 'Failed to get universities')
   }

@@ -93,7 +93,7 @@ describe('POST /api/auth/login', () => {
 })
 
 describe('POST /api/auth/register', () => {
-  it('creates a new user and returns 200', async () => {
+  it('creates a new user and returns 201', async () => {
     const req = makeRequest(`${BASE}/api/auth/register`, {
       method: 'POST',
       body: {
@@ -108,7 +108,7 @@ describe('POST /api/auth/register', () => {
     })
 
     const res = await registerHandler(req)
-    expect(res.status).toBe(200)
+    expect(res.status).toBe(201)
 
     const data = await res.json()
     expect(data.message).toBe('Registration successful')
@@ -194,7 +194,7 @@ describe('POST /api/auth/register', () => {
     })
 
     const res = await registerHandler(req)
-    expect(res.status).toBe(200)
+    expect(res.status).toBe(201)
 
     const university = await prisma.university.findUnique({
       where: { name: 'Existing University' },
@@ -220,7 +220,7 @@ describe('POST /api/auth/register', () => {
     })
 
     const res = await registerHandler(req)
-    expect(res.status).toBe(200)
+    expect(res.status).toBe(201)
 
     const user = await prisma.user.findUnique({
       where: { email: 'normalized@test.com' },

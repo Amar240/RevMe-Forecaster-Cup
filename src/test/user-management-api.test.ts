@@ -13,7 +13,7 @@ import {
   createUser,
 } from './fixtures'
 
-import { POST as postAdminUsers } from '@/app/api/admin/users/route'
+import { GET as getAdminUsers, POST as postAdminUsers } from '@/app/api/admin/users/route'
 import { PATCH as patchAdminUser } from '@/app/api/admin/users/[id]/route'
 import { DELETE as deleteAdminUser } from '@/app/api/admin/users/[id]/delete/route'
 import { PATCH as patchAdminUserStatus } from '@/app/api/admin/users/[id]/status/route'
@@ -229,6 +229,50 @@ describe('admin student management', () => {
 
     expect(auditLog).not.toBeNull()
     expect(auditLog?.userId).toBe(admin.id)
+  })
+
+  it('surfaces delete eligibility and blocked reasons in the admin users list', async () => {
+    const admin = await createUser({ email: 'admin@delete-surface.test', role: 'ADMIN' })
+    const university = await createUniversity('Delete Surface University')
+    const supervisor = await createUser({
+      email: 'supervisor@delete-surface.test',
+      role: 'SUPERVISOR',
+      universityId: university.id,
+    })
+    const cleanStudent = await createUser({
+      email: 'clean-student@delete-surface.test',
+      role: 'STUDENT',
+      universityId: university.id,
+    })
+    const memberStudent = await createUser({
+      email: 'member-student@delete-surface.test',
+      role: 'STUDENT',
+      universityId: university.id,
+    })
+
+    const team = await createTeam({
+      name: 'Delete Surface Team',
+      supervisorId: supervisor.id,
+      universityId: university.id,
+    })
+    await addTeamMember(team.id, memberStudent.id, true)
+
+    await loginAs(admin.id)
+
+    const res = await getAdminUsers()
+    expect(res.status).toBe(200)
+
+    const data = await res.json()
+    const cleanStudentRow = data.users.find((user: { id: string }) => user.id === cleanStudent.id)
+    const memberStudentRow = data.users.find((user: { id: string }) => user.id === memberStudent.id)
+    const supervisorRow = data.users.find((user: { id: string }) => user.id === supervisor.id)
+
+    expect(cleanStudentRow.canDelete).toBe(true)
+    expect(cleanStudentRow.deleteBlockedReason).toBeNull()
+    expect(memberStudentRow.canDelete).toBe(false)
+    expect(memberStudentRow.deleteBlockedReason).toContain('team memberships')
+    expect(supervisorRow.canDelete).toBe(false)
+    expect(supervisorRow.deleteBlockedReason).toContain('Only clean student accounts')
   })
 
   it('blocks self-delete', async () => {
