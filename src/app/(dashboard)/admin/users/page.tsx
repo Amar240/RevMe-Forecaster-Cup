@@ -144,12 +144,20 @@ export default function AdminUsersPage() {
         await updateStudent(selectedStudent.id, studentForm)
         toast.success('Student updated successfully')
       } else {
+        const createdEmail = studentForm.email.trim()
         const data = await createStudent(studentForm)
-        toast.success(
-          data.emailSent
-            ? 'Student created and password reset email sent'
-            : 'Student created. Password reset email could not be sent.'
-        )
+        if (data.devPassword) {
+          toast.success(`Account created! Dev login: ${data.devPassword}`, {
+            duration: 15000,
+            description: `${createdEmail} can log in with password: ${data.devPassword}`,
+          })
+        } else {
+          toast.success(
+            data.emailSent
+              ? 'Student created and password reset email sent'
+              : 'Student created. Password reset email could not be sent.'
+          )
+        }
       }
 
       await fetchUsers()

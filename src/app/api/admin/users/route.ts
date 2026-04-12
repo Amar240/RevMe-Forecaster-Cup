@@ -58,7 +58,14 @@ export async function POST(request: NextRequest) {
       universityId,
     })
 
-    return jsonOk({ user: result.user, emailSent: result.emailSent }, 201)
+    return jsonOk(
+      {
+        user: result.user,
+        emailSent: result.emailSent,
+        devPassword: result.devPassword ?? null,
+      },
+      201
+    )
   } catch (error) {
     return jsonError(error, 'Failed to create student')
   }

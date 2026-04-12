@@ -84,6 +84,22 @@ export default function RulesPage() {
 
   const sectionIsOpen = (section: string) => expandedSection === section
 
+  if (acknowledged === null) {
+    return (
+      <div className="mx-auto max-w-4xl space-y-6 animate-pulse">
+        <div className="mb-8 text-center space-y-2">
+          <div className="mx-auto h-8 w-64 rounded bg-surface-secondary" />
+          <div className="mx-auto h-4 w-80 rounded bg-surface-secondary" />
+        </div>
+        <div className="grid gap-6 md:grid-cols-2">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-48 rounded-lg bg-surface-secondary" />
+          ))}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       {showSuccess && (
@@ -102,6 +118,23 @@ export default function RulesPage() {
           Please read and acknowledge the rules below to participate in the competition.
         </AlertBanner>
       )}
+
+      <Card className="border-primary/20 bg-primary-soft/20">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <CheckCircle className="h-5 w-5 text-primary" />
+            Your First Steps
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="text-sm text-text-secondary">
+          <ol className="list-inside list-decimal space-y-2">
+            <li>Your supervisor will create your team and add you to it</li>
+            <li>One team member is designated as the <strong>submitter</strong> — only they can submit forecasts</li>
+            <li>Before each round deadline, the submitter enters predictions for all 3 markets</li>
+            <li>After the round closes, admin scores submissions and publishes the leaderboard</li>
+          </ol>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-6 md:grid-cols-2">
         <Card>
@@ -152,10 +185,14 @@ export default function RulesPage() {
               <li>Submit forecasts before the <strong>round deadline</strong></li>
               <li>Submissions are <strong>permanently locked</strong> after submit</li>
               <li>
-                You must submit <strong>12 values per round</strong>:
-                <div className="ml-6 mt-1 text-text-muted">3 markets x 2 weeks x 2 metrics</div>
+                Submit <strong>12 values per round</strong>: one Occupancy and one ADR prediction
+                {' '}per market (3 markets), for each of 2 upcoming weeks
+                <div className="ml-6 mt-1 text-text-muted">
+                  Enter numbers only — no $ or % symbols. Occupancy: 0–100. ADR: positive dollar amount (e.g. 189.50)
+                </div>
               </li>
               <li>Late or missing submissions are <strong>not allowed</strong></li>
+              <li>Deadlines are shown in <strong>your local time</strong> on the dashboard</li>
             </ul>
           </CardContent>
         </Card>
@@ -262,6 +299,10 @@ export default function RulesPage() {
         </CardHeader>
         {sectionIsOpen('submit') && (
           <CardContent className="space-y-4 text-sm text-text-secondary">
+            <div className="rounded-lg border border-info/20 bg-info-background/55 p-4 text-sm">
+              <p className="mb-1 font-medium text-foreground">Who submits?</p>
+              <p>Only the <strong>designated submitter</strong> on your team can submit. If you are not the submitter, your teammate will submit on behalf of the team. You can view your team&apos;s submitted forecasts under <strong>My Scores</strong> after submission.</p>
+            </div>
             <div className="rounded-lg border border-border bg-card p-4">
               <h4 className="mb-2 font-semibold text-foreground">Step-by-Step Guide</h4>
               <ol className="list-inside list-decimal space-y-2">

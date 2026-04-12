@@ -1,5 +1,5 @@
 import crypto from 'crypto'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { prisma } from './db'
 import { loginAs } from './auth'
 import { makeRequest } from './http'
@@ -13,6 +13,7 @@ import {
   createUser,
 } from './fixtures'
 
+import { verifyPassword } from '@/lib/auth'
 import { GET as getAdminUsers, POST as postAdminUsers } from '@/app/api/admin/users/route'
 import { PATCH as patchAdminUser } from '@/app/api/admin/users/[id]/route'
 import { DELETE as deleteAdminUser } from '@/app/api/admin/users/[id]/delete/route'
@@ -22,8 +23,17 @@ import { PATCH as patchAdminSupervisor } from '@/app/api/admin/supervisors/[id]/
 import { PATCH as patchAdminSupervisorStatus } from '@/app/api/admin/supervisors/[id]/status/route'
 import { GET as getSupervisorStudents, POST as postSupervisorStudents } from '@/app/api/supervisor/students/route'
 import { PATCH as patchSupervisorStudent } from '@/app/api/supervisor/students/[id]/route'
+import { POST as loginHandler } from '@/app/api/auth/login/route'
 
 const BASE = 'http://localhost:5000'
+
+beforeEach(() => {
+  vi.stubEnv('DEV_DEFAULT_PASSWORD', '')
+})
+
+afterEach(() => {
+  vi.unstubAllEnvs()
+})
 
 describe('admin student management', () => {
   it('creates a student from /api/admin/users', async () => {
@@ -47,12 +57,61 @@ describe('admin student management', () => {
     const data = await res.json()
     expect(data.user.role).toBe('STUDENT')
     expect(data.user.universityId).toBe(university.id)
+    expect(data.devPassword).toBeNull()
 
     const createdUser = await prisma.user.findUnique({
       where: { email: 'maya@student-create.test' },
     })
     expect(createdUser?.resetToken).toBeTruthy()
+    expect(createdUser?.resetTokenExpiry).toBeTruthy()
+    expect(createdUser?.rulesAcknowledgedAt).toBeNull()
     expect(createdUser?.isActive).toBe(true)
+  })
+
+  it('uses DEV_DEFAULT_PASSWORD for admin-created students when configured', async () => {
+    vi.stubEnv('DEV_DEFAULT_PASSWORD', 'LocalPass123!')
+
+    const admin = await createUser({ email: 'admin@dev-student.test', role: 'ADMIN' })
+    const university = await createUniversity('Dev Student University')
+    await loginAs(admin.id)
+
+    const req = makeRequest(`${BASE}/api/admin/users`, {
+      method: 'POST',
+      body: {
+        firstName: 'Dev',
+        lastName: 'Student',
+        email: 'dev-student@test.local',
+        universityId: university.id,
+      },
+    })
+
+    const res = await postAdminUsers(req)
+    expect(res.status).toBe(201)
+
+    const data = await res.json()
+    expect(data.emailSent).toBe(false)
+    expect(data.devPassword).toBe('LocalPass123!')
+
+    const createdUser = await prisma.user.findUnique({
+      where: { email: 'dev-student@test.local' },
+    })
+
+    expect(createdUser).not.toBeNull()
+    expect(createdUser?.resetToken).toBeNull()
+    expect(createdUser?.resetTokenExpiry).toBeNull()
+    expect(createdUser?.rulesAcknowledgedAt).toBeTruthy()
+    expect(await verifyPassword('LocalPass123!', createdUser!.passwordHash)).toBe(true)
+
+    const loginReq = makeRequest(`${BASE}/api/auth/login`, {
+      method: 'POST',
+      body: {
+        email: 'dev-student@test.local',
+        password: 'LocalPass123!',
+      },
+    })
+
+    const loginRes = await loginHandler(loginReq)
+    expect(loginRes.status).toBe(200)
   })
 
   it('updates student fields and blocks unsafe university changes after team membership', async () => {
@@ -181,6 +240,7 @@ describe('admin student management', () => {
     expect(studentRes.status).toBe(201)
     const studentData = await studentRes.json()
     expect(studentData.user.role).toBe('STUDENT')
+    expect(studentData.devPassword).toBeNull()
 
     const supervisorReq = makeRequest(`${BASE}/api/admin/supervisors`, {
       method: 'POST',
@@ -195,6 +255,14 @@ describe('admin student management', () => {
     expect(supervisorRes.status).toBe(201)
     const supervisorData = await supervisorRes.json()
     expect(supervisorData.supervisor.email).toBe('supervisor@surface-split.test')
+    expect(supervisorData.devPassword).toBeNull()
+
+    const createdSupervisor = await prisma.user.findUnique({
+      where: { email: 'supervisor@surface-split.test' },
+    })
+    expect(createdSupervisor?.resetToken).toBeTruthy()
+    expect(createdSupervisor?.resetTokenExpiry).toBeTruthy()
+    expect(createdSupervisor?.rulesAcknowledgedAt).toBeNull()
   })
 
   it('deletes a clean student account and writes an audit log entry', async () => {
@@ -487,6 +555,52 @@ describe('admin student management', () => {
 })
 
 describe('admin supervisor management', () => {
+  it('uses DEV_DEFAULT_PASSWORD for admin-created supervisors when configured', async () => {
+    vi.stubEnv('DEV_DEFAULT_PASSWORD', 'LocalPass123!')
+
+    const admin = await createUser({ email: 'admin@dev-supervisor.test', role: 'ADMIN' })
+    const university = await createUniversity('Dev Supervisor University')
+    await loginAs(admin.id)
+
+    const req = makeRequest(`${BASE}/api/admin/supervisors`, {
+      method: 'POST',
+      body: {
+        firstName: 'Dev',
+        lastName: 'Supervisor',
+        email: 'dev-supervisor@test.local',
+        universityId: university.id,
+      },
+    })
+
+    const res = await postAdminSupervisors(req)
+    expect(res.status).toBe(201)
+
+    const data = await res.json()
+    expect(data.emailSent).toBe(false)
+    expect(data.devPassword).toBe('LocalPass123!')
+
+    const createdSupervisor = await prisma.user.findUnique({
+      where: { email: 'dev-supervisor@test.local' },
+    })
+
+    expect(createdSupervisor).not.toBeNull()
+    expect(createdSupervisor?.resetToken).toBeNull()
+    expect(createdSupervisor?.resetTokenExpiry).toBeNull()
+    expect(createdSupervisor?.rulesAcknowledgedAt).toBeNull()
+    expect(await verifyPassword('LocalPass123!', createdSupervisor!.passwordHash)).toBe(true)
+
+    const loginReq = makeRequest(`${BASE}/api/auth/login`, {
+      method: 'POST',
+      body: {
+        email: 'dev-supervisor@test.local',
+        password: 'LocalPass123!',
+      },
+    })
+
+    const loginRes = await loginHandler(loginReq)
+    expect(loginRes.status).toBe(200)
+  })
+
   it('updates supervisor details and syncs pending join-request email references', async () => {
     const admin = await createUser({ email: 'admin@supervisor-edit.test', role: 'ADMIN' })
     const university = await createUniversity('Supervisor Edit University')
@@ -671,5 +785,42 @@ describe('supervisor student management', () => {
       params: Promise.resolve({ id: sameUniversitySupervisor.id }),
     })
     expect(blockedRoleRes.status).toBe(404)
+  })
+
+  it('keeps supervisor-created students on the reset-email flow even when DEV_DEFAULT_PASSWORD is set', async () => {
+    vi.stubEnv('DEV_DEFAULT_PASSWORD', 'LocalPass123!')
+
+    const university = await createUniversity('Supervisor Managed University')
+    const supervisor = await createUser({
+      email: 'supervisor@managed-dev-mode.test',
+      role: 'SUPERVISOR',
+      universityId: university.id,
+    })
+
+    await loginAs(supervisor.id)
+
+    const createReq = makeRequest(`${BASE}/api/supervisor/students`, {
+      method: 'POST',
+      body: {
+        firstName: 'Managed',
+        lastName: 'Student',
+        email: 'managed-student@test.local',
+      },
+    })
+
+    const createRes = await postSupervisorStudents(createReq)
+    expect(createRes.status).toBe(201)
+
+    const data = await createRes.json()
+    expect(data.emailSent).toBe(false)
+    expect(data.devPassword).toBeUndefined()
+
+    const createdStudent = await prisma.user.findUnique({
+      where: { email: 'managed-student@test.local' },
+    })
+
+    expect(createdStudent?.resetToken).toBeTruthy()
+    expect(createdStudent?.resetTokenExpiry).toBeTruthy()
+    expect(createdStudent?.rulesAcknowledgedAt).toBeNull()
   })
 })

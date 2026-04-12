@@ -200,18 +200,30 @@ export default function AdminSupervisorsPage() {
         if (!res.ok) throw new Error(data.message || 'Failed to update supervisor')
         toast.success('Supervisor updated successfully')
       } else {
+        const createdEmail = form.email.trim()
         const res = await csrfFetch('/api/admin/supervisors', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(form),
         })
-        const data = await res.json() as { emailSent?: boolean; message?: string }
+        const data = await res.json() as {
+          devPassword?: string | null
+          emailSent?: boolean
+          message?: string
+        }
         if (!res.ok) throw new Error(data.message || 'Failed to create supervisor')
-        toast.success(
-          data.emailSent
-            ? `Supervisor created and password reset email sent to ${form.email}`
-            : 'Supervisor created. Password reset email could not be sent.'
-        )
+        if (data.devPassword) {
+          toast.success(`Account created! Dev login: ${data.devPassword}`, {
+            duration: 15000,
+            description: `${createdEmail} can log in with password: ${data.devPassword}`,
+          })
+        } else {
+          toast.success(
+            data.emailSent
+              ? `Supervisor created and password reset email sent to ${createdEmail}`
+              : 'Supervisor created. Password reset email could not be sent.'
+          )
+        }
       }
 
       resetForm()

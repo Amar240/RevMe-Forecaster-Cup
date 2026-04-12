@@ -69,7 +69,14 @@ export async function POST(request: Request) {
       },
     })
 
-    return jsonOk({ supervisor, emailSent: result.emailSent }, 201)
+    return jsonOk(
+      {
+        supervisor,
+        emailSent: result.emailSent,
+        devPassword: result.devPassword ?? null,
+      },
+      201
+    )
   } catch (error) {
     return jsonError(error, 'Failed to create supervisor')
   }

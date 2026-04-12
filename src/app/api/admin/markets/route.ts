@@ -6,6 +6,9 @@ import { z } from 'zod'
 
 export const dynamic = 'force-dynamic'
 
+const STARTED_SEASON_STATUSES = ['ACTIVE', 'PAUSED', 'COMPLETED'] as const
+const MARKET_LOCK_REASON = 'Used in a started season'
+
 const marketSchema = z.object({
   name: z.string(),
 })
@@ -23,9 +26,29 @@ export async function GET() {
 
     const markets = await prisma.market.findMany({
       orderBy: { name: 'asc' },
+      include: {
+        seasonMarkets: {
+          where: {
+            season: {
+              status: {
+                in: [...STARTED_SEASON_STATUSES],
+              },
+            },
+          },
+          select: {
+            id: true,
+          },
+        },
+      },
     })
 
-    return jsonOk({ markets })
+    return jsonOk({
+      markets: markets.map(({ seasonMarkets, ...market }) => ({
+        ...market,
+        isLocked: seasonMarkets.length > 0,
+        lockReason: seasonMarkets.length > 0 ? MARKET_LOCK_REASON : null,
+      })),
+    })
   } catch (error) {
     return jsonError(error, 'Failed to fetch markets')
   }

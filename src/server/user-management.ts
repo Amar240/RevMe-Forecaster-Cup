@@ -317,8 +317,14 @@ export async function createManagedUser(args: {
 
   const university = await requireUniversity(effectiveUniversityId, prisma)
 
-  const { tempPassword, resetToken, resetTokenExpiry } = buildResetCredentials()
-  const passwordHash = await hashPassword(tempPassword)
+  const configuredDevPassword = process.env.DEV_DEFAULT_PASSWORD
+  const useDevDefaultPassword =
+    Boolean(configuredDevPassword) &&
+    (args.scope === 'admin-student' || args.scope === 'admin-supervisor')
+  const resetCredentials = useDevDefaultPassword ? null : buildResetCredentials()
+  const passwordHash = await hashPassword(
+    useDevDefaultPassword ? configuredDevPassword! : resetCredentials!.tempPassword
+  )
 
   const user = await prisma.user.create({
     data: {
@@ -328,24 +334,32 @@ export async function createManagedUser(args: {
       role,
       universityId: university.id,
       passwordHash,
-      resetToken,
-      resetTokenExpiry,
+      resetToken: useDevDefaultPassword ? null : resetCredentials!.resetToken,
+      resetTokenExpiry: useDevDefaultPassword ? null : resetCredentials!.resetTokenExpiry,
       emailVerified: true,
       isActive: true,
+      rulesAcknowledgedAt: useDevDefaultPassword && role === 'STUDENT' ? new Date() : null,
     },
     select: managedUserMutationSelect,
   })
 
-  const emailSent = await sendPasswordResetEmail(email, resetToken)
+  const emailSent = useDevDefaultPassword
+    ? false
+    : await sendPasswordResetEmail(email, resetCredentials!.resetToken)
 
   await logAuditAction(args.actor.id, `${role}_CREATED`, 'User', user.id, {
     email: user.email,
     role: user.role,
     universityId: user.universityId,
     emailSent,
+    devPasswordMode: useDevDefaultPassword,
   })
 
-  return { user, emailSent }
+  return {
+    user,
+    emailSent,
+    devPassword: useDevDefaultPassword ? configuredDevPassword : undefined,
+  }
 }
 
 export async function updateManagedUser(args: {

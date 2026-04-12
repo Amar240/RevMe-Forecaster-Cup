@@ -1,5 +1,9 @@
 import { csrfFetch } from '@/lib/csrf'
-import type { AdminUsersResponse, ResetPasswordEmailResponse } from '@/features/users/types'
+import type {
+  AdminUsersResponse,
+  CreateStudentResponse,
+  ResetPasswordEmailResponse,
+} from '@/features/users/types'
 
 async function parseJson<T>(res: Response): Promise<T> {
   const data = await res.json()
@@ -47,7 +51,7 @@ export async function createStudent(payload: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   })
-  return parseJson<{ user: AdminUsersResponse['users'][number]; emailSent: boolean }>(res)
+  return parseJson<CreateStudentResponse>(res)
 }
 
 export async function updateStudent(

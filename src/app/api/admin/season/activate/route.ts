@@ -5,7 +5,6 @@ import { requireAdminOrResponse, jsonOk, jsonError } from '@/server/http'
 
 export const dynamic = 'force-dynamic'
 
-
 const VALID_ACTIONS = ['start', 'pause', 'resume', 'complete'] as const
 
 type SeasonAction = (typeof VALID_ACTIONS)[number]
@@ -15,6 +14,19 @@ async function hasExactlyThreeActiveMarkets(seasonId: string) {
     where: { seasonId, isActive: true },
   })
   return count === 3
+}
+
+async function openRoundOneIfUpcoming(seasonId: string) {
+  const round1 = await prisma.round.findFirst({
+    where: { seasonId, number: 1 },
+  })
+
+  if (round1 && round1.status === 'UPCOMING') {
+    await prisma.round.update({
+      where: { id: round1.id },
+      data: { status: 'OPEN' },
+    })
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -52,6 +64,8 @@ export async function POST(request: NextRequest) {
         where: { id: season.id },
         data: { status: 'ACTIVE' },
       })
+
+      await openRoundOneIfUpcoming(season.id)
 
       await logAuditAction(user!.id, 'SEASON_START', 'Season', season.id, {
         seasonName: season.name,
@@ -119,6 +133,11 @@ export async function POST(request: NextRequest) {
         break
       default:
         return jsonOk({ message: 'Invalid action' }, 400)
+    }
+
+    // If starting the season, immediately open Round 1
+    if (action === 'start') {
+      await openRoundOneIfUpcoming(season.id)
     }
 
     const updatedSeason = await prisma.season.update({

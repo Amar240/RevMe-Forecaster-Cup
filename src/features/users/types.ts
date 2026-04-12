@@ -44,3 +44,9 @@ export interface ResetPasswordEmailResponse {
   emailSent: boolean
   message: string
 }
+
+export interface CreateStudentResponse {
+  user: AdminUser
+  emailSent: boolean
+  devPassword: string | null
+}
