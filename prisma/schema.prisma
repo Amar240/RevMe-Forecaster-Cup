@@ -131,6 +131,7 @@ model User {
   lastName             String
   role                 Role      @default(STUDENT)
   emailVerified        Boolean   @default(false)
+  emailVerifiedAt      DateTime?
   isActive             Boolean   @default(true)
   resetToken           String?
   resetTokenExpiry     DateTime?
@@ -164,15 +165,31 @@ model User {
   marketInfosUpdated       MarketInfo[]     @relation("MarketInfoUpdatedBy")
   marketRoundUpdates       MarketRoundUpdate[] @relation("MarketRoundUpdateCreator")
   seasonArchives           SeasonArchive[]
+  emailVerificationCodes   EmailVerificationCode[]
 
   @@index([email])
   @@index([role])
+}
+
+model EmailVerificationCode {
+  id        String    @id @default(cuid())
+  userId    String
+  codeHash  String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 model University {
   id        String   @id @default(cuid())
   name      String   @unique
   normalizedName String?
+  isListed  Boolean  @default(true)
   country   String?
   createdAt DateTime @default(now())
 

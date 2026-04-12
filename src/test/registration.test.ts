@@ -7,12 +7,12 @@ import { prisma } from './db'
 
 const emailMocks = vi.hoisted(() => ({
   sendPasswordResetEmail: vi.fn().mockResolvedValue(true),
-  sendWelcomeEmail: vi.fn().mockResolvedValue(true),
+  sendEmailVerificationEmail: vi.fn().mockResolvedValue(true),
 }))
 
 vi.mock('@/lib/email', () => ({
   sendPasswordResetEmail: emailMocks.sendPasswordResetEmail,
-  sendWelcomeEmail: emailMocks.sendWelcomeEmail,
+  sendEmailVerificationEmail: emailMocks.sendEmailVerificationEmail,
 }))
 
 import { POST as forgotPasswordHandler } from '@/app/api/auth/forgot-password/route'
@@ -25,7 +25,9 @@ import { POST as resetPasswordHandler } from '@/app/api/auth/reset-password/rout
 const BASE = 'http://localhost:5000'
 
 describe('Registration and auth flow', () => {
-  it('registers a valid student and creates a session', async () => {
+  it('registers a valid student in an unverified state and sends a verification email', async () => {
+    const university = await createUniversity('Registration University')
+
     const req = makeRequest(`${BASE}/api/auth/register`, {
       method: 'POST',
       body: {
@@ -34,7 +36,8 @@ describe('Registration and auth flow', () => {
         firstName: 'Student',
         lastName: 'Register',
         role: 'STUDENT',
-        universityName: 'Registration University',
+        universitySelectionMode: 'EXISTING',
+        universityId: university.id,
         country: 'United States',
       },
     })
@@ -43,21 +46,31 @@ describe('Registration and auth flow', () => {
     const data = await res.json()
 
     expect(res.status).toBe(201)
+    expect(data.message).toBe('Registration successful. Verify your email to continue.')
     expect(data.user.email).toBe('student.register@test.com')
     expect(data.user.role).toBe('STUDENT')
-    expect(global.__testAuthToken).toBeTruthy()
-    expect(global.__testCookieOps.some((entry) => entry.type === 'set')).toBe(true)
+    expect(data.email).toBe('student.register@test.com')
+    expect(data.requiresEmailVerification).toBe(true)
+    expect(data.emailSent).toBe(true)
+    expect(global.__testAuthToken).toBeNull()
+    expect(global.__testCookieOps.some((entry) => entry.type === 'set')).toBe(false)
 
     const user = await prisma.user.findUnique({
       where: { email: 'student.register@test.com' },
     })
     expect(user).not.toBeNull()
+    expect(user?.emailVerified).toBe(false)
+    expect(user?.emailVerifiedAt).toBeNull()
 
-    const session = await prisma.session.findUnique({
-      where: { token: global.__testAuthToken! },
+    const verification = await prisma.emailVerificationCode.findFirst({
+      where: { userId: user!.id },
     })
-    expect(session?.userId).toBe(user!.id)
-    expect(emailMocks.sendWelcomeEmail).toHaveBeenCalledWith('student.register@test.com', 'Student', 'STUDENT')
+    expect(verification).not.toBeNull()
+    expect(emailMocks.sendEmailVerificationEmail).toHaveBeenCalledWith(
+      'student.register@test.com',
+      'Student',
+      expect.stringMatching(/^\d{6}$/)
+    )
   })
 
   it('returns 409 for duplicate email registration', async () => {
@@ -76,7 +89,8 @@ describe('Registration and auth flow', () => {
         firstName: 'Duplicate',
         lastName: 'User',
         role: 'STUDENT',
-        universityName: 'Duplicate Registration University',
+        universitySelectionMode: 'EXISTING',
+        universityId: university.id,
         country: 'United States',
       },
     })
@@ -86,6 +100,8 @@ describe('Registration and auth flow', () => {
   })
 
   it('returns 400 for invalid email format', async () => {
+    const university = await createUniversity('Validation University')
+
     const req = makeRequest(`${BASE}/api/auth/register`, {
       method: 'POST',
       body: {
@@ -94,7 +110,8 @@ describe('Registration and auth flow', () => {
         firstName: 'Invalid',
         lastName: 'Email',
         role: 'STUDENT',
-        universityName: 'Validation University',
+        universitySelectionMode: 'EXISTING',
+        universityId: university.id,
         country: 'United States',
       },
     })
@@ -114,6 +131,8 @@ describe('Registration and auth flow', () => {
   })
 
   it('returns 400 for too-short passwords', async () => {
+    const university = await createUniversity('Validation University')
+
     const req = makeRequest(`${BASE}/api/auth/register`, {
       method: 'POST',
       body: {
@@ -122,7 +141,8 @@ describe('Registration and auth flow', () => {
         firstName: 'Short',
         lastName: 'Password',
         role: 'STUDENT',
-        universityName: 'Validation University',
+        universitySelectionMode: 'EXISTING',
+        universityId: university.id,
         country: 'United States',
       },
     })
@@ -274,6 +294,7 @@ describe('Registration and auth flow', () => {
       role: 'STUDENT',
       universityId: university.id,
       password: 'Password123!',
+      emailVerified: false,
     })
 
     await prisma.user.update({
@@ -300,6 +321,8 @@ describe('Registration and auth flow', () => {
     })
     expect(updatedUser?.resetToken).toBeNull()
     expect(updatedUser?.resetTokenExpiry).toBeNull()
+    expect(updatedUser?.emailVerified).toBe(true)
+    expect(updatedUser?.emailVerifiedAt).not.toBeNull()
     expect(await bcrypt.compare('NewPassword456!', updatedUser!.passwordHash)).toBe(true)
   })
 

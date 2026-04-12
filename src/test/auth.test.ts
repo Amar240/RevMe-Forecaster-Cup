@@ -84,6 +84,23 @@ describe('getSession', () => {
     const deletedSession = await prisma.session.findUnique({ where: { token } })
     expect(deletedSession).toBeNull()
   })
+
+  it('returns null for an unverified user and removes their sessions', async () => {
+    const uni = await createUniversity()
+    const user = await createUser({
+      email: 'unverified-session@test.com',
+      role: 'STUDENT',
+      universityId: uni.id,
+      emailVerified: false,
+    })
+    const token = await loginAs(user.id)
+
+    const sessionUser = await getSession()
+    expect(sessionUser).toBeNull()
+
+    const deletedSession = await prisma.session.findUnique({ where: { token } })
+    expect(deletedSession).toBeNull()
+  })
 })
 
 describe('destroySession', () => {

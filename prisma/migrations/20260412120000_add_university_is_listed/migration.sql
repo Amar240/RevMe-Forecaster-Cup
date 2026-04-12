@@ -1,0 +1,2 @@
+ALTER TABLE "University"
+ADD COLUMN "isListed" BOOLEAN NOT NULL DEFAULT true;

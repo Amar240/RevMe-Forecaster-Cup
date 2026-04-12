@@ -6,12 +6,17 @@ import { formatUniversityDisplayName, normalizeUniversityName } from '@/server/u
 
 let teamDisplayIdCounter = 0
 
-export async function createUniversity(name = 'Test University') {
+export async function createUniversity(
+  name = 'Test University',
+  options?: { isListed?: boolean; country?: string | null }
+) {
   const displayName = formatUniversityDisplayName(name)
   return prisma.university.create({
     data: {
       name: displayName,
       normalizedName: normalizeUniversityName(displayName),
+      isListed: options?.isListed ?? true,
+      country: options?.country ?? null,
     },
   })
 }
@@ -25,8 +30,10 @@ export async function createUser(params: {
   password?: string
   hasFullAccess?: boolean
   isActive?: boolean
+  emailVerified?: boolean
 }) {
   const passwordHash = await bcrypt.hash(params.password || 'Password123!', 10)
+  const emailVerified = params.emailVerified ?? true
   return prisma.user.create({
     data: {
       email: params.email,
@@ -36,7 +43,8 @@ export async function createUser(params: {
       passwordHash,
       universityId: params.universityId || null,
       hasFullAccess: params.hasFullAccess || false,
-      emailVerified: true,
+      emailVerified,
+      emailVerifiedAt: emailVerified ? new Date() : null,
       isActive: params.isActive ?? true,
     },
   })

@@ -33,6 +33,12 @@ export async function POST(request: NextRequest) {
       throw new ApiError('Invalid email or password', 401, 'UNAUTHORIZED')
     }
 
+    if (!user.emailVerified) {
+      throw new ApiError('Verify your email before signing in.', 403, 'EMAIL_NOT_VERIFIED', {
+        email: user.email,
+      })
+    }
+
     await createSession(user.id)
 
     return jsonOk({

@@ -78,6 +78,30 @@ describe('POST /api/auth/login', () => {
     expect(data.code).toBe('FORBIDDEN')
   })
 
+  it('returns 403 for unverified users', async () => {
+    const uni = await createUniversity()
+    await createUser({
+      email: 'unverified-login@test.com',
+      role: 'STUDENT',
+      universityId: uni.id,
+      password: 'Password123!',
+      emailVerified: false,
+    })
+
+    const req = makeRequest(`${BASE}/api/auth/login`, {
+      method: 'POST',
+      body: { email: 'unverified-login@test.com', password: 'Password123!' },
+    })
+
+    const res = await loginHandler(req)
+    expect(res.status).toBe(403)
+
+    const data = await res.json()
+    expect(data.code).toBe('EMAIL_NOT_VERIFIED')
+    expect(data.message).toBe('Verify your email before signing in.')
+    expect(data.details?.email).toBe('unverified-login@test.com')
+  })
+
   it('returns 400 for invalid body (missing fields)', async () => {
     const req = makeRequest(`${BASE}/api/auth/login`, {
       method: 'POST',
@@ -93,7 +117,9 @@ describe('POST /api/auth/login', () => {
 })
 
 describe('POST /api/auth/register', () => {
-  it('creates a new user and returns 201', async () => {
+  it('creates a new unverified user and returns verification metadata', async () => {
+    const university = await createUniversity('Listed Registration University')
+
     const req = makeRequest(`${BASE}/api/auth/register`, {
       method: 'POST',
       body: {
@@ -102,7 +128,8 @@ describe('POST /api/auth/register', () => {
         firstName: 'New',
         lastName: 'User',
         role: 'STUDENT',
-        universityName: 'Test University',
+        universitySelectionMode: 'EXISTING',
+        universityId: university.id,
         country: 'United States',
       },
     })
@@ -111,15 +138,19 @@ describe('POST /api/auth/register', () => {
     expect(res.status).toBe(201)
 
     const data = await res.json()
-    expect(data.message).toBe('Registration successful')
+    expect(data.message).toMatch(/Registration successful/)
     expect(data.user.email).toBe('newuser@test.com')
     expect(data.user.role).toBe('STUDENT')
+    expect(data.email).toBe('newuser@test.com')
+    expect(data.requiresEmailVerification).toBe(true)
+    expect(typeof data.emailSent).toBe('boolean')
 
-    const university = await prisma.university.findUnique({
-      where: { name: 'Test University' },
+    const createdUser = await prisma.user.findUnique({
+      where: { email: 'newuser@test.com' },
     })
 
-    expect(university?.country).toBe('United States')
+    expect(createdUser?.universityId).toBe(university.id)
+    expect(createdUser?.emailVerified).toBe(false)
   })
 
   it('returns 409 for duplicate email', async () => {
@@ -134,7 +165,8 @@ describe('POST /api/auth/register', () => {
         firstName: 'Dup',
         lastName: 'User',
         role: 'STUDENT',
-        universityName: 'Test University',
+        universitySelectionMode: 'EXISTING',
+        universityId: uni.id,
         country: 'United States',
       },
     })
@@ -147,6 +179,8 @@ describe('POST /api/auth/register', () => {
   })
 
   it('returns 400 for short password', async () => {
+    const university = await createUniversity('Short Password University')
+
     const req = makeRequest(`${BASE}/api/auth/register`, {
       method: 'POST',
       body: {
@@ -155,7 +189,8 @@ describe('POST /api/auth/register', () => {
         firstName: 'Short',
         lastName: 'Pass',
         role: 'STUDENT',
-        universityName: 'Test University',
+        universitySelectionMode: 'EXISTING',
+        universityId: university.id,
         country: 'United States',
       },
     })
@@ -188,6 +223,7 @@ describe('POST /api/auth/register', () => {
         firstName: 'Country',
         lastName: 'Fill',
         role: 'SUPERVISOR',
+        universitySelectionMode: 'OTHER',
         universityName: 'Existing University',
         country: 'India',
       },
@@ -214,6 +250,7 @@ describe('POST /api/auth/register', () => {
         firstName: 'Normalized',
         lastName: 'User',
         role: 'STUDENT',
+        universitySelectionMode: 'OTHER',
         universityName: '  ohio   state   university  ',
         country: 'United States',
       },

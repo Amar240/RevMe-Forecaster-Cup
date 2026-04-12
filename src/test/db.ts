@@ -18,6 +18,11 @@ export async function ensureTestSchema() {
     )
   }
 
+  const hasIsListed = columns.some((column) => column.column_name === 'isListed')
+  if (!hasIsListed) {
+    await prisma.$executeRawUnsafe('ALTER TABLE "University" ADD COLUMN "isListed" BOOLEAN NOT NULL DEFAULT true')
+  }
+
   const userColumns = await prisma.$queryRaw<{ column_name: string }[]>`
     SELECT column_name
     FROM information_schema.columns
@@ -29,6 +34,31 @@ export async function ensureTestSchema() {
   if (!hasIsActive) {
     await prisma.$executeRawUnsafe('ALTER TABLE "User" ADD COLUMN "isActive" BOOLEAN NOT NULL DEFAULT true')
   }
+
+  const hasEmailVerifiedAt = userColumns.some((column) => column.column_name === 'emailVerifiedAt')
+  if (!hasEmailVerifiedAt) {
+    await prisma.$executeRawUnsafe('ALTER TABLE "User" ADD COLUMN "emailVerifiedAt" TIMESTAMP(3)')
+  }
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "EmailVerificationCode" (
+      "id" TEXT NOT NULL,
+      "userId" TEXT NOT NULL,
+      "codeHash" TEXT NOT NULL,
+      "expiresAt" TIMESTAMP(3) NOT NULL,
+      "usedAt" TIMESTAMP(3),
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "EmailVerificationCode_pkey" PRIMARY KEY ("id"),
+      CONSTRAINT "EmailVerificationCode_userId_fkey"
+        FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE
+    )
+  `)
+  await prisma.$executeRawUnsafe(
+    'CREATE INDEX IF NOT EXISTS "EmailVerificationCode_userId_idx" ON "EmailVerificationCode"("userId")'
+  )
+  await prisma.$executeRawUnsafe(
+    'CREATE INDEX IF NOT EXISTS "EmailVerificationCode_expiresAt_idx" ON "EmailVerificationCode"("expiresAt")'
+  )
 
   const teamColumns = await prisma.$queryRaw<{ column_name: string }[]>`
     SELECT column_name

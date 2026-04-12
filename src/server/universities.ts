@@ -7,12 +7,14 @@ type UniversityRecord = {
   id?: string | null
   name?: string | null
   normalizedName?: string | null
+  isListed?: boolean | null
 }
 
 const universitySelect = {
   id: true,
   name: true,
   normalizedName: true,
+  isListed: true,
   country: true,
   createdAt: true,
 } satisfies Prisma.UniversitySelect
@@ -93,11 +95,18 @@ async function listUniversities(db: DbClient) {
   })
 }
 
-export async function findUniversityByNormalizedName(name: string, db: DbClient = prisma) {
+async function findUniversityByNormalizedNameInternal(
+  name: string,
+  db: DbClient,
+  isListed?: boolean
+) {
   const normalizedName = normalizeUniversityName(name)
+  const where: Prisma.UniversityWhereInput = isListed === undefined
+    ? { normalizedName }
+    : { normalizedName, isListed }
 
   const exactMatch = await db.university.findFirst({
-    where: { normalizedName },
+    where,
     select: universitySelect,
     orderBy: { createdAt: 'asc' },
   })
@@ -107,13 +116,24 @@ export async function findUniversityByNormalizedName(name: string, db: DbClient 
   }
 
   const universities = await listUniversities(db)
-  return universities.find((university) => getUniversityKey(university) === normalizedName) ?? null
+  return (
+    universities.find(
+      (university) =>
+        (isListed === undefined || university.isListed === isListed) &&
+        getUniversityKey(university) === normalizedName
+    ) ?? null
+  )
+}
+
+export async function findUniversityByNormalizedName(name: string, db: DbClient = prisma) {
+  return findUniversityByNormalizedNameInternal(name, db)
 }
 
 export async function resolveOrCreateUniversity(
   args: {
     name: string
     country?: string | null
+    isListed?: boolean
   },
   db: DbClient = prisma
 ) {
@@ -141,7 +161,62 @@ export async function resolveOrCreateUniversity(
     data: {
       name,
       normalizedName,
+      isListed: args.isListed ?? true,
       country,
     },
+  })
+}
+
+export async function resolveOrReusePendingUniversity(
+  args: {
+    name: string
+    country?: string | null
+  },
+  db: DbClient = prisma
+): Promise<{ id: string }> {
+  const name = formatUniversityDisplayName(args.name)
+  const normalizedName = normalizeUniversityName(name)
+  const country = args.country?.trim() || null
+
+  const listed = await findUniversityByNormalizedNameInternal(name, db, true)
+  if (listed) {
+    if (!listed.normalizedName || (!listed.country && country)) {
+      return db.university.update({
+        where: { id: listed.id },
+        data: {
+          normalizedName: listed.normalizedName ?? normalizedName,
+          country: listed.country ?? country,
+        },
+        select: { id: true },
+      })
+    }
+
+    return { id: listed.id }
+  }
+
+  const pending = await findUniversityByNormalizedNameInternal(name, db, false)
+  if (pending) {
+    if (!pending.normalizedName || (!pending.country && country)) {
+      return db.university.update({
+        where: { id: pending.id },
+        data: {
+          normalizedName: pending.normalizedName ?? normalizedName,
+          country: pending.country ?? country,
+        },
+        select: { id: true },
+      })
+    }
+
+    return { id: pending.id }
+  }
+
+  return db.university.create({
+    data: {
+      name,
+      normalizedName,
+      isListed: false,
+      country,
+    },
+    select: { id: true },
   })
 }

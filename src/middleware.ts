@@ -11,6 +11,8 @@ const AUTH_PATHS = new Set([
   '/api/auth/register',
   '/api/auth/forgot-password',
   '/api/auth/reset-password',
+  '/api/auth/verify-email',
+  '/api/auth/resend-verification',
 ])
 const SENSITIVE_PATH_PREFIXES = [
   '/api/submissions',

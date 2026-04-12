@@ -25,7 +25,6 @@ export default function RegisterPage() {
     firstName: '',
     lastName: '',
     role: 'STUDENT' as 'STUDENT' | 'SUPERVISOR',
-    universityName: '',
     country: '',
   })
   const [error, setError] = useState('')
@@ -73,6 +72,16 @@ export default function RegisterPage() {
       return
     }
 
+    if (!selectedUniversity) {
+      setError('Please select your university')
+      return
+    }
+
+    if (selectedUniversity === 'other' && !customUniversityName.trim()) {
+      setError('Please enter your university name')
+      return
+    }
+
     if (!formData.country) {
       setError('Please select your country')
       return
@@ -81,10 +90,23 @@ export default function RegisterPage() {
     setLoading(true)
 
     try {
+      const payload = {
+        email: formData.email,
+        password: formData.password,
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        role: formData.role,
+        country: formData.country,
+        universitySelectionMode: selectedUniversity === 'other' ? 'OTHER' as const : 'EXISTING' as const,
+        ...(selectedUniversity === 'other'
+          ? { universityName: customUniversityName.trim() }
+          : { universityId: selectedUniversity }),
+      }
+
       const res = await csrfFetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(payload),
       })
 
       const data = await res.json()
@@ -94,7 +116,9 @@ export default function RegisterPage() {
         return
       }
 
-      router.push(formData.role === 'STUDENT' ? '/rules' : '/dashboard')
+      const nextEmail = encodeURIComponent(data.email || formData.email)
+      const emailSent = data.emailSent === false ? '0' : '1'
+      router.push(`/verify-email?email=${nextEmail}&sent=${emailSent}`)
     } catch {
       setError('An error occurred. Please try again.')
     } finally {
@@ -152,12 +176,9 @@ export default function RegisterPage() {
               onChange={(e) => {
                 const value = e.target.value
                 setSelectedUniversity(value)
-                if (value === 'other') {
-                  setFormData({ ...formData, universityName: customUniversityName })
-                  return
+                if (value !== 'other') {
+                  setCustomUniversityName('')
                 }
-                setCustomUniversityName('')
-                setFormData({ ...formData, universityName: value })
               }}
               className="flex h-11 w-full rounded-md border border-input bg-card px-3.5 py-2 text-[15px] text-foreground shadow-sm transition-[border-color,box-shadow,background-color] focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
               required
@@ -166,7 +187,7 @@ export default function RegisterPage() {
                 Select your university
               </option>
               {universities.map((university) => (
-                <option key={university.id} value={university.name}>
+                <option key={university.id} value={university.id}>
                   {university.name}
                 </option>
               ))}
@@ -177,9 +198,7 @@ export default function RegisterPage() {
                 placeholder="Enter your university name"
                 value={customUniversityName}
                 onChange={(e) => {
-                  const value = e.target.value
-                  setCustomUniversityName(value)
-                  setFormData({ ...formData, universityName: value })
+                  setCustomUniversityName(e.target.value)
                 }}
                 required
               />

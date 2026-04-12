@@ -12,6 +12,7 @@ export async function GET(request: NextRequest) {
     const normalizedQuery = query ? normalizeUniversityName(query) : ''
 
     const universities = await prisma.university.findMany({
+      where: { isListed: true },
       select: {
         id: true,
         name: true,

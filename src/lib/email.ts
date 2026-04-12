@@ -207,6 +207,76 @@ The RevME Team
   }
 }
 
+export async function sendEmailVerificationEmail(
+  email: string,
+  firstName: string,
+  verificationCode: string
+): Promise<boolean> {
+  const transporter = getTransporter()
+  const verifyUrl = `${getAppBaseUrl()}/verify-email?email=${encodeURIComponent(email)}`
+
+  if (!transporter) {
+    logger.info('Email verification email skipped (SMTP not configured)', {
+      email,
+      verifyUrl,
+    })
+    return false
+  }
+
+  try {
+    await sendMailWithRetry(transporter, {
+      from: `"RevME Forecaster Cup" <${getFromEmail()}>`,
+      to: email,
+      subject: 'Verify Your Email - RevME Forecaster Cup',
+      text: `
+Hello ${firstName},
+
+We received your registration for RevME Forecaster Cup.
+
+Your verification code is:
+${verificationCode}
+
+Enter this 6-digit code on the verification page to activate your account:
+${verifyUrl}
+
+If you did not create this account, you can ignore this email.
+
+Best regards,
+The RevME Team
+      `,
+      html: `${emailHeader}
+        <h2 style="margin-top: 0; color: #1e293b;">Verify Your Email</h2>
+        <p>Hi <strong>${firstName}</strong>,</p>
+        <p>We sent this code to verify your email address and activate your account.</p>
+
+        <div style="background: #f8fafc; border: 1px solid #dbeafe; border-radius: 10px; padding: 20px; margin: 24px 0; text-align: center;">
+          <p style="margin: 0 0 8px 0; color: #475569; font-size: 14px;">Verification code</p>
+          <p style="margin: 0; color: #1e293b; font-size: 32px; font-weight: 700; letter-spacing: 0.3em;">${verificationCode}</p>
+        </div>
+
+        <p style="color: #475569;">Enter the 6-digit code on the verification page to continue.</p>
+
+        <div style="text-align: center; margin: 32px 0;">
+          <a href="${verifyUrl}" style="background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%); color: white; padding: 14px 32px; text-decoration: none; border-radius: 8px; display: inline-block; font-weight: 600;">
+            Verify My Email
+          </a>
+        </div>
+
+        <p style="color: #64748b; font-size: 14px;">If you did not create this account, you can safely ignore this email.</p>
+      ${emailFooter}`,
+    })
+
+    logger.info('Email verification email sent', { email })
+    return true
+  } catch (error) {
+    logger.error('Failed to send email verification email', {
+      email,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return false
+  }
+}
+
 export async function sendRoundOpenEmail(
   email: string,
   roundNumber: number,

@@ -2,9 +2,9 @@
 
 import { csrfFetch } from '@/lib/csrf'
 
-import { useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { PasswordInput } from '@/components/ui/password-input'
@@ -14,16 +14,30 @@ import { AuthShell } from '@/components/auth/auth-shell'
 
 export const dynamic = 'force-dynamic'
 
-export default function LoginPage() {
+function LoginPageContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [success, setSuccess] = useState('')
+
+  useEffect(() => {
+    setSuccess(searchParams.get('verified') === '1' ? 'Your email has been verified.' : '')
+  }, [searchParams])
+
+  useEffect(() => {
+    const nextEmail = searchParams.get('email')
+    if (!nextEmail) return
+
+    setEmail((currentEmail) => currentEmail || nextEmail)
+  }, [searchParams])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+    setSuccess('')
     setLoading(true)
 
     try {
@@ -36,6 +50,11 @@ export default function LoginPage() {
       const data = await res.json()
 
       if (!res.ok) {
+        if (data.code === 'EMAIL_NOT_VERIFIED') {
+          const nextEmail = encodeURIComponent(data.details?.email || email)
+          router.push(`/verify-email?email=${nextEmail}&reason=signin`)
+          return
+        }
         setError(data.message || 'Login failed')
         return
       }
@@ -52,6 +71,11 @@ export default function LoginPage() {
   return (
     <AuthShell title="Welcome back" description="Sign in to continue to your dashboard.">
         <form onSubmit={handleSubmit} className="space-y-5">
+          {success && (
+            <AlertBanner variant="success" className="shadow-none">
+              {success}
+            </AlertBanner>
+          )}
           {error && (
             <AlertBanner variant="error" className="shadow-none">
               {error}
@@ -93,5 +117,23 @@ export default function LoginPage() {
           </p>
         </form>
     </AuthShell>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <AuthShell title="Welcome back" description="Sign in to continue to your dashboard.">
+          <div className="space-y-4">
+            <div className="h-11 rounded-md border border-border bg-card" />
+            <div className="h-11 rounded-md border border-border bg-card" />
+            <div className="h-11 rounded-md bg-primary/15" />
+          </div>
+        </AuthShell>
+      }
+    >
+      <LoginPageContent />
+    </Suspense>
   )
 }
