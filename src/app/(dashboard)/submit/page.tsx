@@ -106,7 +106,9 @@ function buildNormalizedSubmissions(
   return {
     ok: true,
     submissions: Object.entries(predictions).map(([key, value]) => {
-      const [marketId, weekOffset] = key.split('-')
+      const lastDash = key.lastIndexOf('-')
+      const marketId = key.slice(0, lastDash)
+      const weekOffset = key.slice(lastDash + 1)
 
       return {
         marketId,

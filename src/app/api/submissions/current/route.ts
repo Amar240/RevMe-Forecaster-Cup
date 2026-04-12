@@ -133,7 +133,9 @@ export async function GET() {
         })
 
         existingSubmissions = Array.from(valuesByKey.entries()).map(([key, values]) => {
-          const [marketId, weekOffset] = key.split('-')
+          const lastDash = key.lastIndexOf('-')
+          const marketId = key.slice(0, lastDash)
+          const weekOffset = key.slice(lastDash + 1)
           return {
             marketId,
             weekOffset: parseInt(weekOffset),
