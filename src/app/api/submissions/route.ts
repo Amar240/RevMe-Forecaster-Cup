@@ -5,6 +5,7 @@ import { logger } from '@/server/logger'
 import { requireUserOrResponse, jsonError } from '@/server/http'
 import { sendSubmissionReceiptEmail } from '@/server/email'
 import { getSeasonScopedTeamMemberWhere } from '@/server/team-membership'
+import { isValidAdrValue, isValidOccupancyValue } from '@/lib/submission-values'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,8 +16,8 @@ const submissionSchema = z.object({
     z.object({
       marketId: z.string().min(1),
       weekOffset: z.number().int().min(1).max(2),
-      occupancy: z.number().min(0).max(100),
-      adr: z.number().min(0),
+      occupancy: z.number().refine(isValidOccupancyValue, 'Occupancy must be between 0 and 100'),
+      adr: z.number().refine(isValidAdrValue, 'ADR must be greater than 0'),
     })
   ),
 })

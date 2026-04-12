@@ -351,6 +351,10 @@ export default function AdminSeasonPage() {
     return <PageLoader message="Loading season data…" />
   }
 
+  const hasCompletedUnarchivedSeason = completedSeasons.some(
+    (completedSeason) => archiveBySeason[completedSeason.id]?.status !== 'COMPLETED'
+  )
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <div>
@@ -686,6 +690,10 @@ export default function AdminSeasonPage() {
             </CardContent>
           </Card>
         </div>
+      ) : hasCompletedUnarchivedSeason ? (
+        <AlertBanner variant="warning">
+          Archive all completed seasons before starting a new one. Go to Season History to archive.
+        </AlertBanner>
       ) : (
         <Card>
           <CardHeader>

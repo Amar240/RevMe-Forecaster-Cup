@@ -6,29 +6,70 @@ import { prisma } from '@/server/db'
 export const ARCHIVE_FILES = ['participants.csv', 'results.csv'] as const
 export type ArchiveFileName = (typeof ARCHIVE_FILES)[number]
 
+const TRACKED_ARCHIVE_MARKETS = [
+  { name: 'Nashville CBD', key: 'nashville' },
+  { name: 'Dubai', key: 'dubai' },
+  { name: 'Hamburg', key: 'hamburg' },
+] as const
+
+type TrackedArchiveMarketKey = (typeof TRACKED_ARCHIVE_MARKETS)[number]['key']
+
 type ParticipantsRow = {
+  seasonName: string
+  seasonStatus: string
+  seasonStartDate: string
+  seasonEndDate: string
   teamId: string
-  teamName: string
   teamDisplayId: string
-  university: string
+  teamExternalId: string
+  teamName: string
+  teamStatus: string
+  disqualifiedReason: string
+  warningCount: number
+  universityName: string
+  universityCountry: string
   supervisorEmail: string
+  supervisorFirstName: string
+  supervisorLastName: string
   memberEmail: string
   memberFirstName: string
   memberLastName: string
+  memberUniversity: string
+  memberCountry: string
   isSubmitter: boolean | ''
   joinedAt: string
 }
 
+type MetricAggregateSummary = {
+  occupancyMape: number | null
+  adrMape: number | null
+  nErrors: number
+}
+
 type ResultsRow = {
+  seasonName: string
   rank: number | ''
-  teamId: string
-  teamName: string
   teamDisplayId: string
-  university: string
+  teamExternalId: string
+  teamName: string
+  teamStatus: string
+  universityName: string
+  supervisorEmail: string
+  supervisorFirstName: string
+  supervisorLastName: string
+  submitterEmail: string
+  submitterFirstName: string
+  submitterLastName: string
+  memberCount: number
+  submissionCount: number
+  totalRounds: number
+  warningCount: number
+  disqualifiedReason: string
   combinedMape: number | null
   occupancyMape: number | null
   adrMape: number | null
   nErrors: number | null
+  marketMapes: Record<TrackedArchiveMarketKey, MetricAggregateSummary>
   roundMapes: Record<number, number | null>
 }
 
@@ -96,29 +137,95 @@ function averagePair(left: number | null, right: number | null) {
   return (left + right) / 2
 }
 
+function createMetricAggregateSummary(): MetricAggregateSummary {
+  return {
+    occupancyMape: null,
+    adrMape: null,
+    nErrors: 0,
+  }
+}
+
+function createTrackedMarketMap(): Record<TrackedArchiveMarketKey, MetricAggregateSummary> {
+  return {
+    nashville: createMetricAggregateSummary(),
+    dubai: createMetricAggregateSummary(),
+    hamburg: createMetricAggregateSummary(),
+  }
+}
+
+function applyMetricAggregate(
+  summary: MetricAggregateSummary,
+  metric: 'OCCUPANCY' | 'ADR',
+  mape: number,
+  nErrors: number
+) {
+  if (metric === 'OCCUPANCY') {
+    summary.occupancyMape = mape
+  } else {
+    summary.adrMape = mape
+  }
+
+  summary.nErrors += nErrors
+}
+
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error)
 }
 
 async function buildParticipantsCsv(seasonId: string) {
+  const season = await prisma.season.findUnique({
+    where: { id: seasonId },
+    select: {
+      name: true,
+      status: true,
+      startDate: true,
+      endDate: true,
+    },
+  })
+
+  if (!season) {
+    throw new Error('Season not found')
+  }
+
   const teams = await prisma.team.findMany({
     where: { seasonId },
     orderBy: [{ name: 'asc' }, { displayId: 'asc' }],
-    include: {
+    select: {
+      id: true,
+      displayId: true,
+      externalTeamId: true,
+      name: true,
+      status: true,
+      disqualifiedReason: true,
+      _count: {
+        select: { warnings: true },
+      },
       university: {
-        select: { name: true },
+        select: { name: true, country: true },
       },
       supervisor: {
-        select: { email: true },
+        select: {
+          email: true,
+          firstName: true,
+          lastName: true,
+        },
       },
       members: {
         orderBy: [{ joinedAt: 'asc' }, { id: 'asc' }],
-        include: {
+        select: {
+          isSubmitter: true,
+          joinedAt: true,
           user: {
             select: {
               email: true,
               firstName: true,
               lastName: true,
+              university: {
+                select: {
+                  name: true,
+                  country: true,
+                },
+              },
             },
           },
         },
@@ -127,14 +234,27 @@ async function buildParticipantsCsv(seasonId: string) {
   })
 
   const headers = [
+    'seasonName',
+    'seasonStatus',
+    'seasonStartDate',
+    'seasonEndDate',
     'teamId',
-    'teamName',
     'teamDisplayId',
-    'university',
+    'teamExternalId',
+    'teamName',
+    'teamStatus',
+    'disqualifiedReason',
+    'warningCount',
+    'universityName',
+    'universityCountry',
     'supervisorEmail',
+    'supervisorFirstName',
+    'supervisorLastName',
     'memberEmail',
     'memberFirstName',
     'memberLastName',
+    'memberUniversity',
+    'memberCountry',
     'isSubmitter',
     'joinedAt',
   ]
@@ -143,11 +263,22 @@ async function buildParticipantsCsv(seasonId: string) {
 
   for (const team of teams) {
     const base = {
+      seasonName: season.name,
+      seasonStatus: season.status,
+      seasonStartDate: season.startDate.toISOString(),
+      seasonEndDate: season.endDate.toISOString(),
       teamId: team.id,
-      teamName: team.name,
       teamDisplayId: team.displayId,
-      university: team.university.name,
+      teamExternalId: team.externalTeamId ?? '',
+      teamName: team.name,
+      teamStatus: team.status,
+      disqualifiedReason: team.disqualifiedReason ?? '',
+      warningCount: team._count.warnings,
+      universityName: team.university.name,
+      universityCountry: team.university.country ?? '',
       supervisorEmail: team.supervisor?.email ?? '',
+      supervisorFirstName: team.supervisor?.firstName ?? '',
+      supervisorLastName: team.supervisor?.lastName ?? '',
     }
 
     if (team.members.length === 0) {
@@ -156,6 +287,8 @@ async function buildParticipantsCsv(seasonId: string) {
         memberEmail: '',
         memberFirstName: '',
         memberLastName: '',
+        memberUniversity: '',
+        memberCountry: '',
         isSubmitter: '',
         joinedAt: '',
       })
@@ -168,6 +301,8 @@ async function buildParticipantsCsv(seasonId: string) {
         memberEmail: member.user.email,
         memberFirstName: member.user.firstName,
         memberLastName: member.user.lastName,
+        memberUniversity: member.user.university?.name ?? '',
+        memberCountry: member.user.university?.country ?? '',
         isSubmitter: member.isSubmitter,
         joinedAt: member.joinedAt.toISOString(),
       }))
@@ -177,14 +312,27 @@ async function buildParticipantsCsv(seasonId: string) {
   return buildCsv(
     headers,
     rows.map((row) => [
+      row.seasonName,
+      row.seasonStatus,
+      row.seasonStartDate,
+      row.seasonEndDate,
       row.teamId,
-      row.teamName,
       row.teamDisplayId,
-      row.university,
+      row.teamExternalId,
+      row.teamName,
+      row.teamStatus,
+      row.disqualifiedReason,
+      row.warningCount,
+      row.universityName,
+      row.universityCountry,
       row.supervisorEmail,
+      row.supervisorFirstName,
+      row.supervisorLastName,
       row.memberEmail,
       row.memberFirstName,
       row.memberLastName,
+      row.memberUniversity,
+      row.memberCountry,
       row.isSubmitter,
       row.joinedAt,
     ])
@@ -192,12 +340,74 @@ async function buildParticipantsCsv(seasonId: string) {
 }
 
 async function buildResultsCsv(seasonId: string) {
+  const season = await prisma.season.findUnique({
+    where: { id: seasonId },
+    select: {
+      name: true,
+      rounds: {
+        orderBy: { number: 'asc' },
+        select: {
+          id: true,
+          number: true,
+        },
+      },
+      markets: {
+        where: { isActive: true },
+        select: {
+          market: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      },
+    },
+  })
+
+  if (!season) {
+    throw new Error('Season not found')
+  }
+
   const teams = await prisma.team.findMany({
     where: { seasonId },
     orderBy: [{ name: 'asc' }, { displayId: 'asc' }],
-    include: {
+    select: {
+      id: true,
+      displayId: true,
+      externalTeamId: true,
+      name: true,
+      status: true,
+      disqualifiedReason: true,
+      _count: {
+        select: {
+          members: true,
+          submissions: true,
+          warnings: true,
+        },
+      },
       university: {
         select: { name: true },
+      },
+      supervisor: {
+        select: {
+          email: true,
+          firstName: true,
+          lastName: true,
+        },
+      },
+      members: {
+        orderBy: [{ joinedAt: 'asc' }, { id: 'asc' }],
+        select: {
+          isSubmitter: true,
+          user: {
+            select: {
+              email: true,
+              firstName: true,
+              lastName: true,
+            },
+          },
+        },
       },
     },
   })
@@ -211,6 +421,7 @@ async function buildResultsCsv(seasonId: string) {
     select: {
       teamId: true,
       metric: true,
+      marketId: true,
       mape: true,
       nErrors: true,
     },
@@ -240,23 +451,29 @@ async function buildResultsCsv(seasonId: string) {
     { occupancyMape: number | null; adrMape: number | null; nErrors: number }
   >()
 
+  const trackedMarketIds = new Map<string, TrackedArchiveMarketKey>()
+  for (const trackedMarket of TRACKED_ARCHIVE_MARKETS) {
+    const seasonMarket = season.markets.find(({ market }) => market.name === trackedMarket.name)
+    if (seasonMarket) {
+      trackedMarketIds.set(seasonMarket.market.id, trackedMarket.key)
+    }
+  }
+
+  const marketScores = new Map<string, Record<TrackedArchiveMarketKey, MetricAggregateSummary>>()
+
   for (const aggregate of seasonAggregates) {
-    const existing = seasonScores.get(aggregate.teamId) ?? {
-      occupancyMape: null,
-      adrMape: null,
-      nErrors: 0,
+    if (aggregate.marketId) {
+      const marketKey = trackedMarketIds.get(aggregate.marketId)
+      if (marketKey) {
+        const existingMarketScores = marketScores.get(aggregate.teamId) ?? createTrackedMarketMap()
+        applyMetricAggregate(existingMarketScores[marketKey], aggregate.metric, aggregate.mape, aggregate.nErrors)
+        marketScores.set(aggregate.teamId, existingMarketScores)
+      }
+      continue
     }
 
-    if (aggregate.metric === 'OCCUPANCY') {
-      existing.occupancyMape = aggregate.mape
-      existing.nErrors += aggregate.nErrors
-    }
-
-    if (aggregate.metric === 'ADR') {
-      existing.adrMape = aggregate.mape
-      existing.nErrors += aggregate.nErrors
-    }
-
+    const existing = seasonScores.get(aggregate.teamId) ?? createMetricAggregateSummary()
+    applyMetricAggregate(existing, aggregate.metric, aggregate.mape, aggregate.nErrors)
     seasonScores.set(aggregate.teamId, existing)
   }
 
@@ -284,14 +501,14 @@ async function buildResultsCsv(seasonId: string) {
     roundScores.set(aggregate.teamId, teamRounds)
   }
 
+  const totalRounds = season.rounds.length
+
   const results: ResultsRow[] = teams.map((team) => {
-    const seasonScore = seasonScores.get(team.id) ?? {
-      occupancyMape: null,
-      adrMape: null,
-      nErrors: 0,
-    }
+    const seasonScore = seasonScores.get(team.id) ?? createMetricAggregateSummary()
     const teamRounds = roundScores.get(team.id) ?? {}
+    const teamMarketScores = marketScores.get(team.id) ?? createTrackedMarketMap()
     const combinedMape = averagePair(seasonScore.occupancyMape, seasonScore.adrMape)
+    const submitter = team.members.find((member) => member.isSubmitter)?.user ?? null
 
     const roundMapes = Object.fromEntries(
       Array.from({ length: 7 }, (_, index) => {
@@ -305,15 +522,29 @@ async function buildResultsCsv(seasonId: string) {
     ) as Record<number, number | null>
 
     return {
+      seasonName: season.name,
       rank: '',
-      teamId: team.id,
-      teamName: team.name,
       teamDisplayId: team.displayId,
-      university: team.university.name,
+      teamExternalId: team.externalTeamId ?? '',
+      teamName: team.name,
+      teamStatus: team.status,
+      universityName: team.university.name,
+      supervisorEmail: team.supervisor?.email ?? '',
+      supervisorFirstName: team.supervisor?.firstName ?? '',
+      supervisorLastName: team.supervisor?.lastName ?? '',
+      submitterEmail: submitter?.email ?? '',
+      submitterFirstName: submitter?.firstName ?? '',
+      submitterLastName: submitter?.lastName ?? '',
+      memberCount: team._count.members,
+      submissionCount: team._count.submissions,
+      totalRounds,
+      warningCount: team._count.warnings,
+      disqualifiedReason: team.disqualifiedReason ?? '',
       combinedMape,
       occupancyMape: seasonScore.occupancyMape,
       adrMape: seasonScore.adrMape,
       nErrors: combinedMape === null ? null : seasonScore.nErrors,
+      marketMapes: teamMarketScores,
       roundMapes,
     }
   })
@@ -360,15 +591,37 @@ async function buildResultsCsv(seasonId: string) {
   })
 
   const headers = [
+    'seasonName',
     'rank',
-    'teamId',
-    'teamName',
     'teamDisplayId',
-    'university',
+    'teamExternalId',
+    'teamName',
+    'teamStatus',
+    'universityName',
+    'supervisorEmail',
+    'supervisorFirstName',
+    'supervisorLastName',
+    'submitterEmail',
+    'submitterFirstName',
+    'submitterLastName',
+    'memberCount',
+    'submissionCount',
+    'totalRounds',
+    'warningCount',
+    'disqualifiedReason',
     'combinedMape',
     'occupancyMape',
     'adrMape',
     'nErrors',
+    'nashvilleCombinedMape',
+    'nashvilleOccupancyMape',
+    'nashvilleAdrMape',
+    'dubaiCombinedMape',
+    'dubaiOccupancyMape',
+    'dubaiAdrMape',
+    'hamburgCombinedMape',
+    'hamburgOccupancyMape',
+    'hamburgAdrMape',
     'round1Mape',
     'round2Mape',
     'round3Mape',
@@ -381,15 +634,37 @@ async function buildResultsCsv(seasonId: string) {
   return buildCsv(
     headers,
     ranked.map((row) => [
+      row.seasonName,
       row.rank,
-      row.teamId,
-      row.teamName,
       row.teamDisplayId,
-      row.university,
+      row.teamExternalId,
+      row.teamName,
+      row.teamStatus,
+      row.universityName,
+      row.supervisorEmail,
+      row.supervisorFirstName,
+      row.supervisorLastName,
+      row.submitterEmail,
+      row.submitterFirstName,
+      row.submitterLastName,
+      row.memberCount,
+      row.submissionCount,
+      row.totalRounds,
+      row.warningCount,
+      row.disqualifiedReason,
       row.combinedMape,
       row.occupancyMape,
       row.adrMape,
       row.nErrors,
+      averagePair(row.marketMapes.nashville.occupancyMape, row.marketMapes.nashville.adrMape),
+      row.marketMapes.nashville.occupancyMape,
+      row.marketMapes.nashville.adrMape,
+      averagePair(row.marketMapes.dubai.occupancyMape, row.marketMapes.dubai.adrMape),
+      row.marketMapes.dubai.occupancyMape,
+      row.marketMapes.dubai.adrMape,
+      averagePair(row.marketMapes.hamburg.occupancyMape, row.marketMapes.hamburg.adrMape),
+      row.marketMapes.hamburg.occupancyMape,
+      row.marketMapes.hamburg.adrMape,
       row.roundMapes[1],
       row.roundMapes[2],
       row.roundMapes[3],

@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { AlertBanner } from '@/components/ui/alert-banner'
+import { parseSubmissionMetricInput } from '@/lib/submission-values'
 import {
   AlertTriangle,
   Ban,
@@ -75,6 +76,46 @@ function formatDeadline(date: string) {
     hour: 'numeric',
     minute: '2-digit',
   })
+}
+
+function getSubmissionValidationError(predictions: Record<string, { occupancy: string; adr: string }>) {
+  for (const prediction of Object.values(predictions)) {
+    if (parseSubmissionMetricInput('OCCUPANCY', prediction.occupancy) === null) {
+      return 'Enter occupancy values as numbers between 0 and 100.'
+    }
+
+    if (parseSubmissionMetricInput('ADR', prediction.adr) === null) {
+      return 'Enter ADR values as positive numbers.'
+    }
+  }
+
+  return null
+}
+
+type NormalizedSubmission =
+  { marketId: string; weekOffset: number; occupancy: number; adr: number }
+
+function buildNormalizedSubmissions(
+  predictions: Record<string, { occupancy: string; adr: string }>
+): { ok: false; error: string } | { ok: true; submissions: NormalizedSubmission[] } {
+  const validationError = getSubmissionValidationError(predictions)
+  if (validationError) {
+    return { ok: false, error: validationError }
+  }
+
+  return {
+    ok: true,
+    submissions: Object.entries(predictions).map(([key, value]) => {
+      const [marketId, weekOffset] = key.split('-')
+
+      return {
+        marketId,
+        weekOffset: Number(weekOffset),
+        occupancy: parseSubmissionMetricInput('OCCUPANCY', value.occupancy)!,
+        adr: parseSubmissionMetricInput('ADR', value.adr)!,
+      }
+    }),
+  }
 }
 
 export default function SubmitPage() {
@@ -172,20 +213,18 @@ export default function SubmitPage() {
 
   const handleSubmit = async () => {
     setError('')
+
+    const result = buildNormalizedSubmissions(predictions)
+    if (!result.ok) {
+      setError(result.error)
+      setShowReview(false)
+      return
+    }
+
     setSubmitting(true)
 
     try {
-      const submissions = Object.entries(predictions).map(([key, value]) => {
-        const [marketId, weekOffset] = key.split('-')
-        return {
-          marketId,
-          weekOffset: parseInt(weekOffset, 10),
-          occupancy: parseFloat(value.occupancy),
-          adr: parseFloat(value.adr),
-        }
-      })
-
-      await submitForecast({ roundId: currentRound?.id || null, submissions })
+      await submitForecast({ roundId: currentRound?.id || null, submissions: result.submissions })
 
       setSuccess(true)
       setTimeout(() => router.push('/dashboard'), 2000)
@@ -198,14 +237,7 @@ export default function SubmitPage() {
   }
 
   const isFormComplete = () =>
-    Object.values(predictions).every(
-      (prediction) =>
-        prediction.occupancy !== '' &&
-        prediction.adr !== '' &&
-        parseFloat(prediction.occupancy) >= 0 &&
-        parseFloat(prediction.occupancy) <= 100 &&
-        parseFloat(prediction.adr) >= 0
-    )
+    getSubmissionValidationError(predictions) === null
 
   const getFilledCount = () =>
     Object.values(predictions).filter((prediction) => prediction.occupancy !== '' && prediction.adr !== '').length * 2

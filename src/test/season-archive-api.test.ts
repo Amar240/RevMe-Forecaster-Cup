@@ -92,6 +92,7 @@ async function createCompletedArchiveScenario(): Promise<ArchiveScenario> {
       data: {
         name: 'Archive University',
         normalizedName: 'archive university',
+        country: 'USA',
       },
     })
 
@@ -184,6 +185,7 @@ async function createCompletedArchiveScenario(): Promise<ArchiveScenario> {
       data: {
         name: 'Alpha Team',
         displayId: 'T-ARCH-1',
+        externalTeamId: 'EXT-ARCH-1',
         supervisorId: supervisor.id,
         universityId: university.id,
         seasonId: season.id,
@@ -195,10 +197,12 @@ async function createCompletedArchiveScenario(): Promise<ArchiveScenario> {
       data: {
         name: 'Beta Team',
         displayId: 'T-ARCH-2',
+        externalTeamId: 'EXT-ARCH-2',
         supervisorId: supervisor.id,
         universityId: university.id,
         seasonId: season.id,
-        status: 'ACTIVE',
+        status: 'DISQUALIFIED',
+        disqualifiedReason: 'Missed final deadline',
       },
     })
 
@@ -304,6 +308,16 @@ function getUploadedCommand(keySuffix: string) {
   return call?.[0] as { input: Record<string, unknown> } | undefined
 }
 
+function parseCsv(csv: string) {
+  const [headerLine, ...dataLines] = csv.trim().split('\n')
+  const headers = headerLine.split(',')
+
+  return dataLines.map((line) => {
+    const values = line.split(',')
+    return Object.fromEntries(headers.map((header, index) => [header, values[index] ?? ''])) as Record<string, string>
+  })
+}
+
 describe('Season archive and wipe APIs', () => {
   beforeEach(() => {
     vi.stubEnv('ARCHIVE_S3_BUCKET', 'revme-archive-bucket')
@@ -340,24 +354,114 @@ describe('Season archive and wipe APIs', () => {
     const participantsCsv = participantsUpload?.input.Body as string
     const resultsCsv = resultsUpload?.input.Body as string
 
-    expect(participantsCsv).toContain(
-      'teamId,teamName,teamDisplayId,university,supervisorEmail,memberEmail,memberFirstName,memberLastName,isSubmitter,joinedAt'
+    expect(participantsCsv.split('\n')[0]).toBe(
+      'seasonName,seasonStatus,seasonStartDate,seasonEndDate,teamId,teamDisplayId,teamExternalId,teamName,teamStatus,disqualifiedReason,warningCount,universityName,universityCountry,supervisorEmail,supervisorFirstName,supervisorLastName,memberEmail,memberFirstName,memberLastName,memberUniversity,memberCountry,isSubmitter,joinedAt'
     )
-    expect(participantsCsv).toContain('Alpha Team')
-    expect(participantsCsv).toContain('student@archive.test')
-    expect(participantsCsv).toContain('Beta Team')
+    const participantRows = parseCsv(participantsCsv)
+    const alphaParticipant = participantRows.find((row) => row.teamDisplayId === 'T-ARCH-1')
+    const betaParticipant = participantRows.find((row) => row.teamDisplayId === 'T-ARCH-2')
 
-    expect(resultsCsv).toContain(
-      'rank,teamId,teamName,teamDisplayId,university,combinedMape,occupancyMape,adrMape,nErrors,round1Mape,round2Mape,round3Mape,round4Mape,round5Mape,round6Mape,round7Mape'
+    expect(alphaParticipant).toMatchObject({
+      seasonName: 'Archive Season',
+      seasonStatus: 'COMPLETED',
+      teamExternalId: 'EXT-ARCH-1',
+      teamName: 'Alpha Team',
+      teamStatus: 'ACTIVE',
+      disqualifiedReason: '',
+      warningCount: '0',
+      universityName: 'Archive University',
+      universityCountry: 'USA',
+      supervisorEmail: 'supervisor@archive.test',
+      supervisorFirstName: 'Supervisor',
+      supervisorLastName: 'User',
+      memberEmail: 'student@archive.test',
+      memberFirstName: 'Ava',
+      memberLastName: 'Analyst',
+      memberUniversity: 'Archive University',
+      memberCountry: 'USA',
+      isSubmitter: 'true',
+    })
+    expect(alphaParticipant?.seasonStartDate).toBe(scenario.season.startDate.toISOString())
+    expect(alphaParticipant?.seasonEndDate).toBe(scenario.season.endDate.toISOString())
+
+    expect(betaParticipant).toMatchObject({
+      seasonName: 'Archive Season',
+      teamExternalId: 'EXT-ARCH-2',
+      teamName: 'Beta Team',
+      teamStatus: 'DISQUALIFIED',
+      disqualifiedReason: 'Missed final deadline',
+      memberEmail: '',
+      memberFirstName: '',
+      memberLastName: '',
+      memberUniversity: '',
+      memberCountry: '',
+      isSubmitter: '',
+      joinedAt: '',
+    })
+
+    expect(resultsCsv.split('\n')[0]).toBe(
+      'seasonName,rank,teamDisplayId,teamExternalId,teamName,teamStatus,universityName,supervisorEmail,supervisorFirstName,supervisorLastName,submitterEmail,submitterFirstName,submitterLastName,memberCount,submissionCount,totalRounds,warningCount,disqualifiedReason,combinedMape,occupancyMape,adrMape,nErrors,nashvilleCombinedMape,nashvilleOccupancyMape,nashvilleAdrMape,dubaiCombinedMape,dubaiOccupancyMape,dubaiAdrMape,hamburgCombinedMape,hamburgOccupancyMape,hamburgAdrMape,round1Mape,round2Mape,round3Mape,round4Mape,round5Mape,round6Mape,round7Mape'
     )
-    expect(resultsCsv).toContain('Beta Team')
-    expect(resultsCsv).toContain('Alpha Team')
+    const resultRows = parseCsv(resultsCsv)
+    const betaResult = resultRows.find((row) => row.teamDisplayId === 'T-ARCH-2')
+    const alphaResult = resultRows.find((row) => row.teamDisplayId === 'T-ARCH-1')
 
-    const resultsLines = resultsCsv.split('\n')
-    expect(resultsLines[1]).toContain('Beta Team')
-    expect(resultsLines[1].startsWith('1,')).toBe(true)
-    expect(resultsLines[2]).toContain('Alpha Team')
-    expect(resultsLines[2].startsWith('2,')).toBe(true)
+    expect(betaResult).toMatchObject({
+      seasonName: 'Archive Season',
+      rank: '1',
+      teamExternalId: 'EXT-ARCH-2',
+      teamName: 'Beta Team',
+      teamStatus: 'DISQUALIFIED',
+      universityName: 'Archive University',
+      supervisorEmail: 'supervisor@archive.test',
+      supervisorFirstName: 'Supervisor',
+      supervisorLastName: 'User',
+      submitterEmail: '',
+      submitterFirstName: '',
+      submitterLastName: '',
+      memberCount: '0',
+      submissionCount: '0',
+      totalRounds: '7',
+      warningCount: '0',
+      disqualifiedReason: 'Missed final deadline',
+      nashvilleCombinedMape: '',
+      nashvilleOccupancyMape: '',
+      nashvilleAdrMape: '',
+      dubaiCombinedMape: '',
+      dubaiOccupancyMape: '',
+      dubaiAdrMape: '',
+      hamburgCombinedMape: '',
+      hamburgOccupancyMape: '',
+      hamburgAdrMape: '',
+      round2Mape: '',
+      round3Mape: '',
+      round4Mape: '',
+      round5Mape: '',
+      round6Mape: '',
+      round7Mape: '',
+    })
+    expect(parseFloat(betaResult?.combinedMape ?? '')).toBeCloseTo(0.11, 5)
+    expect(parseFloat(betaResult?.occupancyMape ?? '')).toBeCloseTo(0.09, 5)
+    expect(parseFloat(betaResult?.adrMape ?? '')).toBeCloseTo(0.13, 5)
+    expect(parseFloat(betaResult?.round1Mape ?? '')).toBeCloseTo(0.1, 5)
+
+    expect(alphaResult).toMatchObject({
+      seasonName: 'Archive Season',
+      rank: '2',
+      teamExternalId: 'EXT-ARCH-1',
+      teamName: 'Alpha Team',
+      teamStatus: 'ACTIVE',
+      submitterEmail: 'student@archive.test',
+      submitterFirstName: 'Ava',
+      submitterLastName: 'Analyst',
+      memberCount: '1',
+      submissionCount: '0',
+      totalRounds: '7',
+      warningCount: '0',
+      disqualifiedReason: '',
+    })
+    expect(parseFloat(alphaResult?.combinedMape ?? '')).toBeCloseTo(0.15, 5)
+    expect(parseFloat(alphaResult?.round1Mape ?? '')).toBeCloseTo(0.15, 5)
   })
 
   it('runArchiveJob marks the archive as failed when S3 upload errors', async () => {

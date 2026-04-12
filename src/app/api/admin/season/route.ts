@@ -72,6 +72,29 @@ export async function POST(request: NextRequest) {
 
     const data = parsed.data
 
+    const completedSeasons = await prisma.season.findMany({
+      where: { status: 'COMPLETED' },
+      select: {
+        id: true,
+        archives: {
+          orderBy: [{ version: 'desc' }, { createdAt: 'desc' }],
+          take: 1,
+          select: { status: true },
+        },
+      },
+    })
+
+    const hasCompletedUnarchivedSeason = completedSeasons.some(
+      (seasonItem) => seasonItem.archives[0]?.status !== 'COMPLETED'
+    )
+
+    if (hasCompletedUnarchivedSeason) {
+      return jsonOk(
+        { message: 'You must archive all completed seasons before creating a new one.' },
+        422
+      )
+    }
+
     const [startYear, startMonth, startDay] = data.startDate.split('-').map(Number)
     const [endYear, endMonth, endDay] = data.endDate.split('-').map(Number)
     const startDate = new Date(startYear, startMonth - 1, startDay, 0, 0, 0)

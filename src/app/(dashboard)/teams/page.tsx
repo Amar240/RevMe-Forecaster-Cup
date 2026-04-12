@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 import { Users, AlertTriangle, Check } from 'lucide-react'
 import { teamStatusMeta } from '@/lib/status-metadata'
+import { getCurrentOperationalSeason } from '@/server/season'
 
 export default async function TeamsPage() {
   const user = await getSession()
@@ -16,6 +17,8 @@ export default async function TeamsPage() {
   }
 
   const { teams } = await getTeamsForUser()
+  const operationalSeason = await getCurrentOperationalSeason({ select: { id: true } })
+  const hasOperationalSeason = Boolean(operationalSeason)
 
   return (
     <div className="space-y-6">
@@ -28,7 +31,7 @@ export default async function TeamsPage() {
             {user.role === 'SUPERVISOR' && `${teams.length} of 10 teams created`}
           </p>
         </div>
-        {user.role === 'SUPERVISOR' && teams.length < 10 && (
+        {user.role === 'SUPERVISOR' && hasOperationalSeason && teams.length < 10 && (
           <Link href="/teams/new">
             <Button>Create Team</Button>
           </Link>
@@ -41,11 +44,15 @@ export default async function TeamsPage() {
             <Users className="mb-4 h-12 w-12 text-text-muted mx-auto" />
             <h3 className="mb-2 text-lg font-medium text-foreground">No teams yet</h3>
             <p className="mb-4 text-text-secondary">
-              Create your first team to start managing students.
+              {user.role === 'SUPERVISOR' && !hasOperationalSeason
+                ? 'An admin needs to create, activate, or resume a season before you can create teams.'
+                : 'Create your first team to start managing students.'}
             </p>
-            <Link href="/teams/new">
-              <Button>Create Team</Button>
-            </Link>
+            {!(user.role === 'SUPERVISOR' && !hasOperationalSeason) && (
+              <Link href="/teams/new">
+                <Button>Create Team</Button>
+              </Link>
+            )}
           </CardContent>
         </Card>
       ) : (

@@ -164,6 +164,92 @@ describe('Submission flow', () => {
     expect(adrValue?.value).toBe(entries[5].adr)
   })
 
+  it('accepts decimal occupancy and ADR values', async () => {
+    await loginAs(student.id)
+
+    const entries = buildSubmissionEntries(markets).map((entry, index) =>
+      index === 0
+        ? { ...entry, occupancy: 72.5, adr: 123.05 }
+        : entry
+    )
+
+    const res = await submitHandler(
+      makeRequest(`${BASE}/api/submissions`, {
+        method: 'POST',
+        body: {
+          roundId: rounds[0].id,
+          submissions: entries,
+        },
+      })
+    )
+
+    expect(res.status).toBe(201)
+
+    const submission = await prisma.submission.findUniqueOrThrow({
+      where: {
+        teamId_roundId: {
+          teamId: team.id,
+          roundId: rounds[0].id,
+        },
+      },
+      include: { values: true },
+    })
+
+    const occupancyValue = submission.values.find(
+      (value) => value.marketId === markets[0].id && value.metric === 'OCCUPANCY' && value.weekOffset === 1
+    )
+    const adrValue = submission.values.find(
+      (value) => value.marketId === markets[0].id && value.metric === 'ADR' && value.weekOffset === 1
+    )
+
+    expect(occupancyValue?.value).toBeCloseTo(72.5)
+    expect(adrValue?.value).toBeCloseTo(123.05)
+  })
+
+  it('rejects ADR values that are zero', async () => {
+    await loginAs(student.id)
+
+    const entries = buildSubmissionEntries(markets).map((entry, index) =>
+      index === 0 ? { ...entry, adr: 0 } : entry
+    )
+
+    const res = await submitHandler(
+      makeRequest(`${BASE}/api/submissions`, {
+        method: 'POST',
+        body: {
+          roundId: rounds[0].id,
+          submissions: entries,
+        },
+      })
+    )
+    const data = await res.json()
+
+    expect(res.status).toBe(400)
+    expect(data.message).toBe('Invalid input')
+  })
+
+  it('rejects occupancy values above 100', async () => {
+    await loginAs(student.id)
+
+    const entries = buildSubmissionEntries(markets).map((entry, index) =>
+      index === 0 ? { ...entry, occupancy: 101 } : entry
+    )
+
+    const res = await submitHandler(
+      makeRequest(`${BASE}/api/submissions`, {
+        method: 'POST',
+        body: {
+          roundId: rounds[0].id,
+          submissions: entries,
+        },
+      })
+    )
+    const data = await res.json()
+
+    expect(res.status).toBe(400)
+    expect(data.message).toBe('Invalid input')
+  })
+
   it('rejects duplicate submissions for the same round', async () => {
     await loginAs(student.id)
 

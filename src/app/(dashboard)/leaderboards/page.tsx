@@ -1,10 +1,9 @@
 'use client'
 
 import { clientLogger } from '@/lib/client-logger'
-import { getCurrentSession } from '@/features/auth/api'
 import { getLeaderboard } from '@/features/leaderboards/api'
 import type { LeaderboardEntry, RoundInfo } from '@/features/leaderboards/types'
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -47,7 +46,6 @@ export default function LeaderboardsPage() {
   const [viewMode, setViewMode] = useState<'team' | 'university'>('team')
   const [showProgression, setShowProgression] = useState(false)
   const [myTeamId, setMyTeamId] = useState<string | null>(null)
-  const [userRole, setUserRole] = useState<string>('')
 
   useEffect(() => {
     fetchLeaderboards()
@@ -68,9 +66,6 @@ export default function LeaderboardsPage() {
 
       setAdrLeaderboard(adrData.leaderboard || [])
       setFinalScoreLeaderboard(finalData.leaderboard || [])
-
-      const sessionData = await getCurrentSession()
-      setUserRole(sessionData?.user.role || '')
     } catch (error) {
       clientLogger.error('Failed to fetch leaderboard:', error)
       toast.error('Failed to load leaderboard')
@@ -84,7 +79,7 @@ export default function LeaderboardsPage() {
     : activeTab === 'occupancy' 
       ? occupancyLeaderboard 
       : adrLeaderboard
-  const canSeeAllMAPE = userRole === 'ADMIN' || userRole === 'SUB_ADMIN' || userRole === 'SUPERVISOR'
+  const canSeeLeaderboardValues = currentLeaderboard.some((entry) => entry.mape !== null)
 
   const scoredRounds = rounds.filter((r) => {
     const hasScores = currentLeaderboard.some((entry) => entry.cumulativeScores[r.id] !== undefined)
@@ -212,7 +207,7 @@ export default function LeaderboardsPage() {
                     <p className="mb-3 text-sm text-text-secondary">{(top3[0] as LeaderboardEntry).university}</p>
                   )}
                   <Badge variant="medal" className="px-3 py-1 text-sm">1st Place</Badge>
-                  {canSeeAllMAPE && (
+                  {canSeeLeaderboardValues && (
                     <p className="mt-3 text-2xl font-semibold text-accent">
                       {viewMode === 'team'
                         ? ((top3[0] as LeaderboardEntry).mape !== null ? `${((top3[0] as LeaderboardEntry).mape! * 100).toFixed(2)}%` : '--')
@@ -234,7 +229,7 @@ export default function LeaderboardsPage() {
                     <p className="mb-2 text-sm text-text-secondary">{(top3[1] as LeaderboardEntry).university}</p>
                   )}
                   <Badge variant="secondary" className="px-3 py-1 text-sm">2nd Place</Badge>
-                  {canSeeAllMAPE && (
+                  {canSeeLeaderboardValues && (
                     <p className="mt-2 text-xl font-semibold text-text-secondary">
                       {viewMode === 'team'
                         ? ((top3[1] as LeaderboardEntry).mape !== null ? `${((top3[1] as LeaderboardEntry).mape! * 100).toFixed(2)}%` : '--')
@@ -256,7 +251,7 @@ export default function LeaderboardsPage() {
                     <p className="mb-2 text-sm text-text-secondary">{(top3[2] as LeaderboardEntry).university}</p>
                   )}
                   <Badge variant="warning" className="px-3 py-1 text-sm">3rd Place</Badge>
-                  {canSeeAllMAPE && (
+                  {canSeeLeaderboardValues && (
                     <p className="mt-2 text-xl font-semibold text-warning">
                       {viewMode === 'team'
                         ? ((top3[2] as LeaderboardEntry).mape !== null ? `${((top3[2] as LeaderboardEntry).mape! * 100).toFixed(2)}%` : '--')
@@ -286,7 +281,7 @@ export default function LeaderboardsPage() {
             ))}
           </div>
 
-          {canSeeAllMAPE && scoredRounds.length > 0 && viewMode === 'team' && activeTab !== 'final' && (
+          {canSeeLeaderboardValues && scoredRounds.length > 0 && viewMode === 'team' && activeTab !== 'final' && (
             <div className="flex justify-end">
               <Button
                 variant={showProgression ? 'default' : 'outline'}
@@ -310,12 +305,12 @@ export default function LeaderboardsPage() {
                     {viewMode === 'team' && (
                       <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">University</th>
                     )}
-          {canSeeAllMAPE && showProgression && viewMode === 'team' && activeTab !== 'final' && scoredRounds.map((round) => (
+          {canSeeLeaderboardValues && showProgression && viewMode === 'team' && activeTab !== 'final' && scoredRounds.map((round) => (
                       <th key={round.id} className="px-3 py-3 text-center text-xs font-medium uppercase tracking-wider text-muted-foreground">
                         R{round.number}
                       </th>
                     ))}
-                    {canSeeAllMAPE && (
+                    {canSeeLeaderboardValues && (
                       <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground">
                         {activeTab === 'final' ? 'Final Score' : activeTab === 'occupancy' ? 'Occupancy MAPE' : 'ADR MAPE'}
                       </th>
@@ -346,14 +341,14 @@ export default function LeaderboardsPage() {
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-text-secondary">{entry.university}</td>
-                          {canSeeAllMAPE && showProgression && activeTab !== 'final' && scoredRounds.map((round) => (
+                          {canSeeLeaderboardValues && showProgression && activeTab !== 'final' && scoredRounds.map((round) => (
                             <td key={round.id} className="px-3 py-4 whitespace-nowrap text-center font-mono text-sm text-text-secondary">
                               {entry.cumulativeScores[round.id] !== undefined 
                                 ? `${(entry.cumulativeScores[round.id] * 100).toFixed(2)}%`
                                 : '--'}
                             </td>
                           ))}
-                          {canSeeAllMAPE && (
+                          {canSeeLeaderboardValues && (
                             <td className="px-6 py-4 whitespace-nowrap text-right font-mono font-bold">
                               <span className="inline-flex items-center">
                                 {entry.mape !== null ? `${(entry.mape * 100).toFixed(2)}%` : '--'}
@@ -379,7 +374,7 @@ export default function LeaderboardsPage() {
                             <span className="font-medium text-foreground">{entry.university}</span>
                             <span className="ml-2 text-sm text-text-secondary">({entry.teamCount} teams)</span>
                           </td>
-                          {canSeeAllMAPE && (
+                          {canSeeLeaderboardValues && (
                             <td className="px-6 py-4 whitespace-nowrap text-right font-mono text-foreground">
                               {entry.avgMAPE !== null ? `${(entry.avgMAPE * 100).toFixed(2)}%` : '--'}
                             </td>

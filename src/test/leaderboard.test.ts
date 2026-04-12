@@ -19,11 +19,13 @@ describe('Leaderboard behavior', () => {
   let gammaTeam: Awaited<ReturnType<typeof createTeam>>
   let disqualifiedTeam: Awaited<ReturnType<typeof createTeam>>
   let pendingTeam: Awaited<ReturnType<typeof createTeam>>
+  let student: Awaited<ReturnType<typeof createUser>>
 
   beforeEach(async () => {
     universityA = await createUniversity('Leaderboard University A')
     universityB = await createUniversity('Leaderboard University B')
     admin = await createUser({ email: 'admin@leaderboard.test', role: 'ADMIN', universityId: universityA.id })
+    student = await createUser({ email: 'student@leaderboard.test', role: 'STUDENT', universityId: universityA.id })
 
     const bundle = await createSeasonWithRounds({ status: 'ACTIVE', name: 'Leaderboard Season' })
     season = bundle.season
@@ -216,6 +218,73 @@ describe('Leaderboard behavior', () => {
     expect(res.status).toBe(200)
     expect(data.leaderboard).toHaveLength(3)
     expect(data.leaderboard.every((entry: { mape: number | null }) => entry.mape === null)).toBe(true)
+  })
+
+  it('shows published leaderboard values and progression to students', async () => {
+    await prisma.round.update({
+      where: { id: rounds[0].id },
+      data: { leaderboardVisible: true },
+    })
+    await prisma.round.update({
+      where: { id: rounds[1].id },
+      data: { leaderboardVisible: true },
+    })
+
+    await loginAs(student.id)
+    const res = await leaderboardHandler(makeRequest(`${BASE}/api/leaderboards?metric=OCCUPANCY`))
+    const data = await res.json()
+    const alphaEntry = data.leaderboard.find((entry: { teamId: string }) => entry.teamId === alphaTeam.id)
+
+    expect(res.status).toBe(200)
+    expect(alphaEntry.mape).toBeCloseTo(0.08, 5)
+    expect(alphaEntry.roundScores[rounds[0].id]).toBeCloseTo(0.1, 5)
+    expect(alphaEntry.cumulativeScores[rounds[1].id]).toBeCloseTo(0.08, 5)
+  })
+
+  it('keeps unpublished round contributions hidden from students', async () => {
+    await prisma.round.update({
+      where: { id: rounds[0].id },
+      data: { leaderboardVisible: true },
+    })
+    await prisma.round.update({
+      where: { id: rounds[1].id },
+      data: { leaderboardVisible: true },
+    })
+
+    await prisma.scoreAggregate.create({
+      data: {
+        seasonId: season.id,
+        teamId: alphaTeam.id,
+        metric: 'OCCUPANCY',
+        scopeType: 'ROUND',
+        roundId: rounds[2].id,
+        marketId: null,
+        mape: 0.3,
+        nErrors: 6,
+      },
+    })
+
+    await prisma.scoreAggregate.updateMany({
+      where: {
+        seasonId: season.id,
+        teamId: alphaTeam.id,
+        metric: 'OCCUPANCY',
+        scopeType: 'SEASON',
+      },
+      data: {
+        mape: (0.1 + 0.06 + 0.3) / 3,
+        nErrors: 18,
+      },
+    })
+
+    await loginAs(student.id)
+    const res = await leaderboardHandler(makeRequest(`${BASE}/api/leaderboards?metric=OCCUPANCY`))
+    const data = await res.json()
+    const alphaEntry = data.leaderboard.find((entry: { teamId: string }) => entry.teamId === alphaTeam.id)
+
+    expect(res.status).toBe(200)
+    expect(data.leaderboard[0].teamId).toBe(alphaTeam.id)
+    expect(alphaEntry.mape).toBeCloseTo(0.08, 5)
   })
 
   it('narrows leaderboard results by universityId', async () => {
