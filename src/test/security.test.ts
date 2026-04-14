@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 import { prisma } from './db'
 import { loginAs, logout } from './auth'
@@ -31,14 +31,19 @@ function makeMiddlewareRequest(
     method?: string
     csrfToken?: string
     cookieToken?: string
-    origin?: string
-    referer?: string
+    origin?: string | null
+    referer?: string | null
   } = {}
 ) {
-  const origin = options.origin ?? BASE
+  const origin = options.origin === undefined ? BASE : options.origin
+  const referer = options.referer === undefined ? (origin ? `${origin}/dashboard` : null) : options.referer
   const headers = new Headers()
-  headers.set('origin', origin)
-  headers.set('referer', `${origin}/dashboard`)
+  if (origin) {
+    headers.set('origin', origin)
+  }
+  if (referer) {
+    headers.set('referer', referer)
+  }
 
   if (options.csrfToken) {
     headers.set('x-csrf-token', options.csrfToken)
@@ -119,6 +124,10 @@ describe('Security boundaries', () => {
 
     await addTeamMember(teamA.id, studentA.id, true)
     await addTeamMember(teamB.id, studentB.id, true)
+  })
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
   })
 
   it('blocks students from representative admin routes', async () => {
@@ -217,6 +226,73 @@ describe('Security boundaries', () => {
 
     const response = middleware(request)
     expect(response.status).toBe(403)
+  })
+
+  it('accepts rev-me.org as a valid unsafe request origin', () => {
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://rev-me.org')
+    const csrfToken = 'csrf-rev-me-org'
+
+    const response = middleware(
+      makeMiddlewareRequest('/api/auth/register', {
+        method: 'POST',
+        origin: 'https://rev-me.org',
+        csrfToken,
+        cookieToken: csrfToken,
+      })
+    )
+
+    expect(response.status).toBe(200)
+  })
+
+  it('accepts www.rev-me.org as a valid unsafe request origin', () => {
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://rev-me.org')
+    const csrfToken = 'csrf-www-rev-me-org'
+
+    const response = middleware(
+      makeMiddlewareRequest('/api/auth/register', {
+        method: 'POST',
+        origin: 'https://www.rev-me.org',
+        csrfToken,
+        cookieToken: csrfToken,
+      })
+    )
+
+    expect(response.status).toBe(200)
+  })
+
+  it('accepts a missing origin when referer resolves to an allowed origin', () => {
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://rev-me.org')
+    const csrfToken = 'csrf-referer-fallback'
+
+    const response = middleware(
+      makeMiddlewareRequest('/api/auth/register', {
+        method: 'POST',
+        origin: null,
+        referer: 'https://www.rev-me.org/register',
+        csrfToken,
+        cookieToken: csrfToken,
+      })
+    )
+
+    expect(response.status).toBe(200)
+  })
+
+  it('rejects an invalid external origin for unsafe requests', async () => {
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://rev-me.org')
+    const csrfToken = 'csrf-invalid-origin'
+
+    const response = middleware(
+      makeMiddlewareRequest('/api/auth/register', {
+        method: 'POST',
+        origin: 'https://evil.example.com',
+        referer: 'https://evil.example.com/register',
+        csrfToken,
+        cookieToken: csrfToken,
+      })
+    )
+
+    expect(response.status).toBe(403)
+    await expect(response.json()).resolves.toEqual({ message: 'Invalid origin' })
   })
 
   it('returns 429 from middleware after exceeding the rate limit', async () => {

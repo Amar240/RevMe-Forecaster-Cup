@@ -23,12 +23,51 @@ const SENSITIVE_PATH_PREFIXES = [
   '/api/admin',
 ]
 
-function normalizeOrigin(value: string) {
+function normalizeOrigin(value: string | null | undefined) {
+  if (!value) {
+    return null
+  }
+
   try {
     return new URL(value).origin
   } catch {
-    return value
+    return null
   }
+}
+
+function addAllowedOriginVariants(allowedOrigins: Set<string>, origin: string | null) {
+  if (!origin) {
+    return
+  }
+
+  allowedOrigins.add(origin)
+
+  try {
+    const url = new URL(origin)
+
+    if (url.hostname === 'localhost') {
+      allowedOrigins.add(`${url.protocol}//127.0.0.1${url.port ? `:${url.port}` : ''}`)
+    } else if (url.hostname === '127.0.0.1') {
+      allowedOrigins.add(`${url.protocol}//localhost${url.port ? `:${url.port}` : ''}`)
+    }
+
+    if (url.hostname === 'rev-me.org') {
+      allowedOrigins.add(`${url.protocol}//www.rev-me.org`)
+    } else if (url.hostname === 'www.rev-me.org') {
+      allowedOrigins.add(`${url.protocol}//rev-me.org`)
+    }
+  } catch {
+    return
+  }
+}
+
+function resolveRequestSourceOrigin(request: NextRequest) {
+  const origin = normalizeOrigin(request.headers.get('origin'))
+  if (origin) {
+    return origin
+  }
+
+  return normalizeOrigin(request.headers.get('referer'))
 }
 
 export function middleware(request: NextRequest) {
@@ -37,17 +76,15 @@ export function middleware(request: NextRequest) {
   const isUnsafe = UNSAFE_METHODS.has(method)
 
   if (pathname.startsWith('/api')) {
-    const origin = request.headers.get('origin')
-    const referer = request.headers.get('referer')
     const host = normalizeOrigin(request.nextUrl.origin)
     const configuredOrigin = normalizeOrigin(getAppBaseUrl())
-    const alternateHost =
-      host.includes('localhost') ? host.replace('localhost', '127.0.0.1') : host.replace('127.0.0.1', 'localhost')
-    const allowedOrigins = new Set([host, alternateHost, configuredOrigin].filter(Boolean) as string[])
+    const allowedOrigins = new Set<string>()
+    addAllowedOriginVariants(allowedOrigins, host)
+    addAllowedOriginVariants(allowedOrigins, configuredOrigin)
 
     if (isUnsafe) {
-      const source = origin || referer
-      if (source && !Array.from(allowedOrigins).some((allowed) => source.startsWith(allowed))) {
+      const sourceOrigin = resolveRequestSourceOrigin(request)
+      if (!sourceOrigin || !allowedOrigins.has(sourceOrigin)) {
         return NextResponse.json({ message: 'Invalid origin' }, { status: 403 })
       }
     }
