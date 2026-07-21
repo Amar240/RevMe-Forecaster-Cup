@@ -12,7 +12,7 @@ import type {
   TeamImportResultRow,
   TeamImportValidationResult,
 } from './types'
-import type { TeamImportOverride } from './types'
+import type { TeamImportColumnMapping, TeamImportOverride } from './types'
 
 async function generateDisplayId(tx: Prisma.TransactionClient) {
   for (let attempt = 0; attempt < 5; attempt += 1) {
@@ -56,6 +56,7 @@ export async function importValidatedTeams(args: {
   mode: 'admin' | 'supervisor'
   validation: TeamImportValidationResult
   overrides?: TeamImportOverride[]
+  columnMapping?: TeamImportColumnMapping | null
 }): Promise<TeamImportConfirmResult> {
   const uniquePeople = new Map<string, TeamImportPersonToProvision>()
   for (const person of args.validation.validRows.flatMap((row) => row.peopleToProvision)) {
@@ -156,6 +157,8 @@ export async function importValidatedTeams(args: {
       rows,
     }
 
+    const batchBeforeUpdate = await tx.importBatch.findUnique({ where: { id: args.batchId }, select: { summaryJson: true } })
+    const existingSummary = (batchBeforeUpdate?.summaryJson ?? {}) as { assist?: unknown }
     await tx.importBatch.update({
       where: { id: args.batchId },
       data: {
@@ -167,6 +170,8 @@ export async function importValidatedTeams(args: {
           result,
           provisionedByTeam,
           overrides: args.overrides ?? [],
+          columnMapping: args.columnMapping ?? null,
+          ...(existingSummary.assist ? { assist: existingSummary.assist } : {}),
         })) as Prisma.InputJsonValue,
       },
     })

@@ -5,6 +5,24 @@ export type TeamImportFormat = 'legacy' | 'normalized'
 export type TeamImportColumnLabel = 'Team' | 'Corresponding Team Member' | 'Additional Member 1' | 'Additional Member 2' | 'Additional Member 3' | 'Additional Member 4'
 export type TeamImportOverrideField = 'teamName' | 'teamExternalId' | 'firstName' | 'lastName' | 'email'
 export interface TeamImportOverride { rowNumber: number; columnLabel: TeamImportColumnLabel; field: TeamImportOverrideField; original: string; value: string }
+export type TeamImportCanonicalField =
+  | 'universityName' | 'teamExternalId' | 'teamName'
+  | 'submitter.firstName' | 'submitter.lastName' | 'submitter.email'
+  | `member${1 | 2 | 3 | 4}.${'firstName' | 'lastName' | 'email'}`
+export interface TeamImportColumnMappingEntry { column: number; field: TeamImportCanonicalField; confidence: number }
+export interface TeamImportColumnMapping { headerRowIndex: number; columnMap: TeamImportColumnMappingEntry[] }
+export type ImportAssistOutcome = 'PENDING' | 'ACCEPTED' | 'REJECTED'
+export interface ImportAssistSuggestion {
+  id: string
+  useCase: 'LAYOUT' | 'REPAIR'
+  rowNumber?: number
+  columnLabel?: TeamImportColumnLabel
+  field?: TeamImportOverrideField
+  suggestion: string
+  reason: string
+  confidence: number
+  outcome: ImportAssistOutcome
+}
 
 export interface TeamImportPersonInput {
   email: string

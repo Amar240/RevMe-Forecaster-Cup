@@ -27,6 +27,8 @@ Use this file to track all deployment decisions and runtime values for each envi
 - App URL:
 - Health endpoint:
 - Environment variables source (SSM/Secrets Manager):
+- When `BEDROCK_IMPORT_ASSIST=true`, grant the instance role `bedrock:InvokeModel`
+  only for the ARN of `BEDROCK_IMPORT_MODEL` (default: `anthropic.claude-3-haiku-20240307-v1:0`).
 
 ## Monitoring
 - CloudWatch dashboard:

@@ -7,8 +7,8 @@ export async function POST(request: Request) {
     const { user, response } = await requireUserOrResponse()
     if (response) return response
     const season = await getSupervisorImportSeason(user!)
-    const { fileName, fileBuffer, batchId, fileHash, overrides } = await readTeamImportFormDataWithSeason(request, season.id)
-    return jsonOk(await previewRosterImport({ actor: user!, mode: 'supervisor', seasonId: season.id, fileName, fileBuffer, batchId, submittedFileHash: fileHash, overrides }))
+    const { fileName, fileBuffer, batchId, fileHash, overrides, columnMapping } = await readTeamImportFormDataWithSeason(request, season.id)
+    return jsonOk(await previewRosterImport({ actor: user!, mode: 'supervisor', seasonId: season.id, fileName, fileBuffer, batchId, submittedFileHash: fileHash, overrides, columnMapping }))
   } catch (error) { return jsonError(error, 'Failed to preview roster import') }
 }
 

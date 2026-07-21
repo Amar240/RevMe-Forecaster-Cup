@@ -3,13 +3,14 @@ import type { Prisma, User } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { ApiError } from '@/server/http'
 import { getCurrentOperationalSeason } from '@/server/season'
-import { parseTeamImportFile } from '@/lib/team-import/parser'
+import { getTeamImportHeaderCoverage, parseTeamImportFile, readTeamImportGrid } from '@/lib/team-import/parser'
 import { validateTeamImport } from '@/lib/team-import/validate'
 import { importValidatedTeams } from '@/lib/team-import/import'
 import { archiveImportFile } from '@/lib/import-archive'
 import type { TeamImportConfirmResult } from '@/lib/team-import/types'
-import type { TeamImportOverride } from '@/lib/team-import/types'
+import type { TeamImportColumnMapping, TeamImportOverride } from '@/lib/team-import/types'
 import { applyTeamImportOverrides } from '@/lib/team-import/overrides'
+import { isImportAssistEnabled } from '@/server/import-assist'
 
 type ImportActor = Pick<User, 'id' | 'email' | 'role' | 'universityId' | 'isActive' | 'hasFullAccess'>
 
@@ -39,6 +40,7 @@ export async function previewRosterImport(args: {
   batchId?: string | null
   submittedFileHash?: string | null
   overrides?: TeamImportOverride[]
+  columnMapping?: TeamImportColumnMapping | null
 }) {
   const hash = fileHash(args.fileBuffer)
   const overrides = args.overrides ?? []
@@ -50,14 +52,15 @@ export async function previewRosterImport(args: {
     if (existingBatch.status !== 'PREVIEWED') throw new ApiError('Only previewed batches can be re-checked', 409, 'CONFLICT')
     if (!args.submittedFileHash || args.submittedFileHash !== hash || existingBatch.fileHash !== hash) throw new ApiError('Workbook has changed since preview; preview it again', 409, 'CONFLICT')
   }
-  const parsedFile = applyTeamImportOverrides(await parseTeamImportFile({ fileName: args.fileName, fileBuffer: args.fileBuffer }), overrides)
+  const parsedFile = applyTeamImportOverrides(await parseTeamImportFile({ fileName: args.fileName, fileBuffer: args.fileBuffer, columnMapping: args.columnMapping }), overrides)
   const validation = await validateTeamImport({
     seasonId: args.seasonId,
     parsedFile,
     mode: args.mode,
     actor: { id: args.actor.id, email: args.actor.email, universityId: args.actor.universityId },
   })
-  const summaryJson = jsonValue({ metadata: validation.metadata, fileWarnings: validation.fileWarnings, preview: { summary: validation.summary, rows: validation.rows }, overrides })
+  const previous = existingBatch?.summaryJson as { assist?: unknown } | undefined
+  const summaryJson = jsonValue({ metadata: validation.metadata, fileWarnings: validation.fileWarnings, preview: { summary: validation.summary, rows: validation.rows }, overrides, columnMapping: args.columnMapping ?? null, ...(previous?.assist ? { assist: previous.assist } : {}) })
   const batch = existingBatch ? await prisma.importBatch.update({ where: { id: existingBatch.id }, data: { summaryJson } }) : await prisma.importBatch.create({
     data: {
       uploaderId: args.actor.id,
@@ -84,6 +87,7 @@ export async function previewRosterImport(args: {
     fileWarnings: validation.fileWarnings,
     summary: validation.summary,
     rows: validation.rows,
+    ...(isImportAssistEnabled() ? { assist: { layoutEligible: !args.columnMapping && getTeamImportHeaderCoverage(readTeamImportGrid({ fileName: args.fileName, fileBuffer: args.fileBuffer })) < 0.8 } } : {}),
   }
 }
 
@@ -96,6 +100,7 @@ export async function confirmRosterImport(args: {
   fileBuffer: Buffer
   submittedFileHash?: string | null
   overrides?: TeamImportOverride[]
+  columnMapping?: TeamImportColumnMapping | null
 }) {
   let batch = args.batchId ? await prisma.importBatch.findUnique({ where: { id: args.batchId } }) : null
   if (!batch) {
@@ -111,13 +116,14 @@ export async function confirmRosterImport(args: {
   if ((args.submittedFileHash && args.submittedFileHash !== hash) || batch.fileHash !== hash) throw new ApiError('Workbook has changed since preview; preview it again', 409, 'CONFLICT')
 
   const overrides = args.overrides ?? []
-  const stored = batch.summaryJson as { result?: TeamImportConfirmResult; overrides?: TeamImportOverride[] }
+  const stored = batch.summaryJson as { result?: TeamImportConfirmResult; overrides?: TeamImportOverride[]; columnMapping?: TeamImportColumnMapping | null }
+  if (args.mode === 'supervisor' && JSON.stringify(stored.columnMapping ?? null) !== JSON.stringify(args.columnMapping ?? null)) throw new ApiError('Confirmed import mapping does not match the latest preview', 409, 'CONFLICT')
   if ((batch.status === 'CONFIRMED' || batch.status === 'COMPLETED') && stored.result) {
     if (JSON.stringify(stored.overrides ?? []) !== JSON.stringify(overrides)) throw new ApiError('Confirmed import overrides do not match', 409, 'CONFLICT')
     return stored.result
   }
 
-  const parsedFile = applyTeamImportOverrides(await parseTeamImportFile({ fileName: args.fileName, fileBuffer: args.fileBuffer }), overrides)
+  const parsedFile = applyTeamImportOverrides(await parseTeamImportFile({ fileName: args.fileName, fileBuffer: args.fileBuffer, columnMapping: args.columnMapping }), overrides)
   const validation = await validateTeamImport({
     seasonId: args.seasonId,
     parsedFile,
@@ -126,7 +132,7 @@ export async function confirmRosterImport(args: {
   })
   if (validation.validRows.length === 0) throw new ApiError('No valid rows are available to import', 422, 'INVALID_INPUT', { summary: validation.summary, rows: validation.rows })
 
-  const result = await importValidatedTeams({ actor: args.actor, batchId: batch.id, fileName: args.fileName, mode: args.mode, validation, overrides })
+  const result = await importValidatedTeams({ actor: args.actor, batchId: batch.id, fileName: args.fileName, mode: args.mode, validation, overrides, columnMapping: args.columnMapping })
   if (args.mode === 'supervisor') {
     const recipients = await prisma.user.findMany({
       where: { isActive: true, OR: [{ role: 'ADMIN' }, { role: 'SUB_ADMIN', hasFullAccess: true }] },

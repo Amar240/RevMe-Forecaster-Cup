@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { parseTeamImportFile } from '@/lib/team-import/parser'
 import { applyTeamImportOverrides, cleanImportCell, parseTeamImportOverrides } from '@/lib/team-import/overrides'
 import { buildRosterTemplate } from '@/lib/team-import/template'
+import { columnMappingSchema } from '@/lib/team-import/assist'
 
 describe('VinUniversity roster workbook parser', () => {
   it('parses metadata, all six teams, hygiene, provenance, and glued-name warnings', async () => {
@@ -66,5 +67,24 @@ describe('VinUniversity roster workbook parser', () => {
 
     const fresh = await parseTeamImportFile({ fileName: 'registration-vinuni-sample.xlsx', fileBuffer })
     expect(() => applyTeamImportOverrides(fresh, [{ ...overrides[0], original: 'changed@example.edu' }])).toThrow(/Original value changed/)
+  })
+
+  it('parses an explicit AI-suggested mapping through the deterministic row DTO', async () => {
+    const columnMapping = columnMappingSchema.parse({ headerRowIndex: 0, columnMap: [
+      { column: 0, field: 'universityName', confidence: 0.9 }, { column: 1, field: 'teamExternalId', confidence: 0.9 },
+      { column: 2, field: 'submitter.firstName', confidence: 0.9 }, { column: 3, field: 'submitter.lastName', confidence: 0.9 },
+      { column: 4, field: 'submitter.email', confidence: 0.9 }, { column: 5, field: 'teamName', confidence: 0.8 },
+    ] })
+    const parsed = await parseTeamImportFile({ fileName: 'unusual.csv', fileBuffer: Buffer.from('School,Code,Given,Surname,Mailbox,Nickname\nAssist University,A-1,Ada,Lovelace,ADA@EXAMPLE.EDU,Analysts'), columnMapping })
+    expect(parsed.rows[0]).toMatchObject({ universityName: 'Assist University', teamExternalId: 'A-1', teamName: 'Analysts', submitter: { firstName: 'Ada', lastName: 'Lovelace', email: 'ada@example.edu' } })
+  })
+
+  it('rejects duplicate columns and incomplete mappings', () => {
+    expect(columnMappingSchema.safeParse({ headerRowIndex: 0, columnMap: [] }).success).toBe(false)
+    expect(columnMappingSchema.safeParse({ headerRowIndex: 0, columnMap: [
+      { column: 0, field: 'universityName', confidence: 1 }, { column: 0, field: 'teamExternalId', confidence: 1 },
+      { column: 2, field: 'submitter.firstName', confidence: 1 }, { column: 3, field: 'submitter.lastName', confidence: 1 },
+      { column: 4, field: 'submitter.email', confidence: 1 }, { column: 5, field: 'teamName', confidence: 1 },
+    ] }).success).toBe(false)
   })
 })

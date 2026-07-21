@@ -3,6 +3,8 @@ import { ApiError } from '@/server/http'
 import type {
   ParsedTeamImportFile,
   ParsedTeamImportRow,
+  TeamImportColumnMapping,
+  TeamImportCanonicalField,
   TeamImportFileType,
   TeamImportPersonInput,
   TeamImportMetadata,
@@ -599,6 +601,53 @@ function parseXlsx(buffer: Buffer) {
   return parseWorksheetRows(worksheetXml, sharedStrings)
 }
 
+export function readTeamImportGrid(args: { fileName: string; fileBuffer: Buffer }) {
+  const fileType = getFileType(args.fileName)
+  return fileType === 'csv' ? parseCsv(args.fileBuffer.toString('utf8')) : parseXlsx(args.fileBuffer)
+}
+
+function parseMappedRows(fileName: string, fileType: TeamImportFileType, rows: string[][], mapping: TeamImportColumnMapping): ParsedTeamImportFile {
+  const byField = new Map(mapping.columnMap.map((entry) => [entry.field, entry.column]))
+  const at = (row: string[], field: TeamImportCanonicalField) => getCellValue(row, byField.get(field) ?? -1)
+  const parsedRows: ParsedTeamImportRow[] = []
+  let ignoredEmptyRows = 0
+  for (let rowIndex = mapping.headerRowIndex + 1; rowIndex < rows.length; rowIndex += 1) {
+    const row = rows[rowIndex] ?? []
+    const emails = ['submitter.email', 'member1.email', 'member2.email', 'member3.email', 'member4.email'].map((field) => at(row, field as TeamImportCanonicalField))
+    if (isBlankRow(row) || isExampleRow(row) || !(at(row, 'universityName') || at(row, 'teamExternalId') || emails.some(Boolean))) { ignoredEmptyRows += 1; continue }
+    const person = (prefix: string, label: string) => createPersonInput(at(row, `${prefix}.email` as TeamImportCanonicalField), at(row, `${prefix}.firstName` as TeamImportCanonicalField), at(row, `${prefix}.lastName` as TeamImportCanonicalField), `Row ${rowIndex + 1} · ${label}`)
+    parsedRows.push({
+      rowNumber: rowIndex + 1,
+      format: 'normalized',
+      universityName: at(row, 'universityName'),
+      teamExternalId: at(row, 'teamExternalId'),
+      teamName: at(row, 'teamName'),
+      supervisorEmail: null,
+      submitter: person('submitter', 'Corresponding Team Member'),
+      members: [1, 2, 3, 4].map((index) => person(`member${index}`, `Additional Member ${index}`)).filter(hasPersonValue),
+    })
+  }
+  const metadata = harvestMetadata(rows)
+  return { fileName, fileType, detectedFormats: ['normalized'], ignoredEmptyRows, metadata, warnings: [], rows: parsedRows }
+}
+
+export function getTeamImportHeaderCoverage(rows: string[][]) {
+  const legacy = findLegacyHeader(rows)
+  if (legacy) {
+    const groups = rows[legacy.groupHeaderRowIndex] ?? []
+    const subs = rows[legacy.subHeaderRowIndex] ?? []
+    const teamCount = ['universityName', 'teamExternalId', 'teamName'].filter((field) => getHeaderIndex(groups, normalizedHeaderAliases[field as keyof typeof normalizedHeaderAliases]) >= 0 || getHeaderIndex(subs, normalizedHeaderAliases[field as keyof typeof normalizedHeaderAliases]) >= 0).length
+    const people = getLegacyPersonColumns(subs)
+    const personCount = [people.submitter, ...people.members].filter(Boolean).reduce((count, item) => count + [item!.firstNameIndex, item!.lastNameIndex, item!.emailIndex].filter((index) => index >= 0).length, 0)
+    return Math.min(1, (teamCount + personCount) / 18)
+  }
+  const headerIndex = findNormalizedHeaderRow(rows)
+  if (headerIndex < 0) return 0
+  const canonical = (rows[headerIndex] ?? []).map(canonicalizeHeader)
+  const known = new Set(Object.values(normalizedHeaderAliases).flatMap((aliases) => Array.from(aliases)).map(canonicalizeHeader))
+  return Math.min(1, canonical.filter((value) => known.has(value) || /^member[1-4](firstname|lastname|email)$/.test(value)).length / 18)
+}
+
 function getFileType(fileName: string): TeamImportFileType {
   const normalized = fileName.trim().toLowerCase()
   if (normalized.endsWith('.csv')) return 'csv'
@@ -609,13 +658,11 @@ function getFileType(fileName: string): TeamImportFileType {
 export async function parseTeamImportFile(args: {
   fileName: string
   fileBuffer: Buffer
+  columnMapping?: TeamImportColumnMapping | null
 }) {
   const fileName = args.fileName.trim() || 'team-import'
   const fileType = getFileType(fileName)
-  const rows =
-    fileType === 'csv'
-      ? parseCsv(args.fileBuffer.toString('utf8'))
-      : parseXlsx(args.fileBuffer)
+  const rows = readTeamImportGrid(args)
 
-  return parseImportedRows(fileName, fileType, rows)
+  return args.columnMapping ? parseMappedRows(fileName, fileType, rows, args.columnMapping) : parseImportedRows(fileName, fileType, rows)
 }
