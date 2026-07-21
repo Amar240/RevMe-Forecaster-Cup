@@ -63,8 +63,8 @@ export default function DemoRequestsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Demo Requests</h1>
-          <p className="text-sm text-gray-500">Track inbound demo inquiries from universities.</p>
+          <h1 className="text-2xl font-bold text-foreground">Demo Requests</h1>
+          <p className="text-sm text-text-muted">Track inbound demo inquiries from universities.</p>
         </div>
         <Button variant="outline" onClick={loadRequests}>
           Refresh
@@ -77,22 +77,22 @@ export default function DemoRequestsPage() {
 
       {loading ? (
         <div className="space-y-4 animate-pulse">
-          <div className="h-10 bg-gray-100 rounded w-full max-w-sm" />
+          <div className="h-10 bg-surface-secondary rounded w-full max-w-sm" />
           <div className="border rounded-lg overflow-hidden">
-            <div className="bg-gray-50 border-b px-4 py-3 flex gap-4">
-              <div className="h-4 bg-gray-200 rounded w-1/5" />
-              <div className="h-4 bg-gray-200 rounded w-1/5" />
-              <div className="h-4 bg-gray-200 rounded w-1/5" />
-              <div className="h-4 bg-gray-200 rounded w-1/5" />
-              <div className="h-4 bg-gray-200 rounded w-1/5" />
+            <div className="bg-surface-secondary border-b px-4 py-3 flex gap-4">
+              <div className="h-4 bg-muted rounded w-1/5" />
+              <div className="h-4 bg-muted rounded w-1/5" />
+              <div className="h-4 bg-muted rounded w-1/5" />
+              <div className="h-4 bg-muted rounded w-1/5" />
+              <div className="h-4 bg-muted rounded w-1/5" />
             </div>
             {Array.from({ length: 5 }).map((_, i) => (
               <div key={i} className="px-4 py-3 border-b last:border-0 flex gap-4">
-                <div className="h-4 bg-gray-100 rounded w-1/4" />
-                <div className="h-4 bg-gray-100 rounded w-1/3" />
-                <div className="h-4 bg-gray-100 rounded w-1/5" />
-                <div className="h-4 bg-gray-100 rounded-full w-20" />
-                <div className="h-4 bg-gray-100 rounded w-16" />
+                <div className="h-4 bg-surface-secondary rounded w-1/4" />
+                <div className="h-4 bg-surface-secondary rounded w-1/3" />
+                <div className="h-4 bg-surface-secondary rounded w-1/5" />
+                <div className="h-4 bg-surface-secondary rounded-full w-20" />
+                <div className="h-4 bg-surface-secondary rounded w-16" />
               </div>
             ))}
           </div>
@@ -115,10 +115,10 @@ export default function DemoRequestsPage() {
               render: (r: DemoRequest) => (
                 <Select value={r.status} onValueChange={(val) => updateStatus(r.id, val as DemoRequest['status'])}>
                   <SelectTrigger className={`h-7 w-[120px] rounded-full px-3 text-xs font-medium border-0 ${
-                    r.status === 'NEW' ? 'bg-blue-100 text-blue-700' :
-                    r.status === 'CONTACTED' ? 'bg-yellow-100 text-yellow-700' :
-                    r.status === 'SCHEDULED' ? 'bg-green-100 text-green-700' :
-                    'bg-gray-100 text-gray-700'
+                    r.status === 'NEW' ? 'bg-info-background text-info' :
+                    r.status === 'CONTACTED' ? 'bg-warning-background text-warning' :
+                    r.status === 'SCHEDULED' ? 'bg-success-background text-success' :
+                    'bg-surface-secondary text-text-secondary'
                   }`}>
                     <SelectValue />
                   </SelectTrigger>
@@ -135,7 +135,7 @@ export default function DemoRequestsPage() {
               header: 'Date',
               sortable: true,
               render: (r: DemoRequest) => (
-                <span className="text-sm text-gray-500">
+                <span className="text-sm text-text-muted">
                   {new Date(r.createdAt).toLocaleDateString()}
                 </span>
               ),

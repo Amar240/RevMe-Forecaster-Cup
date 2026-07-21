@@ -14,6 +14,7 @@ import { KpiRow } from './command-center/KpiRow'
 import { OperationsSection } from './command-center/OperationsSection'
 import { SubmissionProgress } from './command-center/SubmissionProgress'
 import { buildCommandCenterDisplay } from './command-center/command-center-display'
+import { RoundRunbook } from './command-center/RoundRunbook'
 
 export function AdminCommandCenter() {
   const [data, setData] = useState<DashboardData | null>(null)
@@ -162,6 +163,8 @@ export function AdminCommandCenter() {
           </Button>
         </div>
       </div>
+
+      <RoundRunbook rounds={data.runbook} />
 
       <CommandCenterHero
         display={display}

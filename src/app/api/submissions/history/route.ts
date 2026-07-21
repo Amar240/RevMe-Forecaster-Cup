@@ -3,11 +3,12 @@ import { prisma } from '@/server/db'
 import { logger } from '@/server/logger'
 import { requireUserOrResponse, jsonError } from '@/server/http'
 import { getCurrentOperationalSeason } from '@/server/season'
+import { resolveScoreTeam } from '@/server/scoped-score-team'
 
 export const dynamic = 'force-dynamic'
 
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const { user, response } = await requireUserOrResponse()
     if (response) return response
@@ -18,17 +19,14 @@ export async function GET() {
       return NextResponse.json({ submissions: [] })
     }
 
-    const teamMember = await prisma.teamMember.findFirst({
-      where: { userId: authUser.id, team: { seasonId: operationalSeason.id } },
-    })
-
-    if (!teamMember) {
+    const team = await resolveScoreTeam({ userId: authUser.id, role: authUser.role, seasonId: operationalSeason.id, requestedTeamId: new URL(request.url).searchParams.get('teamId') })
+    if (!team) {
       return NextResponse.json({ submissions: [] })
     }
 
     const submissions = await prisma.submission.findMany({
       where: {
-        teamId: teamMember.teamId,
+        teamId: team.id,
         round: { seasonId: operationalSeason.id },
       },
       include: {
@@ -41,7 +39,7 @@ export async function GET() {
     })
 
     const errors = await prisma.predictionError.findMany({
-      where: { teamId: teamMember.teamId, seasonId: operationalSeason.id },
+      where: { teamId: team.id, seasonId: operationalSeason.id },
     })
 
     const errorMap = new Map<string, { absError: number; apeError: number | null }>()
@@ -76,7 +74,7 @@ export async function GET() {
           adr: v.adr || 0,
           weekOffset: v.weekOffset,
           submittedAt: sub.submittedAt.toISOString(),
-          round: { number: sub.round.number },
+          round: { id: sub.round.id, number: sub.round.number },
           market: { name: v.marketName },
           score: occError || adrError ? {
             occupancyAE: occError?.absError || 0,

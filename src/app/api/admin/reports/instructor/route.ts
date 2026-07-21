@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url)
     const supervisorId = searchParams.get('supervisorId')
-    const format = searchParams.get('format') || 'csv'
+    const universityId = searchParams.get('universityId')
 
     const operationalSeason = await getCurrentOperationalSeason({
       include: {
@@ -32,6 +32,7 @@ export async function GET(request: NextRequest) {
     if (supervisorId) {
       whereClause.supervisorId = supervisorId
     }
+    if (universityId) whereClause.universityId = universityId
 
     const teams = await prisma.team.findMany({
       where: whereClause,
@@ -104,8 +105,8 @@ export async function GET(request: NextRequest) {
       ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')),
     ].join('\n')
 
-    const filename = supervisorId
-      ? `instructor-report-${supervisorId}.csv`
+    const filename = supervisorId || universityId
+      ? `instructor-report-${supervisorId || universityId}.csv`
       : `instructor-report-all-${new Date().toISOString().split('T')[0]}.csv`
 
     return new Response(csvContent, {

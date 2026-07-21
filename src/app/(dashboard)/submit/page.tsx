@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, type ComponentType } from 'react'
-import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { toast } from 'sonner'
 import { clientLogger } from '@/lib/client-logger'
 import { getCurrentSubmission, submitForecast } from '@/features/submissions/api'
@@ -13,6 +13,11 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { AlertBanner } from '@/components/ui/alert-banner'
 import { parseSubmissionMetricInput } from '@/lib/submission-values'
+import { contextualWarning, draftKey, draftSavedAt, parseDraft, serializeDraft } from '@/lib/submission-workspace'
+import { Sparkline } from '@/components/ui/sparkline'
+import { Tooltip } from '@/components/ui/tooltip'
+import { DualTimezoneDeadline } from '@/components/dual-timezone-deadline'
+import { GlossaryTerm } from '@/components/ui/glossary-term'
 import {
   AlertTriangle,
   Ban,
@@ -67,17 +72,6 @@ const LOCK_MESSAGES: Record<
   },
 }
 
-function formatDeadline(date: string) {
-  return new Date(date).toLocaleString('en-US', {
-    timeZone: 'America/New_York',
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  })
-}
-
 function getSubmissionValidationError(predictions: Record<string, { occupancy: string; adr: string }>) {
   for (const prediction of Object.values(predictions)) {
     if (parseSubmissionMetricInput('OCCUPANCY', prediction.occupancy) === null) {
@@ -120,8 +114,11 @@ function buildNormalizedSubmissions(
   }
 }
 
+function stringList(value: unknown) {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
+}
+
 export default function SubmitPage() {
-  const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -135,6 +132,11 @@ export default function SubmitPage() {
   const [activeMarket, setActiveMarket] = useState('')
   const [showReview, setShowReview] = useState(false)
   const [timeRemaining, setTimeRemaining] = useState('')
+  const [context, setContext] = useState<{ userId: string; teamId: string; seasonId: string } | null>(null)
+  const [evidenceByMarket, setEvidenceByMarket] = useState<NonNullable<import('@/features/submissions/types').CurrentSubmissionResponse['evidenceByMarket']>>({})
+  const [draftRestored, setDraftRestored] = useState(false)
+  const [draftSavedTime, setDraftSavedTime] = useState<string | null>(null)
+  const [warningsAcknowledged, setWarningsAcknowledged] = useState(false)
 
   useEffect(() => {
     void fetchData()
@@ -185,6 +187,8 @@ export default function SubmitPage() {
       setExistingSubmissions(data.existingSubmissions || [])
       setCanSubmit(data.canSubmit)
       setLockReason(data.lockReason)
+      setContext(data.context || null)
+      setEvidenceByMarket(data.evidenceByMarket || {})
 
       if (data.markets?.length > 0) {
         setActiveMarket(data.markets[0].id)
@@ -204,7 +208,16 @@ export default function SubmitPage() {
           }
         })
       })
-      setPredictions(initialPredictions)
+      if (data.context && data.currentRound && !data.existingSubmissions?.length) {
+        const storedDraft = localStorage.getItem(draftKey({ ...data.context, roundId: data.currentRound.id }))
+        const restored = parseDraft(storedDraft)
+        setPredictions(restored ? { ...initialPredictions, ...restored } : initialPredictions)
+        setDraftRestored(Boolean(restored))
+        setDraftSavedTime(draftSavedAt(storedDraft))
+      } else {
+        setPredictions(initialPredictions)
+        if (data.context && data.currentRound) localStorage.removeItem(draftKey({ ...data.context, roundId: data.currentRound.id }))
+      }
     } catch (err) {
       clientLogger.error('Failed to fetch data:', err)
       toast.error('Failed to load submission data')
@@ -212,6 +225,16 @@ export default function SubmitPage() {
       setLoading(false)
     }
   }
+
+  useEffect(() => {
+    if (!context || !currentRound || existingSubmissions.length > 0 || loading) return
+    const timer = window.setTimeout(() => {
+      const serialized = serializeDraft(predictions)
+      localStorage.setItem(draftKey({ ...context, roundId: currentRound.id }), serialized)
+      setDraftSavedTime(draftSavedAt(serialized))
+    }, 400)
+    return () => window.clearTimeout(timer)
+  }, [context, currentRound, existingSubmissions.length, loading, predictions])
 
   const handleSubmit = async () => {
     setError('')
@@ -228,8 +251,9 @@ export default function SubmitPage() {
     try {
       await submitForecast({ roundId: currentRound?.id || null, submissions: result.submissions })
 
+      if (context && currentRound) localStorage.removeItem(draftKey({ ...context, roundId: currentRound.id }))
+
       setSuccess(true)
-      setTimeout(() => router.push('/dashboard'), 2000)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
       setShowReview(false)
@@ -248,6 +272,15 @@ export default function SubmitPage() {
     const weeks = currentRound?.isFinal ? 1 : 2
     return markets.length * weeks * 2
   }
+
+  const contextualWarnings = Object.entries(predictions).flatMap(([key, prediction]) => {
+    const lastDash = key.lastIndexOf('-')
+    const marketId = key.slice(0, lastDash)
+    return [
+      contextualWarning(Number(prediction.occupancy), evidenceByMarket[marketId]?.lastActual.occupancy ?? null, 'OCCUPANCY'),
+      contextualWarning(Number(prediction.adr), evidenceByMarket[marketId]?.lastActual.adr ?? null, 'ADR'),
+    ].filter((warning): warning is string => Boolean(warning))
+  })
 
   if (loading) {
     return (
@@ -272,7 +305,8 @@ export default function SubmitPage() {
             <p className="text-primary-foreground/80">Your forecast has been locked and cannot be edited.</p>
           </div>
           <CardContent className="p-6 text-center">
-            <p className="text-muted-foreground">Redirecting to dashboard...</p>
+            <p className="text-muted-foreground">A receipt is being sent in the background. While results are prepared, note the assumption you most want to test when actuals arrive.</p>
+            <div className="mt-5 flex flex-col justify-center gap-3 sm:flex-row"><Button asChild><Link href="/dashboard">Return to dashboard</Link></Button><Button asChild variant="outline"><Link href="/market-info">Review market context</Link></Button></div>
           </CardContent>
         </Card>
       </div>
@@ -322,7 +356,7 @@ export default function SubmitPage() {
       <div className="mx-auto max-w-2xl space-y-6">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight text-foreground">Round {currentRound.number} Submission</h1>
-          <p className="text-text-secondary">Deadline: {formatDeadline(currentRound.closesAt)} ET</p>
+          <p className="text-text-secondary">Deadline: <DualTimezoneDeadline date={currentRound.closesAt} /></p>
         </div>
 
         <Card className="border-warning/20 bg-warning-background">
@@ -334,6 +368,8 @@ export default function SubmitPage() {
             <p className="text-text-secondary">{lockInfo.description}</p>
           </CardContent>
         </Card>
+
+        {contextualWarnings.length > 0 && <label className="flex items-start gap-3 rounded-xl border border-warning/30 bg-warning-background p-4"><input type="checkbox" checked={warningsAcknowledged} onChange={(event) => setWarningsAcknowledged(event.target.checked)} className="mt-1 h-4 w-4" /><span><strong>These values are intentional.</strong><span className="mt-1 block text-sm text-text-secondary">I reviewed {contextualWarnings.length} contextual warning{contextualWarnings.length === 1 ? '' : 's'}. These warnings are guidance and do not replace validation.</span></span></label>}
 
         <Card>
           <CardHeader>
@@ -457,7 +493,7 @@ export default function SubmitPage() {
           <Button variant="outline" onClick={() => setShowReview(false)} className="flex-1">
             Go Back & Edit
           </Button>
-          <Button onClick={handleSubmit} disabled={submitting} className="flex-1">
+          <Button onClick={handleSubmit} disabled={submitting || (contextualWarnings.length > 0 && !warningsAcknowledged)} className="flex-1">
             {submitting ? (
               'Submitting...'
             ) : (
@@ -474,10 +510,10 @@ export default function SubmitPage() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight text-foreground">Round {currentRound.number} Submission</h1>
-          <p className="text-text-secondary">Deadline: {formatDeadline(currentRound.closesAt)} ET</p>
+          <p className="text-text-secondary">Deadline: <DualTimezoneDeadline date={currentRound.closesAt} /></p>
         </div>
         <div className="flex items-center space-x-2">
           <Clock className="h-4 w-4 text-warning" />
@@ -503,6 +539,10 @@ export default function SubmitPage() {
 
       {error && <AlertBanner variant="error">{error}</AlertBanner>}
 
+      {draftRestored && !hasExisting && <AlertBanner variant="info">Your browser-saved draft was restored.</AlertBanner>}
+
+      {draftSavedTime && !hasExisting && <p role="status" className="text-right text-xs text-text-muted">Draft saved in this browser at {new Date(draftSavedTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</p>}
+
       {!hasExisting && (
         <Card>
           <CardContent className="py-4">
@@ -525,7 +565,7 @@ export default function SubmitPage() {
         </Card>
       )}
 
-      <div className="flex space-x-2 border-b border-border">
+      <div className="flex space-x-2 overflow-x-auto border-b border-border">
         {markets.map((market) => (
           <button
             key={market.id}
@@ -547,13 +587,14 @@ export default function SubmitPage() {
       {markets
         .filter((market) => market.id === activeMarket)
         .map((market) => (
-          <Card key={market.id}>
+          <div key={market.id} className="grid gap-6 lg:grid-cols-[1.15fr_.85fr]">
+          <Card>
             <CardHeader>
               <CardTitle className="flex items-center space-x-2">
                 <MapPin className="h-5 w-5 text-primary" />
                 <span>{market.name}</span>
               </CardTitle>
-              <CardDescription>Enter your predictions for occupancy and ADR ($)</CardDescription>
+              <CardDescription>Enter your predictions for <GlossaryTerm term="Occupancy" /> and <GlossaryTerm term="ADR" /> ($)</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="grid gap-6 md:grid-cols-2">
@@ -586,6 +627,7 @@ export default function SubmitPage() {
                             }
                             disabled={hasExisting}
                           />
+                          {!hasExisting && predictions[key]?.occupancy && contextualWarning(Number(predictions[key].occupancy), evidenceByMarket[market.id]?.lastActual.occupancy ?? null, 'OCCUPANCY') && <p className="rounded-md bg-warning-background px-2 py-1 text-xs text-warning">⚠ {contextualWarning(Number(predictions[key].occupancy), evidenceByMarket[market.id]?.lastActual.occupancy ?? null, 'OCCUPANCY')}</p>}
                         </div>
                         <div className="space-y-2">
                           <Label htmlFor={`${key}-adr`} className="flex items-center space-x-2">
@@ -611,6 +653,7 @@ export default function SubmitPage() {
                               className="pl-7"
                             />
                           </div>
+                          {!hasExisting && predictions[key]?.adr && contextualWarning(Number(predictions[key].adr), evidenceByMarket[market.id]?.lastActual.adr ?? null, 'ADR') && <p className="rounded-md bg-warning-background px-2 py-1 text-xs text-warning">⚠ {contextualWarning(Number(predictions[key].adr), evidenceByMarket[market.id]?.lastActual.adr ?? null, 'ADR')}</p>}
                         </div>
                       </div>
                     </div>
@@ -619,14 +662,25 @@ export default function SubmitPage() {
               </div>
             </CardContent>
           </Card>
+          <Card className="h-fit lg:sticky lg:top-6"><CardHeader><CardTitle>Evidence panel</CardTitle><CardDescription>Published information for {market.name}</CardDescription></CardHeader><CardContent><details open className="group"><summary className="mb-4 cursor-pointer text-sm font-semibold text-primary lg:hidden">Show or hide evidence</summary><div className="space-y-4">{evidenceByMarket[market.id] ? <>
+            <div className="rounded-lg bg-surface-secondary p-3"><p className="text-xs font-semibold uppercase text-text-muted">Recent actuals</p><div className="mt-2 grid grid-cols-2 gap-2 tabular-nums"><div><p className="text-xs text-text-muted">Occupancy average</p><p className="font-semibold">{evidenceByMarket[market.id].trailingAverage.occupancy?.toFixed(1) ?? '—'}%</p></div><div><p className="text-xs text-text-muted">ADR average</p><p className="font-semibold">${evidenceByMarket[market.id].trailingAverage.adr?.toFixed(0) ?? '—'}</p></div></div></div>
+            <div className="grid grid-cols-2 gap-3"><div className="text-primary"><p className="mb-1 text-xs text-text-muted">Occupancy trend</p><Sparkline label="Recent occupancy actuals" values={evidenceByMarket[market.id].actuals.filter((item) => item.metric === 'OCCUPANCY').slice().reverse().map((item) => item.value)} /></div><div className="text-success"><p className="mb-1 text-xs text-text-muted">ADR trend</p><Sparkline label="Recent ADR actuals" values={evidenceByMarket[market.id].actuals.filter((item) => item.metric === 'ADR').slice().reverse().map((item) => item.value)} /></div></div>
+            {evidenceByMarket[market.id].latestError && <div className="rounded-lg border border-border p-3"><p className="text-xs text-text-muted">Your last published result here</p><p className="text-sm font-medium">{evidenceByMarket[market.id].latestError?.direction.toLowerCase()}-forecast {evidenceByMarket[market.id].latestError?.metric === 'ADR' ? 'ADR' : 'occupancy'} in Round {evidenceByMarket[market.id].latestError?.roundNumber}</p></div>}
+            {evidenceByMarket[market.id].roundUpdate && <div className="rounded-lg border-l-4 border-accent bg-accent-soft p-3"><p className="font-semibold">{evidenceByMarket[market.id].roundUpdate?.headline}</p><p className="text-sm text-text-secondary">{evidenceByMarket[market.id].roundUpdate?.whatChanged}</p></div>}
+            {evidenceByMarket[market.id].marketInfo?.summary && <div><p className="text-xs font-semibold uppercase text-text-muted">Market brief</p><p className="text-sm text-text-secondary">{evidenceByMarket[market.id].marketInfo?.summary}</p><a href={`/market-info?marketId=${market.id}`} className="mt-1 inline-block text-sm text-primary">Full market brief →</a></div>}
+            {stringList(evidenceByMarket[market.id].marketInfo?.quickInsights).length > 0 && <div><p className="text-xs font-semibold uppercase text-text-muted">Quick insights</p><ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-text-secondary">{stringList(evidenceByMarket[market.id].marketInfo?.quickInsights).map((insight) => <li key={insight}>{insight}</li>)}</ul></div>}
+            {(evidenceByMarket[market.id].marketInfo?.resourceLinks.length ?? 0) > 0 && <div><p className="text-xs font-semibold uppercase text-text-muted">Resources</p><div className="mt-2 flex flex-wrap gap-2">{evidenceByMarket[market.id].marketInfo?.resourceLinks.map((resource) => <a key={resource.id} href={resource.url} target="_blank" rel="noreferrer" className="rounded-full border border-border px-3 py-1 text-xs font-medium text-primary">{resource.label}</a>)}</div></div>}
+          </> : <p className="text-sm text-text-secondary">Evidence will appear after published results are available.</p>}</div></details></CardContent></Card>
+          </div>
         ))}
 
       {!hasExisting && (
-        <div className="flex justify-end">
-          <Button size="lg" onClick={() => setShowReview(true)} disabled={!isFormComplete()} className="min-w-[200px]">
+        <div className="sticky bottom-0 z-10 flex items-center justify-between gap-4 border-t border-border bg-background/95 py-4 backdrop-blur">
+          <p className="text-sm text-text-secondary">{getFilledCount()} of {getTotalRequired()} values entered</p>
+          <Tooltip label={isFormComplete() ? 'All required values are ready for review.' : `${Math.max(0, getTotalRequired() - getFilledCount())} required values are missing or invalid.`}><Button size="lg" onClick={() => setShowReview(true)} disabled={!isFormComplete()} className="min-w-[200px]">
             Review Submission
             <ChevronRight className="ml-2 h-4 w-4" />
-          </Button>
+          </Button></Tooltip>
         </div>
       )}
     </div>

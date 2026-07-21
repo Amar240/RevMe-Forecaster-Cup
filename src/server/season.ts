@@ -3,9 +3,34 @@ import { canPerformAdminAction } from '@/server/permissions'
 import { ApiError } from '@/server/http'
 import type { Prisma, User } from '@prisma/client'
 import type { CreateSeasonInput } from '@/features/season/schema'
+import { deriveHomepageHeroStatusLabel, HOMEPAGE_DEFAULT_HERO_STATUS_LABEL } from '@/lib/homepage-season-status'
+import { fromZonedTime } from 'date-fns-tz'
 
 const TOTAL_ROUNDS = 7
 const DAYS_PER_ROUND = 7
+const COMPETITION_TIME_ZONE = 'America/New_York'
+
+function addCalendarDays(date: string, days: number) {
+  const [year, month, day] = date.split('-').map(Number)
+  const shifted = new Date(Date.UTC(year, month - 1, day + days))
+  return shifted.toISOString().slice(0, 10)
+}
+
+export function getSeasonDateBoundaries(startDateInput: string) {
+  const startDate = fromZonedTime(`${startDateInput} 00:00:00.000`, COMPETITION_TIME_ZONE)
+  const endDateInput = addCalendarDays(startDateInput, TOTAL_ROUNDS * DAYS_PER_ROUND - 1)
+  const endDate = fromZonedTime(`${endDateInput} 23:59:59.999`, COMPETITION_TIME_ZONE)
+  const rounds = Array.from({ length: TOTAL_ROUNDS }, (_, index) => {
+    const opensOn = addCalendarDays(startDateInput, index * DAYS_PER_ROUND)
+    const closesOn = addCalendarDays(startDateInput, (index + 1) * DAYS_PER_ROUND - 1)
+    return {
+      number: index + 1,
+      opensAt: fromZonedTime(`${opensOn} 00:00:00.000`, COMPETITION_TIME_ZONE),
+      closesAt: fromZonedTime(`${closesOn} 23:59:59.999`, COMPETITION_TIME_ZONE),
+    }
+  })
+  return { startDate, endDate, rounds }
+}
 
 type CurrentOperationalSeasonArgs = Omit<Prisma.SeasonFindFirstArgs, 'where' | 'orderBy'>
 
@@ -31,6 +56,71 @@ export async function getCurrentOperationalSeason<T extends CurrentOperationalSe
   })
 
   return pausedSeason as Prisma.SeasonGetPayload<T> | null
+}
+
+export async function getHomepageHeroStatusLabel() {
+  try {
+    const operationalSeason = await getCurrentOperationalSeason({
+      select: {
+        status: true,
+        rounds: {
+          select: {
+            number: true,
+            status: true,
+            opensAt: true,
+            closesAt: true,
+          },
+          orderBy: { number: 'asc' },
+        },
+      },
+    })
+
+    if (operationalSeason) {
+      return deriveHomepageHeroStatusLabel(operationalSeason)
+    }
+
+    const upcomingSeason = await prisma.season.findFirst({
+      where: { status: 'DRAFT' },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        status: true,
+        rounds: {
+          select: {
+            number: true,
+            status: true,
+            opensAt: true,
+            closesAt: true,
+          },
+          orderBy: { number: 'asc' },
+        },
+      },
+    })
+
+    if (upcomingSeason) {
+      return deriveHomepageHeroStatusLabel(upcomingSeason)
+    }
+
+    const completedSeason = await prisma.season.findFirst({
+      where: { status: 'COMPLETED' },
+      orderBy: { endDate: 'desc' },
+      select: {
+        status: true,
+        rounds: {
+          select: {
+            number: true,
+            status: true,
+            opensAt: true,
+            closesAt: true,
+          },
+          orderBy: { number: 'asc' },
+        },
+      },
+    })
+
+    return deriveHomepageHeroStatusLabel(completedSeason)
+  } catch {
+    return HOMEPAGE_DEFAULT_HERO_STATUS_LABEL
+  }
 }
 
 export async function getSeasonOverview(user: User | null) {
@@ -67,12 +157,7 @@ export async function createSeason(user: User | null, data: CreateSeasonInput) {
     throw new ApiError('Forbidden', 403, 'FORBIDDEN')
   }
 
-  const [startYear, startMonth, startDay] = data.startDate.split('-').map(Number)
-  const startDate = new Date(startYear, startMonth - 1, startDay, 0, 0, 0)
-
-  const endDate = new Date(startDate)
-  endDate.setDate(startDate.getDate() + (TOTAL_ROUNDS * DAYS_PER_ROUND) - 1)
-  endDate.setHours(23, 59, 59, 999)
+  const { startDate, endDate, rounds } = getSeasonDateBoundaries(data.startDate)
 
   if (endDate <= startDate) {
     throw new ApiError('End date must be after start date', 400, 'INVALID_INPUT')
@@ -106,22 +191,14 @@ export async function createSeason(user: User | null, data: CreateSeasonInput) {
     })),
   })
 
-  for (let i = 1; i <= TOTAL_ROUNDS; i++) {
-    const roundStartDay = new Date(startDate)
-    roundStartDay.setDate(startDate.getDate() + (i - 1) * DAYS_PER_ROUND)
-    roundStartDay.setHours(0, 0, 0, 0)
-
-    const roundEndDay = new Date(startDate)
-    roundEndDay.setDate(startDate.getDate() + i * DAYS_PER_ROUND - 1)
-    roundEndDay.setHours(23, 59, 59, 999)
-
+  for (const round of rounds) {
     await prisma.round.create({
       data: {
         seasonId: season.id,
-        number: i,
-        opensAt: roundStartDay,
-        closesAt: roundEndDay,
-        isFinal: i === TOTAL_ROUNDS,
+        number: round.number,
+        opensAt: round.opensAt,
+        closesAt: round.closesAt,
+        isFinal: round.number === TOTAL_ROUNDS,
       },
     })
   }

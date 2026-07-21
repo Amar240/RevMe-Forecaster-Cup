@@ -107,6 +107,7 @@ export async function GET() {
       teamMember.isSubmitter
 
     let existingSubmissions: { marketId: string; weekOffset: number; occupancy: number; adr: number }[] = []
+    const evidenceByMarket: Record<string, unknown> = {}
     if (teamMember) {
       const submission = await prisma.submission.findUnique({
         where: {
@@ -144,6 +145,30 @@ export async function GET() {
           }
         })
       }
+
+      const publishedRoundIds = activeSeason.rounds.filter((round) => round.leaderboardVisible && round.number < currentRound!.number).map((round) => round.id)
+      const [actuals, latestErrors, marketInfos, roundUpdates] = await Promise.all([
+        prisma.actual.findMany({ where: { seasonId: activeSeason.id, roundId: { in: publishedRoundIds }, isVoided: false }, include: { round: { select: { number: true } } }, orderBy: [{ round: { number: 'desc' } }], take: 72 }),
+        prisma.predictionError.findMany({ where: { seasonId: activeSeason.id, teamId: teamMember.teamId, roundId: { in: publishedRoundIds } }, include: { round: { select: { number: true } } }, orderBy: { round: { number: 'desc' } } }),
+        prisma.marketInfo.findMany({ where: { seasonId: activeSeason.id }, select: { marketId: true, summary: true, quickInsights: true, resourceLinks: { select: { id: true, label: true, url: true, type: true, note: true }, orderBy: { order: 'asc' }, take: 5 } } }),
+        prisma.marketRoundUpdate.findMany({ where: { seasonId: activeSeason.id, roundNumber: currentRound.number }, select: { marketId: true, headline: true, whatChanged: true } }),
+      ])
+      for (const market of activeMarkets) {
+        const marketActuals = actuals.filter((actual) => actual.marketId === market.id).slice(0, 12).map((actual) => ({ metric: actual.metric, weekOffset: actual.weekOffset, value: actual.value, roundNumber: actual.round.number }))
+        const average = (metric: 'OCCUPANCY' | 'ADR') => { const values = marketActuals.filter((item) => item.metric === metric).slice(0, 6).map((item) => item.value); return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null }
+        const latest = latestErrors.find((error) => error.marketId === market.id)
+        evidenceByMarket[market.id] = {
+          actuals: marketActuals,
+          lastActual: {
+            occupancy: marketActuals.find((item) => item.metric === 'OCCUPANCY')?.value ?? null,
+            adr: marketActuals.find((item) => item.metric === 'ADR')?.value ?? null,
+          },
+          trailingAverage: { occupancy: average('OCCUPANCY'), adr: average('ADR') },
+          latestError: latest ? { metric: latest.metric, direction: latest.predictedValue > latest.actualValue ? 'OVER' : latest.predictedValue < latest.actualValue ? 'UNDER' : 'EXACT', apeError: latest.apeError, roundNumber: latest.round.number } : null,
+          marketInfo: marketInfos.find((item) => item.marketId === market.id) || null,
+          roundUpdate: roundUpdates.find((item) => item.marketId === market.id) || null,
+        }
+      }
     }
 
     return NextResponse.json({
@@ -153,6 +178,8 @@ export async function GET() {
       canSubmit: canSubmit && canSubmitStatus,
       seasonStatus: activeSeason.status,
       lockReason,
+      context: teamMember ? { userId: authUser.id, teamId: teamMember.teamId, seasonId: activeSeason.id } : undefined,
+      evidenceByMarket,
     })
   } catch (error) {
     logger.error('Get current submissions error:', error)

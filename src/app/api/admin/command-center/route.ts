@@ -2,6 +2,7 @@ import { prisma } from '@/lib/db'
 import { requireAdminOrResponse, jsonOk, jsonError } from '@/server/http'
 import { getCurrentOperationalSeason } from '@/server/season'
 import { getAdminTeamScope, getSeasonTeamWhere } from '@/server/team-scope'
+import { getRoundRunbook } from '@/server/round-runbook'
 
 export const dynamic = 'force-dynamic'
 
@@ -40,13 +41,14 @@ export async function GET() {
       return isTimeOpen && isStatusOpen
     })
 
-    const [totalUsers, totalSubmissions, totalWarnings, pendingTeamApprovals] = await Promise.all([
+    const [totalUsers, totalSubmissions, totalWarnings, pendingTeamApprovals, runbook] = await Promise.all([
       prisma.user.count(),
       prisma.submission.count(),
       prisma.warning.count(),
       operationalSeason
         ? prisma.team.count({ where: { seasonId: operationalSeason.id, status: 'PENDING_APPROVAL' } })
         : Promise.resolve(0),
+      operationalSeason ? getRoundRunbook(operationalSeason.id, now) : Promise.resolve([]),
     ])
 
     // Warning breakdown for disqualification risk card
@@ -158,6 +160,7 @@ export async function GET() {
         total: teamScope.summary.activeTeams,
       },
       rounds,
+      runbook,
     })
   } catch (error) {
     return jsonError(error, 'Failed to load command center')

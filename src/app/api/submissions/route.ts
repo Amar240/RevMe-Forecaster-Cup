@@ -154,38 +154,27 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: 'Missing submissions for one or more markets/weeks' }, { status: 400 })
     }
 
-    const submission = await prisma.submission.create({
-      data: {
-        teamId: teamMember.teamId,
-        roundId: round.id,
-        submittedById: authUser.id,
-        locked: true,
-      },
+    const submission = await prisma.$transaction(async (tx) => {
+      const created = await tx.submission.create({
+        data: {
+          teamId: teamMember.teamId,
+          roundId: round.id,
+          submittedById: authUser.id,
+          locked: true,
+        },
+      })
+      const values = data.submissions.flatMap((entry) => [
+        { submissionId: created.id, marketId: entry.marketId, metric: 'OCCUPANCY' as const, weekOffset: entry.weekOffset, value: entry.occupancy },
+        { submissionId: created.id, marketId: entry.marketId, metric: 'ADR' as const, weekOffset: entry.weekOffset, value: entry.adr },
+      ])
+      await tx.submissionValue.createMany({ data: values })
+      return created
     })
-
-    const values = data.submissions.flatMap((entry) => [
-      {
-        submissionId: submission.id,
-        marketId: entry.marketId,
-        metric: 'OCCUPANCY' as const,
-        weekOffset: entry.weekOffset,
-        value: entry.occupancy,
-      },
-      {
-        submissionId: submission.id,
-        marketId: entry.marketId,
-        metric: 'ADR' as const,
-        weekOffset: entry.weekOffset,
-        value: entry.adr,
-      },
-    ])
-
-    await prisma.submissionValue.createMany({ data: values })
 
     const submittedByName = `${authUser.firstName} ${authUser.lastName}`.trim()
     const supervisorEmail = teamMember.team.supervisor?.email
 
-    const [studentSent, supervisorSent] = await Promise.all([
+    void Promise.all([
       sendSubmissionReceiptEmail({
         email: authUser.email,
         teamName: teamMember.team.name,
@@ -204,14 +193,9 @@ export async function POST(request: NextRequest) {
             recipientRole: 'SUPERVISOR',
           })
         : Promise.resolve(false),
-    ])
-
-    if (studentSent || supervisorSent) {
-      await prisma.submission.update({
-        where: { id: submission.id },
-        data: { emailSentAt: new Date() },
-      })
-    }
+    ]).then(async ([studentSent, supervisorSent]) => {
+      if (studentSent || supervisorSent) await prisma.submission.update({ where: { id: submission.id }, data: { emailSentAt: new Date() } })
+    }).catch((error) => logger.error('Submission receipt email error:', error))
 
     return NextResponse.json({ message: 'Submission saved' }, { status: 201 })
   } catch (error) {

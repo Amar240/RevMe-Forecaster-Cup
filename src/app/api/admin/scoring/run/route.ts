@@ -93,6 +93,29 @@ export async function POST(request: NextRequest) {
       return jsonOk({ message: `Scoring failed: ${result.errorMessage}`, ...result }, 500)
     }
 
+    const scoredAt = new Date()
+    const scoredRounds = await prisma.round.findMany({
+      where: {
+        seasonId: targetSeasonId,
+        ...(scope === 'ROUND' && roundId ? { id: roundId } : {}),
+        actuals: { some: { isVoided: false } },
+      },
+      select: { id: true },
+    })
+    if (scoredRounds.length > 0) {
+      await prisma.round.updateMany({
+        where: { id: { in: scoredRounds.map((round) => round.id) } },
+        data: {
+          isLockedActuals: true,
+          lockedAt: scoredAt,
+          lockedById: user!.id,
+          scoresStale: false,
+          lastScoredAt: scoredAt,
+          lastScoredById: user!.id,
+        },
+      })
+    }
+
     await notifyLeaderboardRelease(targetSeasonId, roundId)
     return jsonOk({ message: 'Scoring completed successfully', ...result })
   } catch (error) {

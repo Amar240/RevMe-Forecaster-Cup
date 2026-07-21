@@ -4,6 +4,7 @@ import { loginAs } from './auth'
 import { createUniversity, createUser } from './fixtures'
 import { makeRequest } from './http'
 import { prisma } from './db'
+import { hashSessionToken } from '@/lib/auth'
 
 const emailMocks = vi.hoisted(() => ({
   sendPasswordResetEmail: vi.fn().mockResolvedValue(true),
@@ -177,7 +178,7 @@ describe('Registration and auth flow', () => {
     expect(global.__testCookieOps.some((entry) => entry.type === 'set')).toBe(true)
 
     const session = await prisma.session.findUnique({
-      where: { token: global.__testAuthToken! },
+      where: { token: hashSessionToken(global.__testAuthToken!) },
     })
     expect(session?.userId).toBe(user.id)
   })
@@ -226,7 +227,7 @@ describe('Registration and auth flow', () => {
     const token = await loginAs(user.id)
 
     const beforeCount = await prisma.session.count({
-      where: { token },
+      where: { token: hashSessionToken(token) },
     })
     expect(beforeCount).toBe(1)
 
@@ -236,7 +237,7 @@ describe('Registration and auth flow', () => {
     expect(global.__testCookieOps.some((entry) => entry.type === 'delete' && entry.name === 'revme_session')).toBe(true)
 
     const afterCount = await prisma.session.count({
-      where: { token },
+      where: { token: hashSessionToken(token) },
     })
     expect(afterCount).toBe(0)
   })

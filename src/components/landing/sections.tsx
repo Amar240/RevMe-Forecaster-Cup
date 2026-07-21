@@ -26,8 +26,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import {
   brand,
   competitionPrinciples,
-  countdownClosedText,
-  countdownDeadline,
   faqItems,
   faqSection as faqSectionContent,
   finalCtaSection,
@@ -78,23 +76,6 @@ const trendTone = {
   same: 'text-warning',
   down: 'text-text-muted',
 } as const
-
-function getCountdownText(deadlineIso: string) {
-  const deadline = new Date(deadlineIso).getTime()
-  const diff = deadline - Date.now()
-
-  if (Number.isNaN(deadline) || diff <= 0) {
-    return countdownClosedText
-  }
-
-  const totalHours = Math.floor(diff / (1000 * 60 * 60))
-  const days = Math.floor(totalHours / 24)
-  const hours = totalHours % 24
-  const dayLabel = days === 1 ? 'day' : 'days'
-  const hourLabel = hours === 1 ? 'hour' : 'hours'
-
-  return `${heroBadge.label} — Round 1 Closes in ${days} ${dayLabel}, ${hours} ${hourLabel}`
-}
 
 function BrandLockup() {
   return (
@@ -196,7 +177,7 @@ function SiteHeader({ audience }: { audience: AudienceType }) {
         {mobileMenuOpen ? (
           <motion.div className="fixed inset-0 z-50 lg:hidden" initial="hidden" animate="visible" exit="exit">
             <motion.div
-              className="absolute inset-0 bg-slate-950/45"
+              className="absolute inset-0 bg-foreground/40"
               variants={mobileMenuBackdrop}
               onClick={() => setMobileMenuOpen(false)}
             />
@@ -249,22 +230,14 @@ function SiteHeader({ audience }: { audience: AudienceType }) {
 function HeroSection({
   audience,
   onAudienceChange,
+  heroStatusLabel,
 }: {
   audience: AudienceType
   onAudienceChange: (audience: AudienceType) => void
+  heroStatusLabel: string
 }) {
-  const [countdownLabel, setCountdownLabel] = useState(() => getCountdownText(countdownDeadline))
   const isProfessor = audience === 'professor'
   const audienceCopy = heroCopy[audience]
-
-  useEffect(() => {
-    setCountdownLabel(getCountdownText(countdownDeadline))
-    const intervalId = window.setInterval(() => {
-      setCountdownLabel(getCountdownText(countdownDeadline))
-    }, 60000)
-
-    return () => window.clearInterval(intervalId)
-  }, [])
 
   return (
     <section className="relative overflow-hidden border-b border-border">
@@ -276,7 +249,7 @@ function HeroSection({
           <div className="space-y-5">
             <Badge variant="info" className="mx-auto inline-flex gap-2 px-3 py-1.5">
               <heroBadge.icon className="h-3.5 w-3.5" />
-              {countdownLabel}
+              {heroStatusLabel}
             </Badge>
             <AudienceToggle audience={audience} onAudienceChange={onAudienceChange} />
             <div className="space-y-4">
@@ -975,14 +948,18 @@ function SiteFooter() {
   )
 }
 
-export function LandingPage() {
+export function LandingPage({ heroStatusLabel }: { heroStatusLabel: string }) {
   const [audience, setAudience] = useState<AudienceType>('student')
 
   return (
     <div className="min-h-screen bg-background text-foreground">
       <SiteHeader audience={audience} />
       <main>
-        <HeroSection audience={audience} onAudienceChange={setAudience} />
+        <HeroSection
+          audience={audience}
+          onAudienceChange={setAudience}
+          heroStatusLabel={heroStatusLabel}
+        />
         <SocialProofStrip />
         <HowItWorksSection />
         <ProductPreviewSection />

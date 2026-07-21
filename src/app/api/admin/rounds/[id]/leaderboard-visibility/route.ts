@@ -25,9 +25,19 @@ export async function PATCH(
     const round = await prisma.round.findUnique({ where: { id } })
     if (!round) throw new ApiError('Round not found', 404, 'NOT_FOUND')
 
-    await prisma.round.update({
-      where: { id },
-      data: { leaderboardVisible: visible },
+    await prisma.$transaction(async (tx) => {
+      await tx.round.update({ where: { id }, data: { leaderboardVisible: visible } })
+      if (visible && !round.leaderboardVisible) {
+        const participants = await tx.teamMember.findMany({
+          where: { team: { seasonId: round.seasonId, status: { in: ['ACTIVE', 'APPROVED'] } } },
+          select: { userId: true },
+        })
+        const link = `/debriefs/${round.id}`
+        const existing = await tx.notification.findMany({ where: { type: 'ROUND_DEBRIEF_READY', link, userId: { in: participants.map((item) => item.userId) } }, select: { userId: true } })
+        const notified = new Set(existing.map((item) => item.userId))
+        const users = [...new Set(participants.map((item) => item.userId))].filter((userId) => !notified.has(userId))
+        if (users.length) await tx.notification.createMany({ data: users.map((userId) => ({ userId, type: 'ROUND_DEBRIEF_READY', title: `Round ${round.number} debrief is ready`, message: 'See what moved the market and what your forecast can teach you.', link })) })
+      }
     })
 
     await logAuditAction(

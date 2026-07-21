@@ -199,7 +199,7 @@ describe('Security boundaries', () => {
     })
 
     await loginAs(studentA.id)
-    const res = await submissionHistoryHandler()
+    const res = await submissionHistoryHandler(makeRequest('http://localhost:5000/api/submissions/history'))
     const data = await res.json()
 
     expect(res.status).toBe(200)

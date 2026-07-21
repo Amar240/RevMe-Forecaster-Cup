@@ -30,10 +30,19 @@ export type LockReason =
   | null
 
 export interface CurrentSubmissionResponse {
+  context?: { userId: string; teamId: string; seasonId: string }
   currentRound: RoundInfo | null
   markets: MarketInfo[]
   existingSubmissions: ExistingSubmission[]
   canSubmit: boolean
   seasonStatus: string | null
   lockReason: LockReason
+  evidenceByMarket?: Record<string, {
+    actuals: Array<{ metric: 'OCCUPANCY' | 'ADR'; weekOffset: number; value: number; roundNumber: number }>
+    lastActual: { occupancy: number | null; adr: number | null }
+    trailingAverage: { occupancy: number | null; adr: number | null }
+    latestError: { metric: 'OCCUPANCY' | 'ADR'; direction: 'OVER' | 'UNDER' | 'EXACT'; apeError: number | null; roundNumber: number } | null
+    marketInfo: { summary: string | null; quickInsights: unknown; resourceLinks: Array<{ id: string; label: string; url: string; type: string; note: string | null }> } | null
+    roundUpdate: { headline: string; whatChanged: string } | null
+  }>
 }

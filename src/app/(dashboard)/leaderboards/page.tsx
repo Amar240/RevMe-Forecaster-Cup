@@ -2,7 +2,7 @@
 
 import { clientLogger } from '@/lib/client-logger'
 import { getLeaderboard } from '@/features/leaderboards/api'
-import type { LeaderboardEntry, RoundInfo } from '@/features/leaderboards/types'
+import type { LeaderboardEntry, LeaderboardResponse, RoundInfo } from '@/features/leaderboards/types'
 import { useEffect, useMemo, useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -10,29 +10,45 @@ import { Button } from '@/components/ui/button'
 import { Trophy, Medal, Users, Building2, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { LineChart, Line, ResponsiveContainer } from 'recharts'
+import { GlossaryTerm } from '@/components/ui/glossary-term'
+import { TrendCue } from '@/components/ui/trend-cue'
+import { formatMape } from '@/lib/learning-analytics'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Tooltip } from '@/components/ui/tooltip'
+import { Info } from 'lucide-react'
+import { MotionReveal } from '@/components/ui/motion-reveal'
+import { OneTimeCelebration } from '@/components/ui/one-time-celebration'
 
 function MiniSparkline({ scores, roundIds }: { scores: Record<string, number>; roundIds: string[] }) {
   const data = roundIds
     .filter((id) => scores[id] !== undefined)
-    .map((id) => ({ v: scores[id] * 100 }))
+    .map((id) => ({ v: scores[id] * 100, r: roundIds.indexOf(id) + 1 }))
   if (data.length < 2) return null
   const isImproving = data[data.length - 1].v <= data[0].v
   return (
-    <div className="inline-block align-middle ml-2" style={{ width: 48, height: 20 }}>
+    <Tooltip label={`Published progression: ${data.map((item) => `R${item.r} ${item.v.toFixed(2)}%`).join(' → ')}. ${isImproving ? 'Improving' : 'Higher MAPE'} overall.`}><span className="inline-block align-middle ml-2" style={{ width: 48, height: 20 }}>
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
           <Line
             type="monotone"
             dataKey="v"
-            stroke={isImproving ? '#16a34a' : '#dc2626'}
+            stroke={isImproving ? 'hsl(var(--success))' : 'hsl(var(--error))'}
             strokeWidth={1.5}
             dot={false}
             isAnimationActive={false}
           />
         </LineChart>
       </ResponsiveContainer>
-    </div>
+    </span></Tooltip>
   )
+}
+
+function PodiumCard({ rank, name, subtitle, score, visible }: { rank: 1 | 2 | 3; name: string; subtitle?: string; score: number | null; visible: boolean }) {
+  const first = rank === 1
+  const Icon = first ? Trophy : Medal
+  const iconClass = first ? 'text-accent' : rank === 2 ? 'text-medal-silver' : 'text-medal-bronze'
+  const background = first ? 'from-accent-soft' : rank === 2 ? 'from-surface-secondary' : 'from-warning-background'
+  return <MotionReveal delay={rank * .06} className={`${first ? 'order-1 md:order-2' : rank === 2 ? 'order-2 md:order-1' : 'order-3'} col-span-3 md:col-span-1`}><Card className={`h-full border-border bg-gradient-to-b ${background} via-card to-card`}><CardContent className={`${first ? 'pb-6 pt-8' : 'pb-4 pt-6'} text-center`}><div className={`mx-auto mb-3 flex ${first ? 'h-20 w-20' : 'h-16 w-16'} items-center justify-center rounded-full bg-surface-secondary shadow-sm`}><Icon className={`${first ? 'h-10 w-10' : 'h-8 w-8'} ${iconClass}`} /></div><p className={`mb-1 font-display ${first ? 'text-2xl' : 'text-lg'} font-semibold`}>{name}</p>{subtitle && <p className="mb-2 text-sm text-text-secondary">{subtitle}</p>}<Badge variant={rank === 1 ? 'medal' : rank === 2 ? 'secondary' : 'warning'}>{rank}{rank === 1 ? 'st' : rank === 2 ? 'nd' : 'rd'} Place</Badge>{visible && <p className={`mt-3 font-mono ${first ? 'text-2xl text-accent' : 'text-xl text-text-secondary'} font-semibold tabular-nums`}>{formatMape(score)}</p>}</CardContent></Card></MotionReveal>
 }
 
 export default function LeaderboardsPage() {
@@ -46,6 +62,8 @@ export default function LeaderboardsPage() {
   const [viewMode, setViewMode] = useState<'team' | 'university'>('team')
   const [showProgression, setShowProgression] = useState(false)
   const [myTeamId, setMyTeamId] = useState<string | null>(null)
+  const [positions, setPositions] = useState<Record<'final' | 'occupancy' | 'adr', LeaderboardResponse['myPosition']>>({ final: null, occupancy: null, adr: null })
+  const [nextUnpublishedRound, setNextUnpublishedRound] = useState<LeaderboardResponse['nextUnpublishedRound']>(null)
 
   useEffect(() => {
     fetchLeaderboards()
@@ -63,9 +81,11 @@ export default function LeaderboardsPage() {
       setSeasonName(occData.seasonName || '')
       setMyTeamId(occData.myTeamId || null)
       setRounds(occData.rounds || [])
+      setNextUnpublishedRound(occData.nextUnpublishedRound || null)
 
       setAdrLeaderboard(adrData.leaderboard || [])
       setFinalScoreLeaderboard(finalData.leaderboard || [])
+      setPositions({ final: finalData.myPosition, occupancy: occData.myPosition, adr: adrData.myPosition })
     } catch (error) {
       clientLogger.error('Failed to fetch leaderboard:', error)
       toast.error('Failed to load leaderboard')
@@ -145,18 +165,18 @@ export default function LeaderboardsPage() {
   const hasOperationalSeason = Boolean(seasonName)
 
   return (
-    <div className="space-y-8">
-      <div className="flex items-center justify-between">
+    <MotionReveal className="space-y-8">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-semibold text-foreground">Leaderboards</h1>
+          <h1 className="font-display text-3xl font-semibold text-foreground">Leaderboards</h1>
           <p className="text-text-secondary">
             {hasOperationalSeason ? `${seasonName} rankings` : 'No operational season available'}
           </p>
         </div>
-        <div className="flex items-center space-x-2 rounded-lg border border-border bg-surface-secondary p-1">
+        <div className="flex w-full items-center space-x-2 rounded-lg border border-border bg-surface-secondary p-1 sm:w-auto">
           <button
             onClick={() => setViewMode('team')}
-            className={`flex items-center space-x-2 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+            className={`flex min-h-11 flex-1 items-center justify-center space-x-2 rounded-md px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
               viewMode === 'team' ? 'bg-card text-foreground shadow-sm' : 'text-text-secondary hover:text-foreground'
             }`}
           >
@@ -165,7 +185,7 @@ export default function LeaderboardsPage() {
           </button>
           <button
             onClick={() => setViewMode('university')}
-            className={`flex items-center space-x-2 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+            className={`flex min-h-11 flex-1 items-center justify-center space-x-2 rounded-md px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
               viewMode === 'university' ? 'bg-card text-foreground shadow-sm' : 'text-text-secondary hover:text-foreground'
             }`}
           >
@@ -186,100 +206,39 @@ export default function LeaderboardsPage() {
             </h3>
             <p className="text-text-secondary">
               {hasOperationalSeason
-                ? 'Leaderboards will appear after scores are calculated.'
+                ? nextUnpublishedRound
+                  ? `Round ${nextUnpublishedRound.number} is ${nextUnpublishedRound.status.toLowerCase()}. Rankings publish after the round closes and scores pass administrator review.`
+                  : 'Leaderboards will appear after scores are calculated and published.'
                 : 'Leaderboards will appear after a season is activated or resumed and scores are published.'}
             </p>
           </CardContent>
         </Card>
       ) : (
         <>
+          <OneTimeCelebration eventKey={positions[activeTab]?.rankMovement && positions[activeTab]!.rankMovement! > 0 ? `${seasonName}:${activeTab}:rank-up:${positions[activeTab]!.rank}` : null}>Your team moved up {positions[activeTab]?.rankMovement} rank{positions[activeTab]?.rankMovement === 1 ? '' : 's'}.</OneTimeCelebration>
           {top3.length >= 3 && (
             <div className="grid grid-cols-3 gap-4">
-              <Card className="order-1 col-span-3 border-border bg-gradient-to-b from-accent-soft via-card to-card md:order-2 md:col-span-1">
-                <CardContent className="pt-8 pb-6 text-center">
-                  <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-accent-soft shadow-sm">
-                    <Trophy className="h-10 w-10 text-accent" />
-                  </div>
-                  <p className="mb-1 text-2xl font-semibold text-foreground">
-                    {viewMode === 'team' ? (top3[0] as LeaderboardEntry).teamName : (top3[0] as { university: string }).university}
-                  </p>
-                  {viewMode === 'team' && (
-                    <p className="mb-3 text-sm text-text-secondary">{(top3[0] as LeaderboardEntry).university}</p>
-                  )}
-                  <Badge variant="medal" className="px-3 py-1 text-sm">1st Place</Badge>
-                  {canSeeLeaderboardValues && (
-                    <p className="mt-3 text-2xl font-semibold text-accent">
-                      {viewMode === 'team'
-                        ? ((top3[0] as LeaderboardEntry).mape !== null ? `${((top3[0] as LeaderboardEntry).mape! * 100).toFixed(2)}%` : '--')
-                        : ((top3[0] as { avgMAPE: number | null }).avgMAPE !== null ? `${((top3[0] as { avgMAPE: number | null }).avgMAPE! * 100).toFixed(2)}%` : '--')}
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
-
-              <Card className="order-2 col-span-3 border-border bg-gradient-to-b from-surface-secondary via-card to-card md:order-1 md:col-span-1">
-                <CardContent className="pt-6 pb-4 text-center">
-                  <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-surface-secondary shadow-sm">
-                    <Medal className="h-8 w-8 text-medal-silver" />
-                  </div>
-                  <p className="mb-1 text-lg font-semibold text-foreground">
-                    {viewMode === 'team' ? (top3[1] as LeaderboardEntry).teamName : (top3[1] as { university: string }).university}
-                  </p>
-                  {viewMode === 'team' && (
-                    <p className="mb-2 text-sm text-text-secondary">{(top3[1] as LeaderboardEntry).university}</p>
-                  )}
-                  <Badge variant="secondary" className="px-3 py-1 text-sm">2nd Place</Badge>
-                  {canSeeLeaderboardValues && (
-                    <p className="mt-2 text-xl font-semibold text-text-secondary">
-                      {viewMode === 'team'
-                        ? ((top3[1] as LeaderboardEntry).mape !== null ? `${((top3[1] as LeaderboardEntry).mape! * 100).toFixed(2)}%` : '--')
-                        : ((top3[1] as { avgMAPE: number | null }).avgMAPE !== null ? `${((top3[1] as { avgMAPE: number | null }).avgMAPE! * 100).toFixed(2)}%` : '--')}
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
-
-              <Card className="order-3 col-span-3 border-border bg-gradient-to-b from-warning-background via-card to-card md:col-span-1">
-                <CardContent className="pt-6 pb-4 text-center">
-                  <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-warning-background shadow-sm">
-                    <Medal className="h-8 w-8 text-medal-bronze" />
-                  </div>
-                  <p className="mb-1 text-lg font-semibold text-foreground">
-                    {viewMode === 'team' ? (top3[2] as LeaderboardEntry).teamName : (top3[2] as { university: string }).university}
-                  </p>
-                  {viewMode === 'team' && (
-                    <p className="mb-2 text-sm text-text-secondary">{(top3[2] as LeaderboardEntry).university}</p>
-                  )}
-                  <Badge variant="warning" className="px-3 py-1 text-sm">3rd Place</Badge>
-                  {canSeeLeaderboardValues && (
-                    <p className="mt-2 text-xl font-semibold text-warning">
-                      {viewMode === 'team'
-                        ? ((top3[2] as LeaderboardEntry).mape !== null ? `${((top3[2] as LeaderboardEntry).mape! * 100).toFixed(2)}%` : '--')
-                        : ((top3[2] as { avgMAPE: number | null }).avgMAPE !== null ? `${((top3[2] as { avgMAPE: number | null }).avgMAPE! * 100).toFixed(2)}%` : '--')}
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
+              {top3.map((entry, index) => <PodiumCard key={viewMode === 'team' ? (entry as LeaderboardEntry).teamId : (entry as { university: string }).university} rank={(index + 1) as 1 | 2 | 3} name={viewMode === 'team' ? (entry as LeaderboardEntry).teamName : (entry as { university: string }).university} subtitle={viewMode === 'team' ? (entry as LeaderboardEntry).university : undefined} score={viewMode === 'team' ? (entry as LeaderboardEntry).mape : (entry as { avgMAPE: number | null }).avgMAPE} visible={canSeeLeaderboardValues} />)}
             </div>
           )}
 
-          <div className="flex space-x-2 border-b border-border">
+          <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as typeof activeTab)}><TabsList>
             {[
               { key: 'final', label: 'Final Score', activeClass: 'border-accent text-accent' },
               { key: 'occupancy', label: 'Occupancy', activeClass: 'border-primary text-primary' },
               { key: 'adr', label: 'ADR', activeClass: 'border-success text-success' },
             ].map((tab) => (
-              <button
+              <TabsTrigger
                 key={tab.key}
-                onClick={() => setActiveTab(tab.key as 'final' | 'occupancy' | 'adr')}
-                className={`border-b-2 px-6 py-3 text-sm font-medium transition-colors ${
-                  activeTab === tab.key ? tab.activeClass : 'border-transparent text-text-muted hover:text-foreground'
-                }`}
+                value={tab.key}
               >
                 {tab.label}
-              </button>
+              </TabsTrigger>
             ))}
-          </div>
+            <Tooltip label="Rankings use published MAPE. Lower is better; combined score equally weights occupancy and ADR."><span className="ml-auto flex min-h-11 items-center gap-1 px-3 text-sm text-text-secondary"><Info className="h-4 w-4" />How scoring works</span></Tooltip>
+          </TabsList></Tabs>
+
+          {viewMode === 'team' && positions[activeTab] && <Card className="border-primary/20 bg-primary-soft"><CardContent className="flex flex-wrap items-center justify-between gap-4 py-4"><div><p className="text-xs font-semibold uppercase tracking-wider text-primary">Your position</p><p className="font-display text-2xl font-semibold tabular-nums">#{positions[activeTab]!.rank} · {positions[activeTab]!.percentile}th percentile</p></div><div className="flex flex-wrap items-center gap-5"><TrendCue delta={positions[activeTab]!.rankMovement} />{positions[activeTab]!.gapToNext != null && <span className="text-sm tabular-nums">{formatMape(positions[activeTab]!.gapToNext)} behind the next rank</span>}<span className="text-sm"><GlossaryTerm term="MAPE" /> · lower is better</span></div></CardContent></Card>}
 
           {canSeeLeaderboardValues && scoredRounds.length > 0 && viewMode === 'team' && activeTab !== 'final' && (
             <div className="flex justify-end">
@@ -293,9 +252,11 @@ export default function LeaderboardsPage() {
             </div>
           )}
 
-          <Card>
+          <div className="space-y-3 md:hidden">{viewMode === 'team' ? currentLeaderboard.map((entry) => <Card key={entry.teamId} className={entry.teamId === myTeamId ? 'border-primary/30 bg-primary-soft' : ''}><CardContent className="py-4"><div className="flex items-start justify-between gap-3"><div><p className="font-display text-2xl font-semibold tabular-nums">#{entry.rank}</p><p className="font-semibold">{entry.teamName}{entry.teamId === myTeamId && <Badge variant="info" className="ml-2">You</Badge>}</p><p className="text-sm text-text-secondary">{entry.university}</p></div><div className="text-right"><p className="font-mono text-lg font-bold tabular-nums">{formatMape(entry.mape)}</p><p className="text-xs text-text-muted">MAPE · lower is better</p></div></div></CardContent></Card>) : universityLeaderboard.map((entry) => <Card key={entry.university}><CardContent className="flex items-center justify-between py-4"><div><p className="font-display text-2xl font-semibold">#{entry.rank}</p><p className="font-semibold">{entry.university}</p><p className="text-sm text-text-secondary">{entry.teamCount} teams</p></div><p className="font-mono font-bold tabular-nums">{formatMape(entry.avgMAPE)}</p></CardContent></Card>)}</div>
+          <Card className="hidden md:block">
             <CardContent className="p-0 overflow-x-auto">
               <table className="w-full">
+                <caption className="sr-only">{activeTab === 'final' ? 'Combined' : activeTab === 'occupancy' ? 'Occupancy' : 'ADR'} {viewMode} leaderboard; lower MAPE is better</caption>
                 <thead className="bg-muted">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">Rank</th>
@@ -387,6 +348,6 @@ export default function LeaderboardsPage() {
           </Card>
         </>
       )}
-    </div>
+    </MotionReveal>
   )
 }

@@ -277,15 +277,15 @@ useEffect(() => {
     return (
       <div className="p-8 animate-pulse">
         <div className="mb-6 space-y-2">
-          <div className="h-7 bg-gray-200 rounded w-48" />
-          <div className="h-4 bg-gray-100 rounded w-72" />
+          <div className="h-7 bg-muted rounded w-48" />
+          <div className="h-4 bg-surface-secondary rounded w-72" />
         </div>
         <div className="grid grid-cols-12 gap-6">
           <div className="col-span-3">
             <div className="border rounded-lg p-4 space-y-3">
-              <div className="h-4 bg-gray-200 rounded w-20" />
+              <div className="h-4 bg-muted rounded w-20" />
               {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="h-8 bg-gray-100 rounded w-full" />
+                <div key={i} className="h-8 bg-surface-secondary rounded w-full" />
               ))}
             </div>
           </div>
@@ -293,30 +293,30 @@ useEffect(() => {
             <div className="border rounded-lg p-6 space-y-4">
               <div className="flex items-center justify-between">
                 <div className="space-y-2">
-                  <div className="h-6 bg-gray-200 rounded w-40" />
-                  <div className="h-4 bg-gray-100 rounded w-56" />
+                  <div className="h-6 bg-muted rounded w-40" />
+                  <div className="h-4 bg-surface-secondary rounded w-56" />
                 </div>
-                <div className="h-9 bg-gray-200 rounded w-28" />
+                <div className="h-9 bg-muted rounded w-28" />
               </div>
               <div className="space-y-3">
-                <div className="h-10 bg-gray-100 rounded w-full" />
-                <div className="h-10 bg-gray-100 rounded w-full" />
-                <div className="h-24 bg-gray-100 rounded w-full" />
+                <div className="h-10 bg-surface-secondary rounded w-full" />
+                <div className="h-10 bg-surface-secondary rounded w-full" />
+                <div className="h-24 bg-surface-secondary rounded w-full" />
               </div>
               <div className="grid md:grid-cols-2 gap-6">
                 {Array.from({ length: 4 }).map((_, i) => (
                   <div key={i} className="space-y-2">
-                    <div className="h-4 bg-gray-200 rounded w-28" />
-                    <div className="h-10 bg-gray-100 rounded w-full" />
-                    <div className="h-10 bg-gray-100 rounded w-full" />
+                    <div className="h-4 bg-muted rounded w-28" />
+                    <div className="h-10 bg-surface-secondary rounded w-full" />
+                    <div className="h-10 bg-surface-secondary rounded w-full" />
                   </div>
                 ))}
               </div>
             </div>
             <div className="border rounded-lg p-6 space-y-3">
-              <div className="h-5 bg-gray-200 rounded w-32" />
-              <div className="h-4 bg-gray-100 rounded w-48" />
-              <div className="h-12 bg-gray-100 rounded w-full" />
+              <div className="h-5 bg-muted rounded w-32" />
+              <div className="h-4 bg-surface-secondary rounded w-48" />
+              <div className="h-12 bg-surface-secondary rounded w-full" />
             </div>
           </div>
         </div>
@@ -330,7 +330,7 @@ useEffect(() => {
         <Card>
           <CardContent className="flex flex-col gap-4 py-8 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">
-              <AlertCircle className="mt-0.5 h-5 w-5 text-amber-500" />
+              <AlertCircle className="mt-0.5 h-5 w-5 text-warning" />
               <div className="space-y-1">
                 <p className="font-medium text-foreground">No operational season is available.</p>
                 <p className="text-sm text-text-secondary">
@@ -351,7 +351,7 @@ useEffect(() => {
     <div className="p-8">
       <div className="mb-6">
         <h1 className="text-2xl font-bold">Market Information</h1>
-        <p className="text-gray-600">Manage market context and resources for {season.name}</p>
+        <p className="text-text-secondary">Manage market context and resources for {season.name}</p>
       </div>
 
       {error && (
@@ -390,14 +390,14 @@ useEffect(() => {
                       <button
                         key={market.id}
                         onClick={() => setSelectedMarketId(market.id)}
-                        className={`w-full flex items-center justify-between px-4 py-2 text-left text-sm hover:bg-gray-50 ${
-                          selectedMarketId === market.id ? 'bg-blue-50 text-blue-700' : ''
+                        className={`w-full flex items-center justify-between px-4 py-2 text-left text-sm hover:bg-surface-secondary ${
+                          selectedMarketId === market.id ? 'bg-info-background text-info' : ''
                         }`}
                       >
                         <span>{market.name}</span>
                         <span className="flex items-center gap-2">
-                          {hasInfo && <span className="w-2 h-2 bg-green-500 rounded-full" />}
-                          <ChevronRight className="h-4 w-4 text-gray-400" />
+                          {hasInfo && <span className="w-2 h-2 bg-success-background0 rounded-full" />}
+                          <ChevronRight className="h-4 w-4 text-text-muted" />
                         </span>
                       </button>
                     )
@@ -464,7 +464,7 @@ useEffect(() => {
                       <div className="space-y-2">
                         {formData.demandDrivers.map((item, i) => (
                           <div key={i} className="flex gap-2">
-                            <div className="flex items-center text-gray-400">
+                            <div className="flex items-center text-text-muted">
                               <GripVertical className="h-4 w-4" />
                             </div>
                             <Input
@@ -474,7 +474,7 @@ useEffect(() => {
                             />
                             {formData.demandDrivers.length > 1 && (
                               <Button variant="ghost" size="sm" onClick={() => removeArrayItem('demandDrivers', i)}>
-                                <Trash2 className="h-4 w-4 text-gray-400" />
+                                <Trash2 className="h-4 w-4 text-text-muted" />
                               </Button>
                             )}
                           </div>
@@ -492,7 +492,7 @@ useEffect(() => {
                       <div className="space-y-2">
                         {formData.supplyNotes.map((item, i) => (
                           <div key={i} className="flex gap-2">
-                            <div className="flex items-center text-gray-400">
+                            <div className="flex items-center text-text-muted">
                               <GripVertical className="h-4 w-4" />
                             </div>
                             <Input
@@ -502,7 +502,7 @@ useEffect(() => {
                             />
                             {formData.supplyNotes.length > 1 && (
                               <Button variant="ghost" size="sm" onClick={() => removeArrayItem('supplyNotes', i)}>
-                                <Trash2 className="h-4 w-4 text-gray-400" />
+                                <Trash2 className="h-4 w-4 text-text-muted" />
                               </Button>
                             )}
                           </div>
@@ -520,7 +520,7 @@ useEffect(() => {
                       <div className="space-y-2">
                         {formData.risks.map((item, i) => (
                           <div key={i} className="flex gap-2">
-                            <div className="flex items-center text-gray-400">
+                            <div className="flex items-center text-text-muted">
                               <GripVertical className="h-4 w-4" />
                             </div>
                             <Input
@@ -530,7 +530,7 @@ useEffect(() => {
                             />
                             {formData.risks.length > 1 && (
                               <Button variant="ghost" size="sm" onClick={() => removeArrayItem('risks', i)}>
-                                <Trash2 className="h-4 w-4 text-gray-400" />
+                                <Trash2 className="h-4 w-4 text-text-muted" />
                               </Button>
                             )}
                           </div>
@@ -548,7 +548,7 @@ useEffect(() => {
                       <div className="space-y-2">
                         {formData.strategyHints.map((item, i) => (
                           <div key={i} className="flex gap-2">
-                            <div className="flex items-center text-gray-400">
+                            <div className="flex items-center text-text-muted">
                               <GripVertical className="h-4 w-4" />
                             </div>
                             <Input
@@ -558,7 +558,7 @@ useEffect(() => {
                             />
                             {formData.strategyHints.length > 1 && (
                               <Button variant="ghost" size="sm" onClick={() => removeArrayItem('strategyHints', i)}>
-                                <Trash2 className="h-4 w-4 text-gray-400" />
+                                <Trash2 className="h-4 w-4 text-text-muted" />
                               </Button>
                             )}
                           </div>
@@ -582,7 +582,7 @@ useEffect(() => {
                 </CardHeader>
                 <CardContent>
                   {showAddLink && (
-                    <div className="mb-4 p-4 bg-gray-50 rounded-lg space-y-3">
+                    <div className="mb-4 p-4 bg-surface-secondary rounded-lg space-y-3">
                       <div className="grid grid-cols-2 gap-3">
                         <Input
                           placeholder="Label (e.g., STR Report)"
@@ -623,25 +623,25 @@ useEffect(() => {
                   )}
 
                   {selectedLinks.length === 0 ? (
-                    <p className="text-gray-500 text-sm">No resource links added yet.</p>
+                    <p className="text-text-muted text-sm">No resource links added yet.</p>
                   ) : (
                     <div className="space-y-2">
                       {selectedLinks.map((link) => (
-                        <div key={link.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                        <div key={link.id} className="flex items-center justify-between p-3 bg-surface-secondary rounded-lg">
                           <div className="flex items-center gap-3">
-                            <ExternalLink className="h-4 w-4 text-gray-400" />
+                            <ExternalLink className="h-4 w-4 text-text-muted" />
                             <div>
-                              <a href={link.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                              <a href={link.url} target="_blank" rel="noopener noreferrer" className="text-info hover:underline">
                                 {link.label}
                               </a>
-                              <div className="flex items-center gap-2 text-xs text-gray-500">
-                                <span className="px-1.5 py-0.5 bg-gray-200 rounded">{link.type}</span>
+                              <div className="flex items-center gap-2 text-xs text-text-muted">
+                                <span className="px-1.5 py-0.5 bg-muted rounded">{link.type}</span>
                                 {link.note && <span>{link.note}</span>}
                               </div>
                             </div>
                           </div>
                           <Button variant="ghost" size="sm" onClick={() => handleDeleteLink(link.id)}>
-                            <Trash2 className="h-4 w-4 text-gray-400" />
+                            <Trash2 className="h-4 w-4 text-text-muted" />
                           </Button>
                         </div>
                       ))}
@@ -663,7 +663,7 @@ useEffect(() => {
                 </CardHeader>
                 <CardContent>
                   {showAddRoundUpdate && (
-                    <div className="mb-4 p-4 bg-gray-50 rounded-lg space-y-3">
+                    <div className="mb-4 p-4 bg-surface-secondary rounded-lg space-y-3">
                       <div className="grid grid-cols-4 gap-3">
                         <Input
                           type="number"
@@ -698,7 +698,7 @@ useEffect(() => {
                   )}
 
                   {selectedRoundUpdates.length === 0 ? (
-                    <p className="text-gray-500 text-sm">No round updates added yet.</p>
+                    <p className="text-text-muted text-sm">No round updates added yet.</p>
                   ) : (
                     <div className="space-y-3">
                       {selectedRoundUpdates.map((update) => (
@@ -706,20 +706,20 @@ useEffect(() => {
                           <div className="flex items-start justify-between">
                             <div>
                               <div className="flex items-center gap-2 mb-1">
-                                <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded">
+                                <span className="px-2 py-0.5 bg-info-background text-info text-xs font-medium rounded">
                                   Round {update.roundNumber}
                                 </span>
                                 <span className="font-medium">{update.headline}</span>
                               </div>
-                              <p className="text-sm text-gray-600">{update.whatChanged}</p>
+                              <p className="text-sm text-text-secondary">{update.whatChanged}</p>
                               {update.createdBy && (
-                                <p className="text-xs text-gray-400 mt-2">
+                                <p className="text-xs text-text-muted mt-2">
                                   By {update.createdBy.firstName} {update.createdBy.lastName}
                                 </p>
                               )}
                             </div>
                             <Button variant="ghost" size="sm" onClick={() => handleDeleteRoundUpdate(update.id)}>
-                              <Trash2 className="h-4 w-4 text-gray-400" />
+                              <Trash2 className="h-4 w-4 text-text-muted" />
                             </Button>
                           </div>
                         </div>

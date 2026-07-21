@@ -7,6 +7,11 @@ import { Button } from '@/components/ui/button'
 import { CountdownTimer } from '@/components/countdown-timer'
 import { AdminCommandCenter } from '@/components/admin/AdminCommandCenter'
 import { getCurrentOperationalSeason } from '@/server/season'
+import { competitionRanks, formatMape } from '@/lib/learning-analytics'
+import { StatCard } from '@/components/ui/stat-card'
+import { DualTimezoneDeadline } from '@/components/dual-timezone-deadline'
+import { MotionReveal } from '@/components/ui/motion-reveal'
+import { getSupervisorCoaching } from '@/server/supervisor-coaching'
 
 export default async function DashboardPage() {
   const user = await getSession()
@@ -44,6 +49,7 @@ export default async function DashboardPage() {
   }
 
   if (user.role === 'SUPERVISOR') {
+    const coaching = await getSupervisorCoaching(user.id)
     const supervisorTeams = operationalSeason
       ? await prisma.team.findMany({
           where: { supervisorId: user.id, seasonId: operationalSeason.id },
@@ -55,7 +61,7 @@ export default async function DashboardPage() {
       : []
 
     return (
-      <div className="space-y-8">
+      <MotionReveal className="space-y-8">
         <div>
           <h1 className="text-3xl font-semibold text-foreground">Supervisor Dashboard</h1>
           <p className="mt-1 text-text-secondary">Manage your teams and monitor submissions</p>
@@ -106,7 +112,7 @@ export default async function DashboardPage() {
 
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <CardTitle>My Teams</CardTitle>
                 <CardDescription>Teams you supervise</CardDescription>
@@ -161,7 +167,8 @@ export default async function DashboardPage() {
             )}
           </CardContent>
         </Card>
-      </div>
+        {coaching?.round && <><Card><CardHeader><div className="flex flex-wrap items-center justify-between gap-3"><div><CardTitle>Team health · Round {coaching.round.number}</CardTitle><CardDescription>Submission, time remaining, score trend, bias, and warnings for your teams</CardDescription></div>{coaching.round.leaderboardVisible && <Link href={`/supervisor/debriefs/${coaching.round.id}`}><Button variant="outline">Project round debrief</Button></Link>}</div></CardHeader><CardContent><div className="hidden overflow-x-auto lg:block"><table className="w-full text-sm"><caption className="sr-only">Supervisor team health for round {coaching.round.number}</caption><thead><tr className="border-b text-left text-text-muted"><th className="py-3">Team</th><th>Members</th><th>Submitted</th><th>Hours left</th><th>MAPE</th><th>Trend</th><th>Pattern</th><th>Warnings</th></tr></thead><tbody>{coaching.teams.map((team) => <tr key={team.id} className="border-b border-border"><td className="py-3 font-medium">{team.name}</td><td className="max-w-48 text-xs text-text-secondary">{team.members.join(', ') || '—'}</td><td>{team.submitted ? '✓ Submitted' : '○ Pending'}</td><td className="tabular-nums">{team.submitted ? '—' : team.hoursRemaining.toFixed(1)}</td><td className="font-mono tabular-nums">{formatMape(team.score)}</td><td>{team.trend == null ? '—' : team.trend > 0 ? '▲ Improving' : team.trend < 0 ? '▼ Worsening' : '— Steady'}</td><td>{team.bias ? `${team.bias.direction === 'OVER' ? '↑' : '↓'} ${team.bias.marketName} ${team.bias.metric === 'ADR' ? 'ADR' : 'Occ'}` : '—'}</td><td className="tabular-nums">{team.warnings}</td></tr>)}</tbody></table></div><div className="space-y-3 lg:hidden">{coaching.teams.map((team) => <div key={team.id} className="rounded-xl border border-border p-4"><div className="flex justify-between"><strong>{team.name}</strong><span>{team.submitted ? '✓ Submitted' : '○ Pending'}</span></div><p className="mt-1 text-xs text-text-muted">{team.members.join(', ') || 'No members'}</p><p className="mt-2 text-sm text-text-secondary">{team.submitted ? 'Forecast locked' : `${team.hoursRemaining.toFixed(1)} hours remaining`} · MAPE {formatMape(team.score)} · {team.warnings} warnings</p>{team.bias && <p className="text-sm">Pattern: {team.bias.direction.toLowerCase()} {team.bias.marketName} {team.bias.metric}</p>}</div>)}</div></CardContent></Card>{coaching.insights?.common && <Card className="border-accent/30"><CardHeader><CardTitle>Class insight</CardTitle></CardHeader><CardContent><p>{coaching.insights.common.teamCount} of {coaching.insights.common.totalTeams} teams {coaching.insights.common.direction.toLowerCase()}-forecast {coaching.insights.common.marketName} {coaching.insights.common.metric === 'ADR' ? 'ADR' : 'occupancy'}.</p>{coaching.insights.bestCall && <p className="mt-2 text-sm text-text-secondary">Best call: {coaching.insights.bestCall.teamName} · {coaching.insights.bestCall.marketName} {coaching.insights.bestCall.metric} · {formatMape(coaching.insights.bestCall.apeError)}</p>}</CardContent></Card>}</>}
+      </MotionReveal>
     )
   }
 
@@ -196,8 +203,19 @@ export default async function DashboardPage() {
     select: { rulesAcknowledgedAt: true },
   })
 
+  let publishedPosition: { score: number; rank: number; percentile: number; latestRoundId: string | null } | null = null
+  if (studentTeam && operationalSeason) {
+    const visibleRounds = operationalSeason.rounds.filter((round) => round.leaderboardVisible)
+    const aggregates = visibleRounds.length ? await prisma.scoreAggregate.findMany({ where: { seasonId: operationalSeason.id, scopeType: 'ROUND', roundId: { in: visibleRounds.map((round) => round.id) }, team: { status: { in: ['ACTIVE', 'APPROVED'] } } }, select: { teamId: true, metric: true, mape: true, nErrors: true } }) : []
+    const buckets = new Map<string, { occSum: number; occN: number; adrSum: number; adrN: number }>()
+    for (const aggregate of aggregates) { const bucket = buckets.get(aggregate.teamId) || { occSum: 0, occN: 0, adrSum: 0, adrN: 0 }; if (aggregate.metric === 'OCCUPANCY') { bucket.occSum += aggregate.mape * aggregate.nErrors; bucket.occN += aggregate.nErrors } else { bucket.adrSum += aggregate.mape * aggregate.nErrors; bucket.adrN += aggregate.nErrors }; buckets.set(aggregate.teamId, bucket) }
+    const ranked = competitionRanks(Array.from(buckets.entries()).flatMap(([teamId, bucket]) => bucket.occN && bucket.adrN ? [{ teamId, score: ((bucket.occSum / bucket.occN) + (bucket.adrSum / bucket.adrN)) / 2 }] : []))
+    const mine = ranked.find((entry) => entry.teamId === studentTeam.teamId)
+    if (mine) publishedPosition = { ...mine, latestRoundId: visibleRounds.at(-1)?.id || null }
+  }
+
   return (
-    <div className="space-y-8">
+    <MotionReveal className="space-y-8">
       {!rulesAcknowledged?.rulesAcknowledgedAt && (
         <Card className="border-warning/20 bg-gradient-to-r from-warning-background via-card to-card">
           <CardContent className="py-4">
@@ -221,9 +239,9 @@ export default async function DashboardPage() {
         </Card>
       )}
 
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-semibold text-foreground">
+          <h1 className="font-display text-3xl font-semibold text-foreground">
             Welcome back, {user.firstName}!
           </h1>
           <p className="mt-1 text-text-secondary">
@@ -251,14 +269,7 @@ export default async function DashboardPage() {
                 </div>
                 <h2 className="text-3xl font-semibold">Round {currentRound.number}</h2>
                 <p className="mt-1 text-primary-foreground/80">
-                  Deadline: {new Date(currentRound.closesAt).toLocaleString('en-US', { 
-                    timeZone: 'America/New_York',
-                    weekday: 'short',
-                    month: 'short',
-                    day: 'numeric',
-                    hour: 'numeric',
-                    minute: '2-digit',
-                  })} ET
+                  Deadline: <DualTimezoneDeadline date={currentRound.closesAt.toISOString()} />
                 </p>
               </div>
               <div className="text-right">
@@ -289,12 +300,12 @@ export default async function DashboardPage() {
                   <p className="font-semibold text-foreground">Ready to submit your forecast?</p>
                   <p className="text-sm text-text-secondary">You need to submit 12 predictions (3 markets x 2 weeks x 2 metrics)</p>
                 </div>
-                <Link href="/submit">
+                <div className="flex flex-col items-end gap-2"><Link href="/submit">
                   <Button size="lg" className="bg-primary hover:bg-primary-hover">
                     Submit Forecast
                     <ArrowRight className="h-4 w-4 ml-2" />
                   </Button>
-                </Link>
+                </Link>{currentRound.number === 1 && <Link href="/rules#first-forecast" className="text-xs text-primary">First time? Read the 5-minute guide →</Link>}</div>
               </div>
             ) : (
               <div className="flex items-center space-x-3">
@@ -305,6 +316,10 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
       )}
+
+      {studentTeam && <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+        {publishedPosition ? <><StatCard title="Published score" value={formatMape(publishedPosition.score)} description="Combined MAPE · lower is better" icon={<Target className="h-5 w-5 text-primary" />} /><StatCard title="Current rank" value={`#${publishedPosition.rank}`} description={`${publishedPosition.percentile}th percentile`} icon={<Trophy className="h-5 w-5 text-accent" />} /><Card><CardContent className="flex h-full items-center justify-between py-6"><div><p className="font-semibold">Your latest debrief is ready</p><p className="text-sm text-text-secondary">Turn your result into the next forecast.</p></div>{publishedPosition.latestRoundId && <Link href={`/debrief/${publishedPosition.latestRoundId}`}><Button variant="outline">Open debrief</Button></Link>}</CardContent></Card></> : <Card className="md:col-span-3"><CardContent className="py-6"><p className="font-semibold">Scores have not been published yet</p><p className="text-sm text-text-secondary">Your rank, score, and debrief will appear here after the leaderboard is released.</p></CardContent></Card>}
+      </div>}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card className="hover:shadow-md transition-shadow">
@@ -473,10 +488,8 @@ export default async function DashboardPage() {
           <CardContent>
             <div className="space-y-4">
               {studentTeam.team.submissions.slice(0, 5).map((sub) => {
-                const occValues = sub.values.filter(v => v.metric === 'OCCUPANCY')
-                const adrValues = sub.values.filter(v => v.metric === 'ADR')
-                const avgOcc = occValues.length > 0 ? occValues.reduce((sum, v) => sum + v.value, 0) / occValues.length : 0
-                const avgAdr = adrValues.length > 0 ? adrValues.reduce((sum, v) => sum + v.value, 0) / adrValues.length : 0
+                const valuesByMarket = new Map<string, typeof sub.values>()
+                for (const value of sub.values) valuesByMarket.set(value.marketId, [...(valuesByMarket.get(value.marketId) || []), value])
                 return (
                   <div key={sub.id} className="flex items-center space-x-4">
                     <div className="rounded-full bg-success-background p-2">
@@ -495,9 +508,8 @@ export default async function DashboardPage() {
                         })}
                       </p>
                     </div>
-                    <div className="text-right text-sm">
-                      <p className="text-text-secondary">{avgOcc.toFixed(1)} | ${avgAdr.toFixed(0)}</p>
-                      <p className="text-xs text-muted-foreground">{sub.values.length} predictions</p>
+                    <div className="flex flex-wrap justify-end gap-1 text-right text-xs">
+                      {Array.from(valuesByMarket.entries()).map(([marketId, values]) => <span key={marketId} className="rounded-full bg-surface-secondary px-2 py-1 text-text-secondary">{operationalSeason?.markets.find((item) => item.market.id === marketId)?.market.name || 'Market'}: {values.length} values</span>)}
                     </div>
                   </div>
                 )
@@ -506,6 +518,6 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
       )}
-    </div>
+    </MotionReveal>
   )
 }

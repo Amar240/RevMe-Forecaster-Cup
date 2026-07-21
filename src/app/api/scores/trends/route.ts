@@ -3,11 +3,12 @@ import { prisma } from '@/server/db'
 import { logger } from '@/server/logger'
 import { requireUserOrResponse, jsonError } from '@/server/http'
 import { getCurrentOperationalSeason } from '@/server/season'
+import { resolveScoreTeam } from '@/server/scoped-score-team'
 
 export const dynamic = 'force-dynamic'
 
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const { user, response } = await requireUserOrResponse()
     if (response) return response
@@ -18,17 +19,14 @@ export async function GET() {
       return NextResponse.json({ trends: [] })
     }
 
-    const teamMember = await prisma.teamMember.findFirst({
-      where: { userId: authUser.id, team: { seasonId: operationalSeason.id } },
-    })
-
-    if (!teamMember) {
+    const team = await resolveScoreTeam({ userId: authUser.id, role: authUser.role, seasonId: operationalSeason.id, requestedTeamId: new URL(request.url).searchParams.get('teamId') })
+    if (!team) {
       return NextResponse.json({ trends: [] })
     }
 
     const aggregates = await prisma.scoreAggregate.findMany({
       where: {
-        teamId: teamMember.teamId,
+        teamId: team.id,
         seasonId: operationalSeason.id,
         scopeType: 'ROUND',
       },

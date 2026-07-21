@@ -53,8 +53,8 @@ const studentNav: NavItem[] = [
   { name: 'Join Team', href: '/join-team', icon: UserPlus },
   { name: 'Submit Forecast', href: '/submit', icon: Send },
   { name: 'My Scores', href: '/scores', icon: FileText },
+  { name: 'Debriefs', href: '/debrief', icon: BookOpen },
   { name: 'Leaderboards', href: '/leaderboards', icon: Trophy },
-  { name: 'Score Details', href: '/scoring-verification', icon: Target },
   { name: 'Market Info', href: '/market-info', icon: MapPin },
   { name: 'Guidelines + Help', href: '/rules', icon: BookOpen },
   { name: 'Support', href: '/support', icon: HelpCircle },
@@ -69,7 +69,8 @@ const supervisorNav: NavItem[] = [
   { name: 'My Teams', href: '/teams', icon: Users },
   { name: 'Reports', href: '/reports', icon: FileText },
   { name: 'Leaderboards', href: '/leaderboards', icon: Trophy },
-  { name: 'Score Details', href: '/scoring-verification', icon: Target },
+  { name: 'Scores', href: '/scores', icon: Target },
+  { name: 'Debriefs', href: '/debrief', icon: BookOpen },
   { name: 'Market Info', href: '/market-info', icon: MapPin },
   { name: 'Settings', href: '/settings', icon: Settings },
 ]
@@ -171,10 +172,18 @@ export function Sidebar({ role, mobileOpen, onMobileClose }: SidebarProps) {
   const pathname = usePathname()
   const [joinRequestsCount, setJoinRequestsCount] = useState(0)
   const [teamApprovalsCount, setTeamApprovalsCount] = useState(0)
+  const [hasCurrentTeam, setHasCurrentTeam] = useState<boolean | null>(null)
 
   useEffect(() => {
     const loadCounts = async () => {
       try {
+        if (role === 'STUDENT') {
+          const res = await csrfFetch('/api/users/me')
+          if (res.ok) {
+            const data = await res.json()
+            setHasCurrentTeam((data.user?.teamMemberships?.length ?? 0) > 0)
+          }
+        }
         if (role === 'SUPERVISOR') {
           const res = await csrfFetch('/api/supervisor/join-requests')
           if (res.ok) {
@@ -200,7 +209,7 @@ export function Sidebar({ role, mobileOpen, onMobileClose }: SidebarProps) {
 
   const navItems = role === 'SUPERVISOR'
     ? supervisorNav
-    : studentNav
+    : studentNav.filter((item) => item.href !== '/join-team' || hasCurrentTeam === false)
   const navGroups = role === 'ADMIN'
     ? adminNavGroups
     : role === 'SUB_ADMIN'
@@ -269,13 +278,13 @@ export function Sidebar({ role, mobileOpen, onMobileClose }: SidebarProps) {
       {mobileOpen && (
         <>
           <div
-            className="fixed inset-0 z-40 bg-slate-900/30 lg:hidden"
+            className="fixed inset-0 z-40 bg-foreground/40 lg:hidden"
             onClick={onMobileClose}
           />
           <aside className="fixed left-0 top-0 z-50 h-full w-72 overflow-y-auto border-r border-border bg-surface-secondary shadow-popover lg:hidden">
             <div className="flex h-16 items-center justify-between border-b border-border px-4">
               <span className="font-display text-lg font-semibold text-foreground">Navigation</span>
-              <button onClick={onMobileClose} className="rounded-md p-2 text-text-secondary transition-colors hover:bg-background hover:text-foreground">
+              <button onClick={onMobileClose} className="min-h-11 min-w-11 rounded-md p-2 text-text-secondary transition-colors hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label="Close navigation">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                   <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
                 </svg>

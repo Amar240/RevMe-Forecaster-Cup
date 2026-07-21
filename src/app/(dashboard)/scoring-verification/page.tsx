@@ -4,6 +4,7 @@ import { csrfFetch } from '@/lib/csrf'
 import { clientLogger } from '@/lib/client-logger'
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -70,16 +71,16 @@ interface PivotRow {
 }
 
 function getHeatmapClasses(ape: number): string {
-  if (ape < 5) return 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300'
-  if (ape < 15) return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300'
-  if (ape < 30) return 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300'
-  return 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300'
+  if (ape < 5) return 'bg-success-background text-success dark:bg-success-background dark:text-success'
+  if (ape < 15) return 'bg-warning-background text-warning dark:bg-warning-background dark:text-warning'
+  if (ape < 30) return 'bg-warning-background text-warning dark:bg-warning-background dark:text-warning'
+  return 'bg-error-background text-error dark:bg-error-background dark:text-error'
 }
 
 function getErrorColor(ape: number): string {
-  if (ape < 10) return 'text-green-600 bg-green-50'
-  if (ape < 25) return 'text-amber-600 bg-amber-50'
-  return 'text-red-600 bg-red-50'
+  if (ape < 10) return 'text-success bg-success-background'
+  if (ape < 25) return 'text-warning bg-warning-background'
+  return 'text-error bg-error-background'
 }
 
 function calculateAPE(absError: number, actualValue: number): number {
@@ -93,6 +94,7 @@ function formatValue(value: number, metric: string): string {
 }
 
 export default function ScoringVerificationPage() {
+  const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [predictions, setPredictions] = useState<Prediction[]>([])
   const [rounds, setRounds] = useState<RoundOption[]>([])
@@ -110,6 +112,7 @@ export default function ScoringVerificationPage() {
   const [viewStyle, setViewStyle] = useState<ViewStyle>('detailed')
   const [sortField, setSortField] = useState<SortField>('mape')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
+  const [accessChecked, setAccessChecked] = useState(false)
 
   const fetchData = useCallback(async () => {
     if (!initialLoad) setLoading(true)
@@ -141,8 +144,14 @@ export default function ScoringVerificationPage() {
   }, [initialLoad, selectedTeam, selectedRound])
 
   useEffect(() => {
-    fetchData()
-  }, [fetchData])
+    csrfFetch('/api/auth/me').then(async (response) => {
+      if (!response.ok) return router.replace('/login')
+      const role = (await response.json()).user?.role
+      if (role !== 'ADMIN' && role !== 'SUB_ADMIN') return router.replace('/scores?tab=round')
+      setAccessChecked(true)
+      void fetchData()
+    }).catch(() => router.replace('/scores?tab=round'))
+  }, [fetchData, router])
 
   const filteredPredictions = useMemo(() => {
     return predictions.filter((p) => {
@@ -297,10 +306,12 @@ export default function ScoringVerificationPage() {
     a.remove()
   }
 
+  if (!accessChecked) return <div className="py-16 text-center text-text-secondary">Checking score access…</div>
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <RefreshCw className="h-8 w-8 animate-spin text-gray-400" />
+        <RefreshCw className="h-8 w-8 animate-spin text-text-muted" />
       </div>
     )
   }
@@ -309,8 +320,8 @@ export default function ScoringVerificationPage() {
     <div className="max-w-[90rem] mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Scoring Verification</h1>
-          <p className="text-gray-600 dark:text-gray-400">{seasonName || 'Review predictions vs actual values'}</p>
+          <h1 className="text-2xl font-bold text-foreground dark:text-text-muted">Scoring Verification</h1>
+          <p className="text-text-secondary dark:text-text-muted">{seasonName || 'Review predictions vs actual values'}</p>
         </div>
         <div className="flex items-center space-x-2">
           <Button variant="outline" size="sm" onClick={exportCSV}>
@@ -329,16 +340,16 @@ export default function ScoringVerificationPage() {
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center space-x-2">
-              <Filter className="h-5 w-5 text-blue-600" />
+              <Filter className="h-5 w-5 text-info" />
               <span>Filters</span>
             </CardTitle>
-            <div className="flex items-center bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
+            <div className="flex items-center bg-surface-secondary dark:bg-muted rounded-lg p-1">
               <button
                 onClick={() => setViewStyle('detailed')}
                 className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
                   viewStyle === 'detailed'
-                    ? 'bg-white dark:bg-gray-700 shadow text-gray-900 dark:text-gray-100'
-                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+                    ? 'bg-white dark:bg-muted shadow text-foreground dark:text-text-muted'
+                    : 'text-text-secondary dark:text-text-muted hover:text-foreground dark:hover:text-text-muted'
                 }`}
               >
                 <List className="h-4 w-4" />
@@ -348,8 +359,8 @@ export default function ScoringVerificationPage() {
                 onClick={() => setViewStyle('comparison')}
                 className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
                   viewStyle === 'comparison'
-                    ? 'bg-white dark:bg-gray-700 shadow text-gray-900 dark:text-gray-100'
-                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+                    ? 'bg-white dark:bg-muted shadow text-foreground dark:text-text-muted'
+                    : 'text-text-secondary dark:text-text-muted hover:text-foreground dark:hover:text-text-muted'
                 }`}
               >
                 <LayoutGrid className="h-4 w-4" />
@@ -416,9 +427,9 @@ export default function ScoringVerificationPage() {
       {filteredPredictions.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center">
-            <BarChart3 className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">No Scored Predictions Yet</h3>
-            <p className="text-gray-500 dark:text-gray-400">
+            <BarChart3 className="h-12 w-12 text-text-muted mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-foreground dark:text-text-muted mb-2">No Scored Predictions Yet</h3>
+            <p className="text-text-muted dark:text-text-muted">
               Predictions will appear here after actuals are uploaded and scoring is run.
             </p>
           </CardContent>
@@ -430,9 +441,9 @@ export default function ScoringVerificationPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm border-collapse">
                 <thead>
-                  <tr className="bg-gray-50 dark:bg-gray-800 border-b dark:border-gray-700">
+                  <tr className="bg-surface-secondary dark:bg-muted border-b dark:border-border">
                     <th
-                      className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400 sticky left-0 bg-gray-50 dark:bg-gray-800 z-10 cursor-pointer select-none whitespace-nowrap"
+                      className="px-4 py-3 text-left font-medium text-text-muted dark:text-text-muted sticky left-0 bg-surface-secondary dark:bg-muted z-10 cursor-pointer select-none whitespace-nowrap"
                       onClick={() => toggleSort('team')}
                     >
                       <span className="flex items-center space-x-1">
@@ -440,9 +451,9 @@ export default function ScoringVerificationPage() {
                         <ArrowUpDown className="h-3 w-3" />
                       </span>
                     </th>
-                    <th className="px-3 py-3 text-left font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">Round</th>
+                    <th className="px-3 py-3 text-left font-medium text-text-muted dark:text-text-muted whitespace-nowrap">Round</th>
                     <th
-                      className="px-3 py-3 text-right font-medium text-gray-500 dark:text-gray-400 cursor-pointer select-none whitespace-nowrap"
+                      className="px-3 py-3 text-right font-medium text-text-muted dark:text-text-muted cursor-pointer select-none whitespace-nowrap"
                       onClick={() => toggleSort('mape')}
                     >
                       <span className="flex items-center justify-end space-x-1">
@@ -455,11 +466,11 @@ export default function ScoringVerificationPage() {
                       return (
                         <th
                           key={col.key}
-                          className="px-3 py-3 text-center font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap min-w-[120px]"
+                          className="px-3 py-3 text-center font-medium text-text-muted dark:text-text-muted whitespace-nowrap min-w-[120px]"
                         >
                           <div className="text-xs leading-tight">
                             <div>{col.marketName}</div>
-                            <div className="text-gray-400 dark:text-gray-500">{shortMetric} W+{col.weekOffset}</div>
+                            <div className="text-text-muted dark:text-text-muted">{shortMetric} W+{col.weekOffset}</div>
                           </div>
                         </th>
                       )
@@ -468,12 +479,12 @@ export default function ScoringVerificationPage() {
                 </thead>
                 <tbody>
                   {pivotRows.map((row) => (
-                    <tr key={`${row.teamId}-${row.roundId}`} className="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                      <td className="px-4 py-2.5 font-medium text-gray-900 dark:text-gray-100 sticky left-0 bg-white dark:bg-gray-900 z-10 whitespace-nowrap">
+                    <tr key={`${row.teamId}-${row.roundId}`} className="border-b dark:border-border hover:bg-surface-secondary dark:hover:bg-muted">
+                      <td className="px-4 py-2.5 font-medium text-foreground dark:text-text-muted sticky left-0 bg-white dark:bg-muted z-10 whitespace-nowrap">
                         {row.teamName}
                       </td>
-                      <td className="px-3 py-2.5 text-gray-600 dark:text-gray-400 whitespace-nowrap">
-                        <span className="px-2 py-0.5 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded text-xs font-medium">
+                      <td className="px-3 py-2.5 text-text-secondary dark:text-text-muted whitespace-nowrap">
+                        <span className="px-2 py-0.5 bg-info-background dark:bg-info-background text-info dark:text-info rounded text-xs font-medium">
                           {row.roundLabel}
                         </span>
                       </td>
@@ -486,7 +497,7 @@ export default function ScoringVerificationPage() {
                         const cell = row.cells[col.key]
                         if (!cell) {
                           return (
-                            <td key={col.key} className="px-3 py-2.5 text-center text-gray-300 dark:text-gray-600">
+                            <td key={col.key} className="px-3 py-2.5 text-center text-text-muted dark:text-text-secondary">
                               --
                             </td>
                           )
@@ -520,28 +531,28 @@ export default function ScoringVerificationPage() {
             return (
               <Card key={round.id}>
                 <CardHeader
-                  className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+                  className="cursor-pointer hover:bg-surface-secondary dark:hover:bg-muted transition-colors"
                   onClick={() => toggleRound(round.id)}
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-4">
                       <CardTitle className="flex items-center space-x-2">
-                        <Target className="h-5 w-5 text-blue-600" />
+                        <Target className="h-5 w-5 text-info" />
                         <span>{round.label}</span>
                       </CardTitle>
                       <div className="flex items-center space-x-4 text-sm">
-                        <span className="text-gray-500 dark:text-gray-400">
+                        <span className="text-text-muted dark:text-text-muted">
                           {roundPreds.length} predictions
                         </span>
                         {stats && (
                           <>
-                            <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded">
+                            <span className="px-2 py-1 bg-info-background dark:bg-info-background text-info dark:text-info rounded">
                               Occ MAPE: {stats.occupancyMAPE.toFixed(2)}%
                             </span>
-                            <span className="px-2 py-1 bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 rounded">
+                            <span className="px-2 py-1 bg-success-background dark:bg-success-background text-success dark:text-success rounded">
                               ADR MAPE: {stats.adrMAPE.toFixed(2)}%
                             </span>
-                            <span className="px-2 py-1 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 rounded">
+                            <span className="px-2 py-1 bg-warning-background dark:bg-warning-background text-warning dark:text-warning rounded">
                               Final MAPE: {stats.finalMAPE.toFixed(2)}%
                             </span>
                           </>
@@ -549,9 +560,9 @@ export default function ScoringVerificationPage() {
                       </div>
                     </div>
                     {isExpanded ? (
-                      <ChevronUp className="h-5 w-5 text-gray-400" />
+                      <ChevronUp className="h-5 w-5 text-text-muted" />
                     ) : (
-                      <ChevronDown className="h-5 w-5 text-gray-400" />
+                      <ChevronDown className="h-5 w-5 text-text-muted" />
                     )}
                   </div>
                 </CardHeader>
@@ -561,7 +572,7 @@ export default function ScoringVerificationPage() {
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm">
                         <thead>
-                          <tr className="border-b text-left text-gray-500 dark:text-gray-400">
+                          <tr className="border-b text-left text-text-muted dark:text-text-muted">
                             {canSelectTeam && <th className="pb-2 font-medium">Team</th>}
                             <th className="pb-2 font-medium">Market</th>
                             <th className="pb-2 font-medium">Metric</th>
@@ -573,21 +584,21 @@ export default function ScoringVerificationPage() {
                         </thead>
                         <tbody>
                           {roundPreds.map((pred) => (
-                            <tr key={pred.id} className="border-b border-gray-50 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                            <tr key={pred.id} className="border-b border-border dark:border-border hover:bg-surface-secondary dark:hover:bg-muted">
                               {canSelectTeam && (
-                                <td className="py-2 text-gray-900 dark:text-gray-100 font-medium">{pred.teamName}</td>
+                                <td className="py-2 text-foreground dark:text-text-muted font-medium">{pred.teamName}</td>
                               )}
-                              <td className="py-2 text-gray-900 dark:text-gray-100">{pred.marketName}</td>
+                              <td className="py-2 text-foreground dark:text-text-muted">{pred.marketName}</td>
                               <td className="py-2">
                                 <span className={`px-2 py-1 rounded text-xs font-medium ${
                                   pred.metric === 'OCCUPANCY'
-                                    ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
-                                    : 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
+                                    ? 'bg-info-background text-info dark:bg-info-background dark:text-info'
+                                    : 'bg-success-background text-success dark:bg-success-background dark:text-success'
                                 }`}>
                                   {pred.metric}
                                 </span>
                               </td>
-                              <td className="py-2 text-gray-600 dark:text-gray-400">Week +{pred.weekOffset}</td>
+                              <td className="py-2 text-text-secondary dark:text-text-muted">Week +{pred.weekOffset}</td>
                               <td className="py-2 text-right font-mono">{formatValue(pred.predictedValue, pred.metric)}</td>
                               <td className="py-2 text-right font-mono">{formatValue(pred.actualValue, pred.metric)}</td>
                               <td className="py-2 text-right">
@@ -608,24 +619,24 @@ export default function ScoringVerificationPage() {
         </div>
       )}
 
-      <Card className="bg-gray-50 dark:bg-gray-800/50">
+      <Card className="bg-surface-secondary dark:bg-muted">
         <CardContent className="py-4">
           <div className="flex items-start space-x-3">
-            <TrendingUp className="h-5 w-5 text-blue-600 mt-0.5" />
-            <div className="text-sm text-gray-600 dark:text-gray-400">
-              <p className="font-medium text-gray-900 dark:text-gray-100 mb-1">Understanding Scores</p>
+            <TrendingUp className="h-5 w-5 text-info mt-0.5" />
+            <div className="text-sm text-text-secondary dark:text-text-muted">
+              <p className="font-medium text-foreground dark:text-text-muted mb-1">Understanding Scores</p>
               <ul className="space-y-1 list-disc list-inside">
                 <li><strong>MAPE</strong> = Mean Absolute Percentage Error (average of percentage errors)</li>
                 <li><strong>APE</strong> = |Predicted - Actual| / Actual x 100% for each prediction</li>
                 <li>Lower errors indicate better predictions</li>
                 <li className="flex items-center space-x-3 list-none ml-[-1.25rem]">
-                  <span className="inline-block w-3 h-3 rounded bg-green-200 dark:bg-green-800"></span>
+                  <span className="inline-block w-3 h-3 rounded bg-success-background dark:bg-success"></span>
                   <span>&lt;5% Excellent</span>
-                  <span className="inline-block w-3 h-3 rounded bg-yellow-200 dark:bg-yellow-800"></span>
+                  <span className="inline-block w-3 h-3 rounded bg-warning-background dark:bg-warning"></span>
                   <span>5-15% Good</span>
-                  <span className="inline-block w-3 h-3 rounded bg-orange-200 dark:bg-orange-800"></span>
+                  <span className="inline-block w-3 h-3 rounded bg-warning-background dark:bg-warning"></span>
                   <span>15-30% Fair</span>
-                  <span className="inline-block w-3 h-3 rounded bg-red-200 dark:bg-red-800"></span>
+                  <span className="inline-block w-3 h-3 rounded bg-error-background dark:bg-error"></span>
                   <span>&gt;30% Needs work</span>
                 </li>
               </ul>

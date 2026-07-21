@@ -21,6 +21,7 @@ vi.mock('@/server/email', () => ({
 
 import { POST as submitHandler } from '@/app/api/submissions/route'
 import { GET as currentSubmissionHandler } from '@/app/api/submissions/current/route'
+import { GET as submissionContextHandler } from '@/app/api/submissions/context/route'
 import { GET as submissionHistoryHandler } from '@/app/api/submissions/history/route'
 
 const BASE = 'http://localhost:5000'
@@ -162,6 +163,28 @@ describe('Submission flow', () => {
 
     expect(occupancyValue?.value).toBe(entries[0].occupancy)
     expect(adrValue?.value).toBe(entries[5].adr)
+  })
+
+  it('rolls back the locked submission when value creation fails', async () => {
+    await loginAs(student.id)
+    await prisma.$executeRawUnsafe(`
+      CREATE OR REPLACE FUNCTION fail_submission_value_insert() RETURNS trigger AS $$
+      BEGIN RAISE EXCEPTION 'simulated value failure'; END;
+      $$ LANGUAGE plpgsql
+    `)
+    await prisma.$executeRawUnsafe(`
+      CREATE TRIGGER test_fail_submission_value_insert
+      BEFORE INSERT ON "SubmissionValue"
+      FOR EACH STATEMENT EXECUTE FUNCTION fail_submission_value_insert()
+    `)
+    try {
+      const res = await submitHandler(makeRequest(`${BASE}/api/submissions`, { method: 'POST', body: { roundId: rounds[0].id, submissions: buildSubmissionEntries(markets) } }))
+      expect(res.status).toBe(500)
+      expect(await prisma.submission.findUnique({ where: { teamId_roundId: { teamId: team.id, roundId: rounds[0].id } } })).toBeNull()
+    } finally {
+      await prisma.$executeRawUnsafe('DROP TRIGGER IF EXISTS test_fail_submission_value_insert ON "SubmissionValue"')
+      await prisma.$executeRawUnsafe('DROP FUNCTION IF EXISTS fail_submission_value_insert()')
+    }
   })
 
   it('accepts decimal occupancy and ADR values', async () => {
@@ -460,6 +483,18 @@ describe('Submission flow', () => {
     expect(data.existingSubmissions).toHaveLength(6)
   })
 
+  it('provides a dedicated compatible submission context payload', async () => {
+    await loginAs(student.id)
+    const res = await submissionContextHandler()
+    const data = await res.json()
+    expect(res.status).toBe(200)
+    expect(data.currentRound.id).toBe(rounds[0].id)
+    expect(data.context).toMatchObject({ userId: student.id, teamId: team.id, seasonId: season.id })
+    expect(data.markets).toHaveLength(3)
+    expect(data.evidenceByMarket).toBeTypeOf('object')
+    expect(data).not.toHaveProperty('existingSubmissions')
+  })
+
   it('returns submission history for the student team', async () => {
     await loginAs(student.id)
 
@@ -474,7 +509,7 @@ describe('Submission flow', () => {
     )
     expect(saveRes.status).toBe(201)
 
-    const res = await submissionHistoryHandler()
+    const res = await submissionHistoryHandler(makeRequest(`${BASE}/api/submissions/history`))
     const data = await res.json()
 
     expect(res.status).toBe(200)

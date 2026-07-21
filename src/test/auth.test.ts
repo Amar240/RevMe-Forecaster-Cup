@@ -3,7 +3,7 @@ import { prisma } from './db'
 import { createUniversity, createUser } from './fixtures'
 import { loginAs, logout } from './auth'
 
-import { hashPassword, verifyPassword, getSession, destroySession, requireRole } from '@/lib/auth'
+import { hashPassword, hashSessionToken, verifyPassword, getSession, destroySession, requireRole } from '@/lib/auth'
 
 describe('hashPassword / verifyPassword', () => {
   it('hashes and verifies a password correctly', async () => {
@@ -55,7 +55,7 @@ describe('getSession', () => {
     await prisma.session.create({
       data: {
         userId: user.id,
-        token,
+        token: hashSessionToken(token),
         expiresAt: new Date(Date.now() - 1000),
       },
     })
@@ -64,7 +64,7 @@ describe('getSession', () => {
     const sessionUser = await getSession()
     expect(sessionUser).toBeNull()
 
-    const deletedSession = await prisma.session.findUnique({ where: { token } })
+    const deletedSession = await prisma.session.findUnique({ where: { token: hashSessionToken(token) } })
     expect(deletedSession).toBeNull()
   })
 
@@ -81,7 +81,7 @@ describe('getSession', () => {
     const sessionUser = await getSession()
     expect(sessionUser).toBeNull()
 
-    const deletedSession = await prisma.session.findUnique({ where: { token } })
+    const deletedSession = await prisma.session.findUnique({ where: { token: hashSessionToken(token) } })
     expect(deletedSession).toBeNull()
   })
 
@@ -98,7 +98,7 @@ describe('getSession', () => {
     const sessionUser = await getSession()
     expect(sessionUser).toBeNull()
 
-    const deletedSession = await prisma.session.findUnique({ where: { token } })
+    const deletedSession = await prisma.session.findUnique({ where: { token: hashSessionToken(token) } })
     expect(deletedSession).toBeNull()
   })
 })
@@ -111,7 +111,7 @@ describe('destroySession', () => {
 
     await destroySession()
 
-    const session = await prisma.session.findFirst({ where: { token } })
+    const session = await prisma.session.findFirst({ where: { token: hashSessionToken(token) } })
     expect(session).toBeNull()
   })
 })

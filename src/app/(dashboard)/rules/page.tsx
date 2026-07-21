@@ -258,6 +258,16 @@ export default function RulesPage() {
         </CardHeader>
         {sectionIsOpen('scoring') && (
           <CardContent className="space-y-4 text-sm text-text-secondary">
+            <div id="first-forecast" className="rounded-lg border border-primary/20 bg-primary-soft p-4 scroll-mt-24">
+              <h4 className="mb-2 font-semibold text-foreground">Your five-minute first forecast</h4>
+              <ol className="list-inside list-decimal space-y-2">
+                <li>Read each market brief and name the one demand signal you expect to matter most.</li>
+                <li>Use the recent actuals as your baseline; do not start from a blank number.</li>
+                <li>Adjust occupancy first, then decide whether the same signal should move ADR.</li>
+                <li>Make week +2 changes more cautiously because uncertainty grows with the horizon.</li>
+                <li>Write down one assumption to check when the round debrief is published.</li>
+              </ol>
+            </div>
             <div className="rounded-lg border border-border bg-card p-4">
               <h4 className="mb-2 font-semibold text-foreground">Mean Absolute Percentage Error (MAPE)</h4>
               <p className="mb-3">Your score is based on the percentage error between your predictions and actual values. Lower is better.</p>

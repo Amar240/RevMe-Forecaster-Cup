@@ -168,7 +168,7 @@ describe('current operational season scoping', () => {
     expect(userData.user.teamMemberships).toHaveLength(1)
     expect(userData.user.teamMemberships[0].team.name).toBe('Current Season Team')
 
-    const historyRes = await getSubmissionHistory()
+    const historyRes = await getSubmissionHistory(makeRequest('http://localhost:5000/api/submissions/history'))
     expect(historyRes.status).toBe(200)
     const historyData = await historyRes.json()
     expect(historyData.submissions).toHaveLength(1)

@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { LandingPage } from '@/components/landing/sections'
+import { getHomepageHeroStatusLabel } from '@/server/season'
 
 export const metadata: Metadata = {
   title: 'The Only Student Competition Scored on Real Hotel Data',
@@ -19,10 +20,12 @@ export const metadata: Metadata = {
   },
 }
 
-export default function Home() {
+export default async function Home() {
+  const heroStatusLabel = await getHomepageHeroStatusLabel()
+
   return (
     <div className="min-h-screen font-body">
-      <LandingPage />
+      <LandingPage heroStatusLabel={heroStatusLabel} />
     </div>
   )
 }

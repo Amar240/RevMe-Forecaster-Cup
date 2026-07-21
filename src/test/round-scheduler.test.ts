@@ -6,6 +6,7 @@ import { makeRequest } from './http'
 
 import { POST as processTransitionsRoute } from '@/app/api/admin/rounds/process-transitions/route'
 import { processRoundTransitions } from '@/lib/round-scheduler'
+import { GET as cronTransitionsRoute } from '@/app/api/cron/process-rounds/route'
 
 describe('Round scheduler', () => {
   it('opens a UPCOMING round when opensAt is in the past', async () => {
@@ -159,5 +160,23 @@ describe('Round scheduler', () => {
 
     expect(response.status).toBe(401)
     expect(data.message).toBe('Unauthorized')
+  })
+
+  it('cron endpoint fails closed when CRON_SECRET is missing', async () => {
+    const previous = process.env.CRON_SECRET
+    delete process.env.CRON_SECRET
+    const response = await cronTransitionsRoute(makeRequest('http://localhost/api/cron/process-rounds'))
+    expect(response.status).toBe(503)
+    if (previous === undefined) delete process.env.CRON_SECRET
+    else process.env.CRON_SECRET = previous
+  })
+
+  it('cron endpoint rejects an invalid bearer token', async () => {
+    const previous = process.env.CRON_SECRET
+    process.env.CRON_SECRET = 'expected-secret'
+    const response = await cronTransitionsRoute(makeRequest('http://localhost/api/cron/process-rounds', { headers: { authorization: 'Bearer wrong-secret' } }))
+    expect(response.status).toBe(401)
+    if (previous === undefined) delete process.env.CRON_SECRET
+    else process.env.CRON_SECRET = previous
   })
 })

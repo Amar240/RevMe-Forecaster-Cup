@@ -5,6 +5,7 @@ import { getSession } from '@/server/auth'
 import { jsonError } from '@/server/http'
 import { getCurrentOperationalSeason } from '@/server/season'
 import { getSeasonScopedTeamMemberWhere } from '@/server/team-membership'
+import { competitionRanks } from '@/lib/learning-analytics'
 
 export const dynamic = 'force-dynamic'
 
@@ -169,8 +170,10 @@ export async function GET(request: NextRequest) {
     })
 
     if (!operationalSeason) {
-      return NextResponse.json({ leaderboard: [], seasonName: '', rounds: [] })
+      return NextResponse.json({ leaderboard: [], seasonName: '', rounds: [], myTeamId: null, myPosition: null, metric: metricParam, expectedErrors: 0, nextUnpublishedRound: null })
     }
+
+    const nextUnpublishedRound = await prisma.round.findFirst({ where: { seasonId: operationalSeason.id, leaderboardVisible: false }, orderBy: { number: 'asc' }, select: { id: true, number: true, status: true, closesAt: true } })
 
     const isAdmin = user?.role === 'ADMIN' || user?.role === 'SUB_ADMIN'
     const isSupervisor = user?.role === 'SUPERVISOR'
@@ -222,6 +225,7 @@ export async function GET(request: NextRequest) {
         myTeamId,
         metric,
         expectedErrors: 0,
+        myPosition: null,
         rounds: rounds.map((r) => ({ id: r.id, number: r.number, isFinal: r.isFinal, status: r.status })),
       })
     }
@@ -443,6 +447,30 @@ export async function GET(request: NextRequest) {
       ? await getExpectedRoundErrors(roundIdParam)
       : 78
 
+    leaderboard = leaderboard.map((entry, index, entries) => ({
+      ...entry,
+      rank: entries.findIndex((candidate) => candidate.mape === entry.mape) + 1,
+    }))
+    const myEntry = leaderboard.find((entry) => entry.teamId === myTeamId)
+    let myPosition: { rank: number; percentile: number; gapToNext: number | null; rankMovement: number | null } | null = null
+    if (myEntry && myEntry.mape !== null) {
+      const above = [...leaderboard].reverse().find((entry) => entry.rank < myEntry.rank && entry.mape !== null)
+      const progressionRoundIds = rounds.map((round) => round.id).filter((id) => myEntry.cumulativeScores[id] !== undefined)
+      let rankMovement: number | null = null
+      if (progressionRoundIds.length >= 2) {
+        const previousRoundId = progressionRoundIds.at(-2)!
+        const previous = competitionRanks(leaderboard.filter((entry) => entry.cumulativeScores[previousRoundId] !== undefined).map((entry) => ({ teamId: entry.teamId, score: entryScore(entry, previousRoundId) })))
+        const previousRank = previous.find((entry) => entry.teamId === myTeamId)?.rank
+        if (previousRank) rankMovement = previousRank - myEntry.rank
+      }
+      myPosition = {
+        rank: myEntry.rank,
+        percentile: leaderboard.length <= 1 ? 100 : Math.round((leaderboard.filter((entry) => (entry.mape ?? Infinity) > myEntry.mape!).length / (leaderboard.length - 1)) * 100),
+        gapToNext: above?.mape == null ? null : myEntry.mape - above.mape,
+        rankMovement,
+      }
+    }
+
     return NextResponse.json({
       leaderboard,
       seasonName: operationalSeason.name,
@@ -450,11 +478,17 @@ export async function GET(request: NextRequest) {
       metric,
       expectedErrors,
       rounds: rounds.map((r) => ({ id: r.id, number: r.number, isFinal: r.isFinal, status: r.status })),
+      myPosition,
+      nextUnpublishedRound,
     })
   } catch (error) {
     logger.error('Get leaderboard error:', error)
     return jsonError(error, 'Failed to get leaderboard')
   }
+}
+
+function entryScore(entry: { cumulativeScores: Record<string, number> }, roundId: string) {
+  return entry.cumulativeScores[roundId] ?? Number.POSITIVE_INFINITY
 }
 
 async function getExpectedRoundErrors(roundId: string): Promise<number> {

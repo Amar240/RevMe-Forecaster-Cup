@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RevME Forecaster Cup — UI/UX Design Report</title>
+<style>
+  :root{
+    --primary:#1f4e8c; --primary-hover:#173b69; --primary-soft:#e8f0fa;
+    --accent:#c89b3c; --accent-soft:#f4e8c8;
+    --bg:#f7f9fc; --surface:#ffffff; --surface2:#eef3f8; --muted:#f1f5f9;
+    --border:#d7e0ea; --text:#0f172a; --text2:#334155; --text3:#64748b;
+    --success:#15803d; --success-bg:#dcfce7; --warning:#b7791f; --warning-bg:#fef3c7;
+    --error:#b42318; --error-bg:#fee4e2; --info:#0f5ea8; --info-bg:#dbeafe;
+    --shadow:0 1px 2px rgba(15,23,42,.04),0 10px 24px rgba(15,23,42,.06);
+    --r:14px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);line-height:1.6}
+  .serif{font-family:Georgia,'Times New Roman',serif}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 28px 80px}
+  header.hero{background:linear-gradient(135deg,#122e52 0%,#1f4e8c 60%,#2c5fa3 100%);color:#fff;padding:64px 28px 56px;margin-bottom:48px}
+  header.hero .inner{max-width:1080px;margin:0 auto}
+  .kicker{text-transform:uppercase;letter-spacing:.14em;font-size:12px;font-weight:600;color:#d8b45c;margin-bottom:14px}
+  header.hero h1{font-size:40px;line-height:1.15;font-weight:600;max-width:760px}
+  header.hero p.sub{margin-top:16px;font-size:17px;color:rgba(255,255,255,.75);max-width:680px}
+  .meta{margin-top:28px;display:flex;gap:24px;flex-wrap:wrap;font-size:13px;color:rgba(255,255,255,.6)}
+  h2{font-size:26px;font-weight:600;margin:56px 0 8px;scroll-margin-top:20px}
+  h2 .num{color:var(--accent);font-family:Georgia,serif;margin-right:10px}
+  h3{font-size:18px;font-weight:600;margin:28px 0 10px}
+  p.lead{color:var(--text2);font-size:16px;max-width:820px;margin-bottom:20px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow);padding:24px;margin:16px 0}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}
+  @media(max-width:800px){.grid2,.grid3{grid-template-columns:1fr}}
+  table.score{width:100%;border-collapse:collapse;margin:16px 0}
+  table.score th{text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);padding:10px 14px;border-bottom:2px solid var(--border)}
+  table.score td{padding:12px 14px;border-bottom:1px solid var(--border);font-size:14.5px;vertical-align:top}
+  .bar{height:8px;border-radius:99px;background:var(--muted);overflow:hidden;min-width:120px}
+  .bar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--primary),#3b82f6)}
+  .bar.low i{background:linear-gradient(90deg,#b42318,#d97706)}
+  .bar.mid i{background:linear-gradient(90deg,#b7791f,#c89b3c)}
+  .scorebig{font-family:Georgia,serif;font-size:15px;font-weight:700;white-space:nowrap}
+  .pill{display:inline-block;font-size:11.5px;font-weight:600;padding:3px 10px;border-radius:99px;margin-right:6px}
+  .pill.crit{background:var(--error-bg);color:var(--error)}
+  .pill.high{background:var(--warning-bg);color:var(--warning)}
+  .pill.med{background:var(--info-bg);color:var(--info)}
+  .pill.win{background:var(--success-bg);color:var(--success)}
+  .pill.gold{background:var(--accent-soft);color:#8a6a25}
+  ul.tight{margin:8px 0 8px 20px}
+  ul.tight li{margin:7px 0;color:var(--text2);font-size:14.5px}
+  ul.tight li strong{color:var(--text)}
+  .verdict{border-left:4px solid var(--accent);background:var(--surface);padding:16px 20px;border-radius:0 12px 12px 0;margin:18px 0;font-size:15px;color:var(--text2)}
+  .verdict strong{color:var(--text)}
+  /* mockups */
+  .mock{background:var(--bg);border:1px solid var(--border);border-radius:16px;padding:20px;margin:14px 0}
+  .mock .browser{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;box-shadow:var(--shadow)}
+  .mock .bbar{display:flex;gap:6px;padding:10px 14px;border-bottom:1px solid var(--border);background:var(--surface2)}
+  .mock .bbar i{width:10px;height:10px;border-radius:99px;background:#cbd5e1;display:block}
+  .mock .binner{padding:20px}
+  .mock label.cap{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--text3);font-weight:700;margin-bottom:10px}
+  .mcard{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px}
+  .mrow{display:flex;justify-content:space-between;align-items:center;gap:10px}
+  .mnum{font-family:Georgia,serif;font-weight:700}
+  .mtag{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:99px}
+  .up{color:var(--success)} .down{color:var(--error)}
+  .spark{height:26px;display:flex;align-items:flex-end;gap:3px}
+  .spark b{width:7px;border-radius:2px;background:var(--primary);opacity:.85;display:block}
+  .footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--border);font-size:13px;color:var(--text3)}
+  .toc{display:flex;flex-wrap:wrap;gap:8px;margin:20px 0 0}
+  .toc a{font-size:13px;font-weight:600;color:var(--primary);text-decoration:none;background:var(--primary-soft);padding:6px 14px;border-radius:99px}
+  .toc a:hover{background:#d9e7f7}
+  a{color:var(--primary)}
+  .src{font-size:13px;color:var(--text3);margin:6px 0}
+  code{background:var(--muted);border:1px solid var(--border);border-radius:6px;padding:1px 6px;font-size:13px}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="inner">
+    <div class="kicker">RevME Forecaster Cup · Design Review</div>
+    <h1 class="serif">UI/UX Audit &amp; Learning-Experience Blueprint</h1>
+    <p class="sub">How the platform looks, feels, and teaches today — and a concrete plan to make it feel premium while turning every round into a genuine learning loop for students and faculty.</p>
+    <div class="meta">
+      <span>Prepared July 21, 2026</span><span>Scope: full dashboard app + design system</span><span>Basis: code review of version2.0 + learning-science research</span>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+<div class="toc">
+  <a href="#s1">1 · Scorecard</a>
+  <a href="#s2">2 · Design System</a>
+  <a href="#s3">3 · Screen-by-Screen</a>
+  <a href="#s4">4 · The Learning Gap</a>
+  <a href="#s5">5 · Redesign Proposals</a>
+  <a href="#s6">6 · Premium Polish</a>
+  <a href="#s7">7 · Roadmap</a>
+</div>
+
+<!-- ============ 1. SCORECARD ============ -->
+<h2 id="s1"><span class="num">1</span>Executive Scorecard</h2>
+<p class="lead">The platform's visual foundation is stronger than most student projects ever get: a real token system, dark mode, role-aware navigation, skeleton loaders, and thoughtful empty states. The gap is not polish — it's <strong>pedagogy</strong>. The app reports scores; it does not yet teach. Students see <em>what</em> their MAPE is, never <em>why</em>, and the richest learning moment in the entire competition — the week actuals arrive — currently has no screen of its own.</p>
+
+<div class="card">
+<table class="score">
+  <tr><th>Category</th><th>Score</th><th></th><th>Assessment</th></tr>
+  <tr><td><strong>Visual design &amp; consistency</strong></td><td class="scorebig">7.5/10</td><td><div class="bar"><i style="width:75%"></i></div></td><td>Token-driven, coherent, calm. Occasional hardcoded hex values and generic shadcn feel in dense screens.</td></tr>
+  <tr><td><strong>Information architecture</strong></td><td class="scorebig">7/10</td><td><div class="bar"><i style="width:70%"></i></div></td><td>Role-aware nav is right. But "My Scores" vs "Score Details" is ambiguous, and 10 flat items for students is 3 too many.</td></tr>
+  <tr><td><strong>Ease of use (task flows)</strong></td><td class="scorebig">7/10</td><td><div class="bar"><i style="width:70%"></i></div></td><td>Submit flow with review step is excellent. But it's a blind, one-shot, no-draft form for the highest-stakes action in the app.</td></tr>
+  <tr><td><strong>Feedback &amp; learning value</strong></td><td class="scorebig">4.5/10</td><td><div class="bar low"><i style="width:45%"></i></div></td><td>The core weakness. Numbers without narrative, ranks without reasons, no post-round debrief, no bias detection, no cohort reference frames.</td></tr>
+  <tr><td><strong>Premium feel</strong></td><td class="scorebig">6.5/10</td><td><div class="bar mid"><i style="width:65%"></i></div></td><td>Landing page has drama; the app inside doesn't. No motion, no celebration states, no moments of delight after high-effort actions.</td></tr>
+  <tr><td><strong>Accessibility &amp; responsiveness</strong></td><td class="scorebig">6.5/10</td><td><div class="bar mid"><i style="width:65%"></i></div></td><td>Good focus rings and semantics. Color-only trend cues, ET-only timezones for an international audience, wide tables on mobile.</td></tr>
+  <tr><td><strong>Overall</strong></td><td class="scorebig" style="color:var(--primary)">6.5/10</td><td><div class="bar"><i style="width:65%"></i></div></td><td>A solid competition tool. Not yet a learning product.</td></tr>
+</table>
+</div>
+
+<div class="verdict"><strong>One-sentence verdict:</strong> RevME successfully runs the competition — the redesign opportunity is to make it <strong>explain the competition back to the student</strong>, because research consistently shows students' top demand from analytics dashboards is "grades <em>and the reasons behind them</em>," and feedback loops are what make forecasting competitions educational rather than just competitive.</div>
+
+<!-- ============ 2. DESIGN SYSTEM ============ -->
+<h2 id="s2"><span class="num">2</span>Design System Audit</h2>
+<p class="lead">Reviewed: <code>tailwind.config.ts</code>, <code>globals.css</code>, 18 UI primitives in <code>components/ui</code>.</p>
+
+<div class="grid2">
+  <div class="card">
+    <h3 style="margin-top:0"><span class="pill win">Strong</span> What's working</h3>
+    <ul class="tight">
+      <li><strong>Full CSS-variable token system</strong> — semantic colors (surface/text/status), radius scale, shadow scale, light + dark themes. This is professional-grade structure.</li>
+      <li><strong>Distinct brand palette</strong> — navy #1F4E8C + gold #C89B3C reads "academic institution," which is exactly right for the audience. Medal tokens (gold/silver/bronze) and an 8-step chart palette show real foresight.</li>
+      <li><strong>Typography intent</strong> — serif display / sans body / mono for numbers is a premium pairing most student apps never attempt.</li>
+      <li><strong>Component hygiene</strong> — skeletons, confirm-dialog, alert-banner, access-denied, page-loader all exist as primitives. Loading and error states are designed, not accidental.</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0"><span class="pill high">Fix</span> Gaps &amp; drift</h3>
+    <ul class="tight">
+      <li><strong>Hardcoded hex escaping the system</strong> — sparkline strokes use <code>#16a34a</code>/<code>#dc2626</code> instead of tokens; skeletons use <code>bg-gray-200</code> instead of <code>bg-muted</code>. Dark mode will drift.</li>
+      <li><strong>No number typography rule</strong> — MAPE tables should use <code>font-mono</code> + <code>tabular-nums</code> everywhere; currently inconsistent, so columns of scores don't align.</li>
+      <li><strong>Missing primitives</strong> — no Tooltip (needed badly for MAPE explainers), no Tabs component used on Leaderboards (hand-rolled buttons), no Stat/KPI card primitive despite the pattern appearing 10+ times.</li>
+      <li><strong>The serif display font barely appears inside the app</strong> — headers are all sans. The "premium" font is reserved for the landing page; bringing it to dashboard H1s and big numbers would unify the brand.</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ============ 3. SCREENS ============ -->
+<h2 id="s3"><span class="num">3</span>Screen-by-Screen Findings</h2>
+
+<div class="card">
+  <h3 style="margin-top:0">Student Dashboard <span class="pill win">good bones</span><span class="pill high">missing the point</span></h3>
+  <ul class="tight">
+    <li>The current-round hero with countdown, deadline, and submitted/not-submitted state is the best screen in the app. Warning count shown as "1 / 3 before disqualification" is excellent expectation-setting.</li>
+    <li><strong>Your rank and score are nowhere on the dashboard.</strong> The single thing every student checks daily requires two extra clicks. The dashboard answers "did I submit?" but not "how am I doing?" or "what should I learn next?"</li>
+    <li><strong>Recent Activity averages Occupancy and ADR across all three markets</strong> into one number pair (e.g. "72.4 | $185"). Averaging Nashville with Dubai is statistically meaningless and quietly teaches students bad habits — show per-market chips or last-round error instead.</li>
+    <li>Post-deadline, pre-scoring is dead air: nothing tells the student "actuals arrive Tuesday, scores Wednesday." Waiting states are unused teaching moments.</li>
+  </ul>
+</div>
+
+<div class="card">
+  <h3 style="margin-top:0">Submit Forecast <span class="pill win">great flow</span><span class="pill crit">blind form</span></h3>
+  <ul class="tight">
+    <li>Review step → lock warning → confirm is exactly right for an irreversible action. Lock-state messaging (paused/closed/not-open) is thorough and human.</li>
+    <li><strong>Students forecast with zero context on screen.</strong> No historical actuals, no last-round result, no market intel — even though the platform already stores all three (<code>Actual</code>, <code>PredictionError</code>, <code>MarketInfo</code>). They're guessing into empty number inputs; the real work happens in a spreadsheet somewhere else. This is the single biggest ease-of-use and learning miss.</li>
+    <li><strong>No draft state.</strong> 12 numbers, one shot, permanent lock. A browser crash mid-entry loses everything; anxiety is built into the design.</li>
+    <li><strong>No sanity checks.</strong> Typing occupancy 9.5 instead of 95, or an ADR 3× last week's actual, submits silently. A soft "this is 40% below last observed — intentional?" nudge would prevent most heartbreak (and support tickets).</li>
+    <li>Deadlines shown in ET only, for a competition with teams in Dubai and Hamburg.</li>
+  </ul>
+</div>
+
+<div class="card">
+  <h3 style="margin-top:0">Leaderboards <span class="pill win">celebratory</span><span class="pill high">rank without reason</span></h3>
+  <ul class="tight">
+    <li>Podium, "You" badge, row highlight, sparklines, team/university toggle, per-metric tabs — engaging and well-featured.</li>
+    <li><strong>MAPE is never explained.</strong> The core number of the entire competition has no tooltip, no legend, no "lower is better" hint. First-time students must infer the scoring system from context.</li>
+    <li><strong>Teams ranked 8–30 see a wall of rows and learn nothing.</strong> Research on learning dashboards warns that raw social comparison demotivates lower-ranked students. Add a "your neighborhood" view: gap to the team above you, percentile, and personal trend — competition framing for the top, progress framing for everyone else.</li>
+    <li>Before any round is published, students can see ranked rows with all values as "--": position without evidence, which reads as broken.</li>
+    <li>Green/red sparkline is the only trend cue — colorblind users get nothing. Add ▲▼ deltas.</li>
+  </ul>
+</div>
+
+<div class="card">
+  <h3 style="margin-top:0">My Scores + Score Details <span class="pill win">rich data</span><span class="pill high">numbers ≠ insight</span></h3>
+  <ul class="tight">
+    <li>Trend chart, per-round expansion, market filter, CSV export, per-prediction error table — the data layer is generous. Two separate nav items ("My Scores", "Score Details") for overlapping content confuses the mental model; merge into one Scores hub with tabs.</li>
+    <li><strong>Everything is descriptive, nothing is diagnostic.</strong> The page shows <em>occupancy APE 8.2%</em> but never: "You over-forecast ADR in all 3 markets for 3 straight rounds" (bias), "Your week+2 error is 2.1× your week+1 error" (horizon difficulty), or "Cohort median this round was 6.1% — you beat it" (reference frame). All computable from data already in <code>PredictionError</code>.</li>
+  </ul>
+</div>
+
+<div class="card">
+  <h3 style="margin-top:0">Market Info <span class="pill win">hidden gem</span></h3>
+  <ul class="tight">
+    <li>Demand drivers, supply notes, risks, strategy hints, resource links, per-round updates — this is genuinely strong curriculum content with a proper data model behind it.</li>
+    <li><strong>It's stranded.</strong> Nothing links it to the submit flow (where it would inform forecasts) or to results (where "what changed this round" would explain misses). The round-update headline (<code>MarketRoundUpdate</code>) is the raw material for a post-round debrief — currently it just sits on this page.</li>
+  </ul>
+</div>
+
+<div class="card">
+  <h3 style="margin-top:0">Supervisor Experience <span class="pill high">thin</span></h3>
+  <ul class="tight">
+    <li>Dashboard = three counts + a team list. Scores page adds team cards with mini trend charts. Functional, but a professor running this as coursework needs: which teams haven't submitted (with hours left), which are trending worse, what the class-wide common error was, and something to project in class after each round.</li>
+    <li>Faculty are the adoption decision-makers — the supervisor view is where "premium" earns its keep.</li>
+  </ul>
+</div>
+
+<!-- ============ 4. LEARNING GAP ============ -->
+<h2 id="s4"><span class="num">4</span>The Learning Gap — Why This Matters</h2>
+<p class="lead">Three findings from learning-analytics and forecasting research map directly onto RevME:</p>
+<div class="grid3">
+  <div class="card"><h3 style="margin-top:0;font-size:15.5px">Feedback must be actionable</h3><p style="font-size:14px;color:var(--text2)">Dashboards improve outcomes when they tell students what to <em>do differently</em>, not just how they scored. RevME currently stops at scores.</p></div>
+  <div class="card"><h3 style="margin-top:0;font-size:15.5px">Reference frames &gt; rankings</h3><p style="font-size:14px;color:var(--text2)">Students interpret data through comparison points — their own past performance, or cohort medians. Pure rank-based social comparison demotivates the bottom half. RevME offers only ranks.</p></div>
+  <div class="card"><h3 style="margin-top:0;font-size:15.5px">The feedback loop IS the pedagogy</h3><p style="font-size:14px;color:var(--text2)">In forecasting competitions specifically, the learning happens when participants confront prediction vs. outcome and revise their method. RevME has no screen where that confrontation happens.</p></div>
+</div>
+<div class="verdict"><strong>The insight:</strong> a weekly cadence of <em>forecast → actuals → debrief → improve</em> is a textbook deliberate-practice loop. RevME has built the first two steps. The redesign should build the second two.</div>
+
+<!-- ============ 5. PROPOSALS ============ -->
+<h2 id="s5"><span class="num">5</span>Redesign Proposals</h2>
+
+<h3 style="font-size:20px">P1 — The Round Debrief <span class="pill gold">flagship</span></h3>
+<p class="lead">A new page, auto-generated the moment a round's leaderboard is published. This is the highest-value addition possible with <strong>zero new data collection</strong> — every element below already exists in <code>PredictionError</code>, <code>Actual</code>, <code>ScoreAggregate</code>, and <code>MarketRoundUpdate</code>.</p>
+<div class="mock">
+  <div class="browser">
+    <div class="bbar"><i></i><i></i><i></i></div>
+    <div class="binner">
+      <label class="cap">Round 4 Debrief · Team Delaware Alpha</label>
+      <div class="mrow" style="margin-bottom:14px">
+        <div><span class="mnum" style="font-size:26px">6.84%</span> <span style="font-size:13px;color:var(--text3)">round MAPE</span> <span class="mtag" style="background:var(--success-bg);color:var(--success)">▲ 2 ranks → #7</span></div>
+        <div style="font-size:12.5px;color:var(--text3)">Cohort median: 8.1% — you beat 68% of teams</div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px">
+        <div class="mcard"><div style="font-size:12px;color:var(--text3)">Nashville CBD · Occ</div><div class="mrow"><span class="mnum">You: 71.0</span><span class="mnum" style="color:var(--primary)">Actual: 74.2</span></div><div style="font-size:12px" class="down">Under by 4.3% — you missed the CMA Fest spillover</div></div>
+        <div class="mcard"><div style="font-size:12px;color:var(--text3)">Dubai · ADR</div><div class="mrow"><span class="mnum">You: $312</span><span class="mnum" style="color:var(--primary)">Actual: $305</span></div><div style="font-size:12px" class="up">Over by 2.3% — your best market this round</div></div>
+        <div class="mcard"><div style="font-size:12px;color:var(--text3)">Hamburg · Occ</div><div class="mrow"><span class="mnum">You: 68.0</span><span class="mnum" style="color:var(--primary)">Actual: 61.5</span></div><div style="font-size:12px" class="down">Over by 10.6% — your biggest miss</div></div>
+      </div>
+      <div class="mcard" style="border-left:3px solid var(--accent)">
+        <div style="font-size:12px;font-weight:700;color:#8a6a25;text-transform:uppercase;letter-spacing:.1em">What moved the market</div>
+        <div style="font-size:13.5px;color:var(--text2)">Hamburg: trade-fair calendar gap cut midweek corporate demand — most teams over-forecast occupancy this round. <a href="#">Read the round update →</a></div>
+      </div>
+      <div class="mcard" style="margin-top:10px;border-left:3px solid var(--primary)">
+        <div style="font-size:12px;font-weight:700;color:var(--primary);text-transform:uppercase;letter-spacing:.1em">Pattern watch</div>
+        <div style="font-size:13.5px;color:var(--text2)">You've over-forecast Hamburg occupancy 3 rounds running (avg +7.2%). Consider anchoring on the 4-week trailing actual before adjusting for events.</div>
+      </div>
+    </div>
+  </div>
+</div>
+<ul class="tight">
+  <li>Per-market forecast-vs-actual with plain-language deltas; biggest miss and best call surfaced first.</li>
+  <li>Cohort median + percentile (reference frame that motivates the whole distribution, not just the podium).</li>
+  <li>"What moved the market" pulls the existing <code>MarketRoundUpdate</code> for that round — connecting admin curriculum content to student results automatically.</li>
+  <li>"Pattern watch" = simple rule-based bias detection (consistent over/under by market/metric across rounds). No ML needed — three SQL queries.</li>
+  <li>Notify via the existing notification system: "Your Round 4 debrief is ready."</li>
+</ul>
+
+<h3 style="font-size:20px">P2 — Forecast Workspace (Submit redesign)</h3>
+<p class="lead">Turn the blind form into a split-screen decision environment: inputs on the left, evidence on the right. Draft autosave and soft sanity checks remove the anxiety.</p>
+<div class="mock">
+  <div class="browser">
+    <div class="bbar"><i></i><i></i><i></i></div>
+    <div class="binner" style="display:grid;grid-template-columns:1.1fr .9fr;gap:16px">
+      <div>
+        <label class="cap">Your forecast · Nashville CBD · Week +1</label>
+        <div class="mcard" style="margin-bottom:8px"><div class="mrow"><span style="font-size:13px">Occupancy %</span><span class="mnum" style="font-size:20px;color:var(--primary)">72.5</span></div></div>
+        <div class="mcard"><div class="mrow"><span style="font-size:13px">ADR $</span><span class="mnum" style="font-size:20px;color:var(--primary)">189</span></div>
+        <div style="margin-top:6px;font-size:12px;background:var(--warning-bg);color:var(--warning);border-radius:8px;padding:5px 9px">⚠ 18% above last observed actual ($160). Intentional?</div></div>
+        <div style="margin-top:10px;font-size:12px;color:var(--text3)">✓ Draft saved 12s ago · 8 of 12 fields complete</div>
+      </div>
+      <div>
+        <label class="cap">Evidence panel</label>
+        <div class="mcard" style="margin-bottom:8px"><div style="font-size:12px;color:var(--text3);margin-bottom:4px">Occupancy — last 6 actuals</div>
+          <div class="spark"><b style="height:12px"></b><b style="height:16px"></b><b style="height:14px"></b><b style="height:19px"></b><b style="height:22px"></b><b style="height:20px;background:var(--accent)"></b></div>
+          <div style="font-size:11.5px;color:var(--text3)">trailing avg 70.8 · last 74.2</div></div>
+        <div class="mcard" style="margin-bottom:8px"><div style="font-size:12px;color:var(--text3)">Your last round here</div><div style="font-size:13px" class="down">Under-forecast occ by 4.3%</div></div>
+        <div class="mcard"><div style="font-size:12px;color:var(--text3)">Market intel</div><div style="font-size:13px;color:var(--text2)">Citywide convention Tue–Thu · 2 new comp-set openings</div><div style="font-size:12px"><a href="#">Full market brief →</a></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+<ul class="tight">
+  <li>Evidence panel per market: trailing actuals sparkline, your last error there, and the <code>MarketInfo</code> quick insights — all existing data.</li>
+  <li>Draft autosave (localStorage first, server draft later) fixes the one-shot anxiety; the existing review/lock step stays as-is.</li>
+  <li>Soft validation nudges (never blocking): large deviation from trailing actuals, occupancy&gt;100 typo patterns, ADR order-of-magnitude checks. This directly reduces the orphan-submission and support-ticket load found in the code review.</li>
+  <li>Show deadline in ET <em>and</em> the student's local timezone.</li>
+</ul>
+
+<h3 style="font-size:20px">P3 — Scores Hub with an Insight Layer</h3>
+<ul class="tight">
+  <li>Merge "My Scores" + "Score Details" into one hub: <strong>Overview / By round / By market / Export</strong> tabs.</li>
+  <li>Add three diagnostic widgets: <strong>Bias meter</strong> (over/under-forecast tendency per metric), <strong>Horizon split</strong> (week+1 vs week+2 accuracy — teaches uncertainty growth), <strong>Cohort band</strong> on the trend chart (your line vs. anonymized median/quartiles).</li>
+  <li>Every widget gets a one-line plain-language takeaway. Rule: no number without a sentence.</li>
+</ul>
+
+<h3 style="font-size:20px">P4 — Leaderboard Reframing</h3>
+<ul class="tight">
+  <li>Keep the podium (it's good). Below it, add a <strong>"Your position"</strong> band: gap to the next rank ("0.4% behind #6"), percentile, movement arrow with ▲▼ text (not color alone).</li>
+  <li>MAPE tooltip + a permanent "lower is better" microcopy. One-line formula on hover: <em>average % miss across all your predictions</em>.</li>
+  <li>Hide fully-empty ranked rows pre-publication; show a "Scores land Wednesday" state instead of dashes.</li>
+</ul>
+
+<h3 style="font-size:20px">P5 — Supervisor Coaching View</h3>
+<ul class="tight">
+  <li><strong>Team health matrix</strong>: rows = teams; columns = submitted-this-round (with hours-left countdown), round MAPE, trend, bias flag, warnings. Red/amber/green at a glance — with icons, not color alone.</li>
+  <li><strong>Class insights panel</strong>: cohort-wide common error this round ("14 of 18 teams over-forecast Hamburg"), best forecast of the week (celebrate method, not just rank).</li>
+  <li><strong>Projectable debrief</strong>: one-click, clean full-screen summary of the round for classroom discussion — this is the feature professors will talk about to other professors.</li>
+</ul>
+
+<h3 style="font-size:20px">P6 — Learning Micro-Content</h3>
+<ul class="tight">
+  <li>Glossary primitives: hoverable definitions for MAPE, ADR, Occupancy, RevPAR, comp set — used everywhere those terms appear.</li>
+  <li>Use waiting states: after submission and between rounds, surface one short "how professional revenue managers think" tip or a relevant market-info card instead of blank confirmation.</li>
+  <li>Rules page → "Guidelines + Help" already exists; add a 5-minute "How to make your first forecast" onboarding path for round 1 (biggest anxiety moment of the season).</li>
+</ul>
+
+<!-- ============ 6. POLISH ============ -->
+<h2 id="s6"><span class="num">6</span>Premium Polish Checklist</h2>
+<div class="card">
+<ul class="tight">
+  <li><strong>Motion</strong>: framer-motion is already a dependency — bring subtle entrance/stagger animations from the landing page into dashboard cards, and animate rank changes on the leaderboard.</li>
+  <li><strong>Celebration states</strong>: after submitting (a real "locked in — good luck" moment), on personal-best MAPE, on rank-up. Cheap to build, huge for felt quality.</li>
+  <li><strong>Serif display font on dashboard H1s and hero numbers</strong> — unify with the landing page brand.</li>
+  <li><strong>Tabular numerals</strong> (<code>font-variant-numeric: tabular-nums</code>) on every score, table, and countdown.</li>
+  <li><strong>Replace all hardcoded grays/greens/reds</strong> with tokens; audit dark mode on Scores + Leaderboards.</li>
+  <li><strong>Mobile tables → card lists</strong> on Leaderboards and Scores below <code>md</code>; students will check ranks from phones.</li>
+  <li><strong>Trend cues never color-only</strong>: pair ▲▼/text with every green/red.</li>
+  <li><strong>Timezone dual-display</strong> everywhere a deadline appears.</li>
+</ul>
+</div>
+
+<!-- ============ 7. ROADMAP ============ -->
+<h2 id="s7"><span class="num">7</span>Prioritized Roadmap</h2>
+<div class="card">
+<table class="score">
+  <tr><th>Phase</th><th>Items</th><th>Why first</th></tr>
+  <tr><td><strong>Quick wins</strong><br><span style="font-size:12px;color:var(--text3)">days</span></td><td>MAPE tooltips + "lower is better" · dashboard rank/score card · ▲▼ trend text · tabular-nums · dual timezone · fix meaningless averaged activity numbers · draft autosave (localStorage)</td><td>High visibility, low effort, no schema changes.</td></tr>
+  <tr><td><strong>Core loop</strong><br><span style="font-size:12px;color:var(--text3)">1–2 weeks</span></td><td>P1 Round Debrief · P2 Evidence panel + sanity checks · P4 leaderboard "your position" band</td><td>Closes the forecast→learn loop before the next season; uses only existing data.</td></tr>
+  <tr><td><strong>Depth</strong><br><span style="font-size:12px;color:var(--text3)">2–4 weeks</span></td><td>P3 Scores hub merge + insight widgets · P5 supervisor coaching view · glossary system</td><td>Faculty-facing value; strongest adoption lever for new universities.</td></tr>
+  <tr><td><strong>Delight</strong><br><span style="font-size:12px;color:var(--text3)">ongoing</span></td><td>Motion, celebration states, mobile card tables, dark-mode audit, onboarding path</td><td>Converts "works well" into "feels premium."</td></tr>
+</table>
+</div>
+
+<div class="verdict"><strong>If you build only one thing:</strong> the Round Debrief (P1). It transforms the platform's identity from scoreboard to teacher, requires no new data, and gives Professor Zvi something no competing classroom tool has.</div>
+
+<div class="footer">
+  <p><strong>Research sources</strong></p>
+  <p class="src">· <a href="https://www.researchgate.net/publication/360329692_Designing_a_Learning_Analytics_Dashboard_to_Provide_Students_with_Actionable_Feedback_and_Evaluating_Its_Impacts">Designing a Learning Analytics Dashboard to Provide Students with Actionable Feedback (ResearchGate)</a></p>
+  <p class="src">· <a href="https://link.springer.com/article/10.1007/s10758-026-09969-4">Student Awareness and Preferences for Learning Analytics Dashboards (Springer)</a></p>
+  <p class="src">· <a href="https://onlinelibrary.wiley.com/doi/full/10.1111/jcal.13042">Learner preferences for reference frames in analytics dashboards (Wiley, JCAL)</a></p>
+  <p class="src">· <a href="https://www.ncbi.nlm.nih.gov/pmc/articles/PMC11925967/">Are learning analytics dashboards the solution to feedback at scale? (PMC)</a></p>
+  <p class="src">· <a href="https://www.sciencedirect.com/science/article/abs/pii/S0169207011000495">The value of feedback in forecasting competitions (Int. Journal of Forecasting)</a></p>
+  <p class="src">· <a href="https://arxiv.org/pdf/2009.07701">Learnings from Kaggle's Forecasting Competitions (arXiv)</a></p>
+  <p style="margin-top:14px">Prepared by Claude for Amar · RevME Forecaster Cup · Based on direct review of the version2.0 codebase (design tokens, 18 UI primitives, dashboard/submit/leaderboards/scores/market-info/supervisor screens).</p>
+</div>
+
+</div>
+</body>
+</html>

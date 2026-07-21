@@ -189,6 +189,13 @@ export default function AdminSeasonPage() {
     }
   }
 
+  const applySeasonTemplate = (source: SeasonSummary) => {
+    const daysPerRound = source.rounds.length > 0 ? Math.max(1, Math.round((new Date(source.rounds[0].closesAt).getTime() - new Date(source.rounds[0].opensAt).getTime()) / 86_400_000)) : 7
+    setFormData((current) => ({ ...current, name: `${source.name} – New Season`, totalRounds: source.rounds.length || 7, daysPerRound, marketIds: source.markets.filter((item) => item.isActive).map((item) => item.market.id), endDate: current.startDate ? computeEndDate(current.startDate, source.rounds.length || 7, daysPerRound) : '' }))
+    setSuccess(`Template loaded from ${source.name}. Choose the new start date and review all settings.`)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
   const handleSeasonAction = async (action: 'start' | 'pause' | 'resume' | 'complete') => {
     setActionLoading(action)
     setError('')
@@ -336,14 +343,14 @@ export default function AdminSeasonPage() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'DRAFT': return 'bg-gray-100 text-gray-700'
-      case 'ACTIVE': return 'bg-green-100 text-green-700'
-      case 'PAUSED': return 'bg-amber-100 text-amber-700'
-      case 'COMPLETED': return 'bg-blue-100 text-blue-700'
-      case 'UPCOMING': return 'bg-gray-100 text-gray-700'
-      case 'OPEN': return 'bg-green-100 text-green-700'
-      case 'CLOSED': return 'bg-red-100 text-red-700'
-      default: return 'bg-gray-100 text-gray-700'
+      case 'DRAFT': return 'bg-surface-secondary text-text-secondary'
+      case 'ACTIVE': return 'bg-success-background text-success'
+      case 'PAUSED': return 'bg-warning-background text-warning'
+      case 'COMPLETED': return 'bg-info-background text-info'
+      case 'UPCOMING': return 'bg-surface-secondary text-text-secondary'
+      case 'OPEN': return 'bg-success-background text-success'
+      case 'CLOSED': return 'bg-error-background text-error'
+      default: return 'bg-surface-secondary text-text-secondary'
     }
   }
 
@@ -358,8 +365,8 @@ export default function AdminSeasonPage() {
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Season Management</h1>
-        <p className="text-gray-600">Configure competition seasons and rounds</p>
+        <h1 className="text-2xl font-bold text-foreground">Season Management</h1>
+        <p className="text-text-secondary">Configure competition seasons and rounds</p>
       </div>
 
       {error && (
@@ -395,7 +402,7 @@ export default function AdminSeasonPage() {
                     <Button 
                       onClick={() => handleSeasonAction('start')}
                       disabled={actionLoading === 'start'}
-                      className="bg-green-600 hover:bg-green-700"
+                      className="bg-success hover:bg-success"
                     >
                       <Play className="h-4 w-4 mr-2" />
                       {actionLoading === 'start' ? 'Starting...' : 'Start Season'}
@@ -407,7 +414,7 @@ export default function AdminSeasonPage() {
                         variant="outline"
                         onClick={() => handleSeasonAction('pause')}
                         disabled={actionLoading === 'pause'}
-                        className="border-amber-500 text-amber-600 hover:bg-amber-50"
+                        className="border-warning/30 text-warning hover:bg-warning-background"
                       >
                         <Pause className="h-4 w-4 mr-2" />
                         {actionLoading === 'pause' ? 'Pausing...' : 'Pause'}
@@ -427,7 +434,7 @@ export default function AdminSeasonPage() {
                       <Button 
                         onClick={() => handleSeasonAction('resume')}
                         disabled={actionLoading === 'resume'}
-                        className="bg-green-600 hover:bg-green-700"
+                        className="bg-success hover:bg-success"
                       >
                         <RotateCcw className="h-4 w-4 mr-2" />
                         {actionLoading === 'resume' ? 'Resuming...' : 'Resume'}
@@ -448,13 +455,13 @@ export default function AdminSeasonPage() {
             <CardContent className="space-y-4">
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
-                  <p className="text-sm text-gray-500">Start Date</p>
+                  <p className="text-sm text-text-muted">Start Date</p>
                   <p className="font-medium">
                     {new Date(season.startDate).toLocaleDateString()}
                   </p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-500">End Date</p>
+                  <p className="text-sm text-text-muted">End Date</p>
                   <p className="font-medium">
                     {new Date(season.endDate).toLocaleDateString()}
                   </p>
@@ -481,8 +488,8 @@ export default function AdminSeasonPage() {
                     key={sm.id}
                     className={`px-3 py-1 rounded-full text-sm ${
                       sm.isActive
-                        ? 'bg-blue-100 text-blue-700'
-                        : 'bg-gray-100 text-gray-500'
+                        ? 'bg-info-background text-info'
+                        : 'bg-surface-secondary text-text-muted'
                     }`}
                   >
                     {sm.market.name}
@@ -517,7 +524,7 @@ export default function AdminSeasonPage() {
                               Round {round.number}
                             </p>
                             {round.isFinal && (
-                              <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
+                              <span className="text-xs bg-warning-background text-warning px-2 py-0.5 rounded-full">
                                 Final
                               </span>
                             )}
@@ -548,7 +555,7 @@ export default function AdminSeasonPage() {
                               </div>
                             </div>
                           ) : (
-                            <p className="text-sm text-gray-500 mt-1">
+                            <p className="text-sm text-text-muted mt-1">
                               <Clock className="h-3 w-3 inline mr-1" />
                               {new Date(round.opensAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })} 
                               {' - '}
@@ -593,7 +600,7 @@ export default function AdminSeasonPage() {
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  className="h-8 text-green-600 border-green-300 hover:bg-green-50"
+                                  className="h-8 text-success border-success/30 hover:bg-success-background"
                                   disabled={isLoading}
                                   onClick={() => handleRoundStatusChange(round.id, 'OPEN')}
                                 >
@@ -607,7 +614,7 @@ export default function AdminSeasonPage() {
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                    className="h-8 text-amber-600 border-amber-300 hover:bg-amber-50"
+                                    className="h-8 text-warning border-warning/30 hover:bg-warning-background"
                                     disabled={isLoading}
                                     onClick={() => handleRoundStatusChange(round.id, 'PAUSED')}
                                   >
@@ -617,7 +624,7 @@ export default function AdminSeasonPage() {
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                    className="h-8 text-red-600 border-red-300 hover:bg-red-50"
+                                    className="h-8 text-error border-error/30 hover:bg-error-background"
                                     disabled={isLoading}
                                     onClick={() => setConfirmCloseRound(round.id)}
                                   >
@@ -632,7 +639,7 @@ export default function AdminSeasonPage() {
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                    className="h-8 text-green-600 border-green-300 hover:bg-green-50"
+                                    className="h-8 text-success border-success/30 hover:bg-success-background"
                                     disabled={isLoading}
                                     onClick={() => handleRoundStatusChange(round.id, 'OPEN')}
                                   >
@@ -642,7 +649,7 @@ export default function AdminSeasonPage() {
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                    className="h-8 text-red-600 border-red-300 hover:bg-red-50"
+                                    className="h-8 text-error border-error/30 hover:bg-error-background"
                                     disabled={isLoading}
                                     onClick={() => setConfirmCloseRound(round.id)}
                                   >
@@ -656,7 +663,7 @@ export default function AdminSeasonPage() {
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  className="h-8 text-green-600 border-green-300 hover:bg-green-50"
+                                  className="h-8 text-success border-success/30 hover:bg-success-background"
                                   disabled={isLoading}
                                   onClick={() => handleRoundStatusChange(round.id, 'OPEN')}
                                 >
@@ -668,7 +675,7 @@ export default function AdminSeasonPage() {
                               <Button
                                 size="sm"
                                 variant="outline"
-                                className={`h-8 ${round.leaderboardVisible ? 'text-blue-600 border-blue-300 hover:bg-blue-50' : 'text-gray-500 border-gray-300 hover:bg-gray-50'}`}
+                                className={`h-8 ${round.leaderboardVisible ? 'text-info border-info/30 hover:bg-info-background' : 'text-text-muted border-border hover:bg-surface-secondary'}`}
                                 disabled={isLoading}
                                 title={round.leaderboardVisible ? 'Hide leaderboard from students' : 'Publish leaderboard to students'}
                                 onClick={() => handleLeaderboardVisibility(round.id, !round.leaderboardVisible)}
@@ -787,7 +794,7 @@ export default function AdminSeasonPage() {
                     aria-readonly="true"
                     required
                   />
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-text-muted">
                     Auto-calculated: {formData.totalRounds} rounds × {formData.daysPerRound} days = {formData.totalRounds * formData.daysPerRound} days total.
                   </p>
                 </div>
@@ -797,7 +804,7 @@ export default function AdminSeasonPage() {
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <Label>Markets</Label>
-                    <p className="text-xs text-gray-500">Select which markets to include in this season.</p>
+                    <p className="text-xs text-text-muted">Select which markets to include in this season.</p>
                   </div>
                   {(marketsError || (!marketsLoading && availableMarkets.length === 0)) && (
                     <Button
@@ -813,7 +820,7 @@ export default function AdminSeasonPage() {
                 </div>
 
                 {marketsLoading ? (
-                  <p className="text-sm text-gray-500">Loading markets...</p>
+                  <p className="text-sm text-text-muted">Loading markets...</p>
                 ) : marketsError ? (
                   <AlertBanner variant="error">
                     {marketsError || 'Markets could not be loaded. Please refresh and try again.'}
@@ -833,7 +840,7 @@ export default function AdminSeasonPage() {
                       {availableMarkets.map((market) => (
                         <label
                           key={market.id}
-                          className="flex items-center space-x-2 p-2 border rounded-lg cursor-pointer hover:bg-gray-50"
+                          className="flex items-center space-x-2 p-2 border rounded-lg cursor-pointer hover:bg-surface-secondary"
                         >
                           <Checkbox
                             checked={formData.marketIds.includes(market.id)}
@@ -851,7 +858,7 @@ export default function AdminSeasonPage() {
                       ))}
                     </div>
                     {formData.marketIds.length === 0 && (
-                      <p className="text-xs text-amber-600">Select at least one market before creating the season.</p>
+                      <p className="text-xs text-warning">Select at least one market before creating the season.</p>
                     )}
                   </>
                 )}
@@ -882,55 +889,57 @@ export default function AdminSeasonPage() {
                 const isLiveDataCleared = isArchived && (s._count?.teams ?? 0) === 0
 
                 return (
-                  <div key={s.id} className="p-4 border rounded-lg bg-gray-50 space-y-4">
+                  <div key={s.id} className="p-4 border rounded-lg bg-surface-secondary space-y-4">
                   <div className="flex items-center justify-between">
                     <div>
                       <div className="flex items-center space-x-2">
-                        <p className="font-medium text-gray-900">{s.name}</p>
-                        <span className="text-xs px-2 py-1 rounded-full bg-blue-100 text-blue-700">
+                        <p className="font-medium text-foreground">{s.name}</p>
+                        <span className="text-xs px-2 py-1 rounded-full bg-info-background text-info">
                           COMPLETED
                         </span>
                         {isArchived && (
-                          <span className="text-xs px-2 py-1 rounded-full bg-green-100 text-green-700">
+                          <span className="text-xs px-2 py-1 rounded-full bg-success-background text-success">
                             Archived
                           </span>
                         )}
                         {archive?.status === 'RUNNING' && (
-                          <span className="text-xs px-2 py-1 rounded-full bg-amber-100 text-amber-700">
+                          <span className="text-xs px-2 py-1 rounded-full bg-warning-background text-warning">
                             Archiving
                           </span>
                         )}
                         {archive?.status === 'FAILED' && (
-                          <span className="text-xs px-2 py-1 rounded-full bg-red-100 text-red-700">
+                          <span className="text-xs px-2 py-1 rounded-full bg-error-background text-error">
                             Archive Failed
                           </span>
                         )}
                       </div>
-                      <p className="text-sm text-gray-500 mt-1">
+                      <p className="text-sm text-text-muted mt-1">
                         {new Date(s.startDate).toLocaleDateString()} - {new Date(s.endDate).toLocaleDateString()}
                       </p>
                       {archive?.status === 'FAILED' && (
-                        <p className="text-sm text-red-600 mt-2">
+                        <p className="text-sm text-error mt-2">
                           {archive?.errorMessage || 'The most recent archive attempt failed. You can retry the archive.'}
                         </p>
                       )}
                       {isLiveDataCleared && (
-                        <p className="text-sm text-emerald-700 mt-2">
+                        <p className="text-sm text-success mt-2">
                           Live data cleared. This season is now archive-only.
                         </p>
                       )}
                     </div>
                     <div className="text-right">
-                      <p className="text-sm text-gray-500">
+                      <p className="text-sm text-text-muted">
                         {s._count?.teams || 0} teams
                       </p>
-                      <p className="text-sm text-gray-500">
+                      <p className="text-sm text-text-muted">
                         {s.rounds.length} rounds
                       </p>
                     </div>
                   </div>
 
                   <div className="flex flex-wrap gap-2">
+                    <Button asChild variant="outline"><Link href={`/recap/${s.id}`} target="_blank">View Public Recap</Link></Button>
+                    <Button variant="outline" disabled={Boolean(season)} onClick={() => applySeasonTemplate(s)}>Use as New Season Template</Button>
                     {!isArchived && (
                       <Button
                         variant="outline"
@@ -1045,7 +1054,7 @@ export default function AdminSeasonPage() {
             />
           </div>
           {wipeError && (
-            <p className="text-sm text-red-600">{wipeError}</p>
+            <p className="text-sm text-error">{wipeError}</p>
           )}
         </div>
       </ConfirmDialog>

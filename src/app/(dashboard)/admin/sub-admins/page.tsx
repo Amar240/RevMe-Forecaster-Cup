@@ -172,25 +172,25 @@ export default function SubAdminsPage() {
       <div className="space-y-6 animate-pulse">
         <div className="flex items-center justify-between">
           <div className="space-y-2">
-            <div className="h-7 bg-gray-200 rounded w-56" />
-            <div className="h-4 bg-gray-100 rounded w-80" />
+            <div className="h-7 bg-muted rounded w-56" />
+            <div className="h-4 bg-surface-secondary rounded w-80" />
           </div>
-          <div className="h-9 bg-gray-200 rounded w-32" />
+          <div className="h-9 bg-muted rounded w-32" />
         </div>
-        <div className="h-10 bg-gray-100 rounded w-full max-w-sm" />
+        <div className="h-10 bg-surface-secondary rounded w-full max-w-sm" />
         <div className="border rounded-lg overflow-hidden">
-          <div className="bg-gray-50 border-b px-4 py-3 flex gap-4">
-            <div className="h-4 bg-gray-200 rounded w-1/4" />
-            <div className="h-4 bg-gray-200 rounded w-1/4" />
-            <div className="h-4 bg-gray-200 rounded w-1/4" />
-            <div className="h-4 bg-gray-200 rounded w-1/4" />
+          <div className="bg-surface-secondary border-b px-4 py-3 flex gap-4">
+            <div className="h-4 bg-muted rounded w-1/4" />
+            <div className="h-4 bg-muted rounded w-1/4" />
+            <div className="h-4 bg-muted rounded w-1/4" />
+            <div className="h-4 bg-muted rounded w-1/4" />
           </div>
           {Array.from({ length: 5 }).map((_, i) => (
             <div key={i} className="px-4 py-3 border-b last:border-0 flex gap-4">
-              <div className="h-4 bg-gray-100 rounded w-1/3" />
-              <div className="h-4 bg-gray-100 rounded w-1/4" />
-              <div className="h-4 bg-gray-100 rounded w-1/5" />
-              <div className="h-4 bg-gray-100 rounded w-1/6" />
+              <div className="h-4 bg-surface-secondary rounded w-1/3" />
+              <div className="h-4 bg-surface-secondary rounded w-1/4" />
+              <div className="h-4 bg-surface-secondary rounded w-1/5" />
+              <div className="h-4 bg-surface-secondary rounded w-1/6" />
             </div>
           ))}
         </div>
@@ -202,8 +202,8 @@ export default function SubAdminsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Sub-Admin Management</h1>
-          <p className="text-gray-600">Create and manage sub-admin accounts with delegated permissions</p>
+          <h1 className="text-2xl font-bold text-foreground">Sub-Admin Management</h1>
+          <p className="text-text-secondary">Create and manage sub-admin accounts with delegated permissions</p>
         </div>
         <Button onClick={() => setShowForm(true)}>
           <Plus className="h-4 w-4 mr-2" /> Add Sub-Admin
@@ -242,7 +242,7 @@ export default function SubAdminsPage() {
                       />
                       <button
                         type="button"
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted"
                         onClick={() => setShowPassword(!showPassword)}
                       >
                         {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -268,17 +268,17 @@ export default function SubAdminsPage() {
                 </div>
               </div>
 
-              <div className="p-4 border rounded-lg bg-purple-50 border-purple-200">
+              <div className="p-4 border rounded-lg bg-accent-soft border-accent/30">
                 <label className="flex items-center gap-3 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={hasFullAccess}
                     onChange={(e) => setHasFullAccess(e.target.checked)}
-                    className="w-5 h-5 rounded text-purple-600"
+                    className="w-5 h-5 rounded text-accent"
                   />
                   <div>
-                    <p className="font-medium text-purple-900">Grant Full Access</p>
-                    <p className="text-sm text-purple-700">
+                    <p className="font-medium text-accent">Grant Full Access</p>
+                    <p className="text-sm text-accent">
                       This sub-admin will have all admin permissions and act as a full administrator
                     </p>
                   </div>
@@ -294,8 +294,8 @@ export default function SubAdminsPage() {
                         key={perm.name}
                         className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-colors ${
                           selectedPermissions.includes(perm.name)
-                            ? 'bg-blue-50 border-blue-300'
-                            : 'hover:bg-gray-50'
+                            ? 'bg-info-background border-info/30'
+                            : 'hover:bg-surface-secondary'
                         }`}
                       >
                         <input
@@ -341,11 +341,11 @@ export default function SubAdminsPage() {
             header: 'Permissions',
             render: (admin: SubAdmin) =>
               admin.hasFullAccess ? (
-                <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs rounded-full font-medium">
+                <span className="px-2 py-0.5 bg-accent-soft text-accent text-xs rounded-full font-medium">
                   Full Access
                 </span>
               ) : (
-                <span className="text-sm text-gray-600">
+                <span className="text-sm text-text-secondary">
                   {admin.permissions.length} permission{admin.permissions.length !== 1 ? 's' : ''}
                 </span>
               ),
@@ -362,7 +362,7 @@ export default function SubAdminsPage() {
                   variant="ghost"
                   size="sm"
                   onClick={() => setDeleteTarget(admin.id)}
-                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                  className="text-error hover:text-error hover:bg-error-background"
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>

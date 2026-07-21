@@ -1,5 +1,5 @@
 import { cookies } from 'next/headers'
-import { randomBytes } from 'crypto'
+import { createHash, randomBytes } from 'crypto'
 import { prisma } from './db'
 import bcrypt from 'bcryptjs'
 import { User, Role } from '@prisma/client'
@@ -30,6 +30,10 @@ function generateToken(): string {
   return randomBytes(32).toString('hex')
 }
 
+export function hashSessionToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex')
+}
+
 export async function createSession(userId: string): Promise<string> {
   const token = generateToken()
   const expiresAt = new Date(Date.now() + SESSION_DURATION)
@@ -37,7 +41,7 @@ export async function createSession(userId: string): Promise<string> {
   await prisma.session.create({
     data: {
       userId,
-      token,
+      token: hashSessionToken(token),
       expiresAt,
     },
   })
@@ -63,7 +67,7 @@ export async function getSession(): Promise<User | null> {
   if (!token) return null
   
   const session = await prisma.session.findUnique({
-    where: { token },
+    where: { token: hashSessionToken(token) },
   })
   
   if (!session || session.expiresAt < new Date()) {
@@ -93,7 +97,7 @@ export async function destroySession(): Promise<void> {
     .find(Boolean)
   
   if (token) {
-    await prisma.session.deleteMany({ where: { token } })
+    await prisma.session.deleteMany({ where: { token: hashSessionToken(token) } })
   }
   
   for (const cookieName of getSessionCookieNames()) {

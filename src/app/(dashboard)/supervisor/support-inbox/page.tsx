@@ -273,21 +273,21 @@ export default function SupervisorSupportInboxPage() {
                       {selectedTicket.team.name}
                     </span>
                   )}
-                  <span className="text-gray-400">{selectedTicket.category} • {getAge(selectedTicket.createdAt)}</span>
+                  <span className="text-text-muted">{selectedTicket.category} • {getAge(selectedTicket.createdAt)}</span>
                 </CardDescription>
               </div>
               {getStatusBadge(selectedTicket.status)}
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="p-4 bg-gray-50 rounded-lg border-l-4 border-gray-300">
-              <p className="text-sm font-medium text-gray-700 mb-1">
+            <div className="p-4 bg-surface-secondary rounded-lg border-l-4 border-border">
+              <p className="text-sm font-medium text-text-secondary mb-1">
                 {selectedTicket.createdBy.firstName} {selectedTicket.createdBy.lastName}
-                <span className="text-gray-400 font-normal ml-2">
+                <span className="text-text-muted font-normal ml-2">
                   {new Date(selectedTicket.createdAt).toLocaleString()}
                 </span>
               </p>
-              <p className="text-gray-600 whitespace-pre-wrap">{selectedTicket.message}</p>
+              <p className="text-text-secondary whitespace-pre-wrap">{selectedTicket.message}</p>
             </div>
 
             {selectedTicket.replies.map((reply) => {
@@ -299,24 +299,24 @@ export default function SupervisorSupportInboxPage() {
                   key={reply.id} 
                   className={`p-4 rounded-lg border-l-4 ${
                     isInternal 
-                      ? 'bg-yellow-50 border-yellow-400' 
+                      ? 'bg-warning-background border-warning/30' 
                       : isStaff 
-                        ? 'bg-blue-50 border-blue-400' 
-                        : 'bg-gray-50 border-gray-300'
+                        ? 'bg-info-background border-info/30' 
+                        : 'bg-surface-secondary border-border'
                   }`}
                 >
-                  <p className="text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
+                  <p className="text-sm font-medium text-text-secondary mb-1 flex items-center gap-2">
                     {reply.author.firstName} {reply.author.lastName}
                     {isInternal && (
-                      <span className="inline-flex items-center gap-1 text-xs text-yellow-700 bg-yellow-100 px-2 py-0.5 rounded">
+                      <span className="inline-flex items-center gap-1 text-xs text-warning bg-warning-background px-2 py-0.5 rounded">
                         <EyeOff className="h-3 w-3" /> Internal Note
                       </span>
                     )}
-                    <span className="text-gray-400 font-normal">
+                    <span className="text-text-muted font-normal">
                       {new Date(reply.createdAt).toLocaleString()}
                     </span>
                   </p>
-                  <p className="text-gray-600 whitespace-pre-wrap">{reply.message}</p>
+                  <p className="text-text-secondary whitespace-pre-wrap">{reply.message}</p>
                 </div>
               )
             })}
@@ -338,22 +338,22 @@ export default function SupervisorSupportInboxPage() {
                           {cannedResponses.map((response) => (
                             <button
                               key={response.id}
-                              className="w-full text-left px-3 py-2 hover:bg-gray-50 text-sm border-b last:border-b-0"
+                              className="w-full text-left px-3 py-2 hover:bg-surface-secondary text-sm border-b last:border-b-0"
                               onClick={() => insertCannedResponse(response)}
                             >
-                              <p className="font-medium text-gray-900">{response.title}</p>
-                              <p className="text-gray-500 text-xs truncate">{response.content}</p>
+                              <p className="font-medium text-foreground">{response.title}</p>
+                              <p className="text-text-muted text-xs truncate">{response.content}</p>
                             </button>
                           ))}
                         </div>
                       )}
                     </div>
-                    <label className="flex items-center gap-2 text-sm text-gray-600">
+                    <label className="flex items-center gap-2 text-sm text-text-secondary">
                       <input
                         type="checkbox"
                         checked={isInternalNote}
                         onChange={(e) => setIsInternalNote(e.target.checked)}
-                        className="rounded border-gray-300"
+                        className="rounded border-border"
                       />
                       <EyeOff className="h-4 w-4" />
                       Internal note (hidden from student)
@@ -380,7 +380,7 @@ export default function SupervisorSupportInboxPage() {
                     variant="outline" 
                     onClick={handleResolve}
                     disabled={submitting}
-                    className="text-green-600 hover:bg-green-50"
+                    className="text-success hover:bg-success-background"
                   >
                     <CheckCircle className="h-4 w-4 mr-2" /> Resolve
                   </Button>
@@ -388,7 +388,7 @@ export default function SupervisorSupportInboxPage() {
                     variant="outline" 
                     onClick={() => setShowEscalateModal(true)}
                     disabled={submitting}
-                    className="text-red-600 hover:bg-red-50"
+                    className="text-error hover:bg-error-background"
                   >
                     <ArrowUp className="h-4 w-4 mr-2" /> Escalate to Admin
                   </Button>
@@ -398,10 +398,10 @@ export default function SupervisorSupportInboxPage() {
 
             {selectedTicket.status === 'ESCALATED' && (
               <div className="border-t pt-4">
-                <div className="p-4 bg-red-50 rounded-lg">
-                  <p className="text-sm font-medium text-red-700">This ticket has been escalated to admin.</p>
+                <div className="p-4 bg-error-background rounded-lg">
+                  <p className="text-sm font-medium text-error">This ticket has been escalated to admin.</p>
                   {selectedTicket.escalationReason && (
-                    <p className="text-sm text-red-600 mt-1">Reason: {selectedTicket.escalationReason}</p>
+                    <p className="text-sm text-error mt-1">Reason: {selectedTicket.escalationReason}</p>
                   )}
                 </div>
               </div>
@@ -409,8 +409,8 @@ export default function SupervisorSupportInboxPage() {
 
             {selectedTicket.status === 'RESOLVED' && (
               <div className="border-t pt-4">
-                <div className="p-4 bg-green-50 rounded-lg">
-                  <p className="text-sm font-medium text-green-700">This ticket has been resolved.</p>
+                <div className="p-4 bg-success-background rounded-lg">
+                  <p className="text-sm font-medium text-success">This ticket has been resolved.</p>
                 </div>
               </div>
             )}
@@ -441,7 +441,7 @@ export default function SupervisorSupportInboxPage() {
                   <Button 
                     onClick={handleEscalate}
                     disabled={!escalationReason.trim() || submitting}
-                    className="bg-red-600 hover:bg-red-700"
+                    className="bg-error hover:bg-error"
                   >
                     {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Escalate'}
                   </Button>
@@ -457,8 +457,8 @@ export default function SupervisorSupportInboxPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Support Inbox</h1>
-        <p className="text-gray-600">Manage support tickets from your students</p>
+        <h1 className="text-2xl font-bold text-foreground">Support Inbox</h1>
+        <p className="text-text-secondary">Manage support tickets from your students</p>
       </div>
 
       <div className="flex flex-wrap gap-4">
@@ -493,9 +493,9 @@ export default function SupervisorSupportInboxPage() {
       {tickets.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center">
-            <MessageSquare className="h-12 w-12 mx-auto text-gray-400 mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No Tickets</h3>
-            <p className="text-gray-500">
+            <MessageSquare className="h-12 w-12 mx-auto text-text-muted mb-4" />
+            <h3 className="text-lg font-medium text-foreground mb-2">No Tickets</h3>
+            <p className="text-text-muted">
               {statusFilter !== 'all' || categoryFilter !== 'all' 
                 ? 'No tickets match your current filters' 
                 : 'No support tickets from your students yet'}
@@ -507,14 +507,14 @@ export default function SupervisorSupportInboxPage() {
           {tickets.map((ticket) => (
             <Card 
               key={ticket.id} 
-              className="cursor-pointer hover:border-blue-300 transition-colors" 
+              className="cursor-pointer hover:border-info/30 transition-colors" 
               onClick={() => setSelectedTicket(ticket)}
             >
               <CardContent className="py-4">
                 <div className="flex items-center justify-between">
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-gray-900 truncate">{ticket.subject}</p>
-                    <div className="flex flex-wrap items-center gap-2 text-sm text-gray-500 mt-1">
+                    <p className="font-medium text-foreground truncate">{ticket.subject}</p>
+                    <div className="flex flex-wrap items-center gap-2 text-sm text-text-muted mt-1">
                       <span className="inline-flex items-center gap-1">
                         <User className="h-3 w-3" />
                         {ticket.createdBy.firstName} {ticket.createdBy.lastName}
@@ -525,13 +525,13 @@ export default function SupervisorSupportInboxPage() {
                           {ticket.team.name}
                         </span>
                       )}
-                      <span className="px-2 py-0.5 bg-gray-100 rounded text-xs">{ticket.category}</span>
-                      <span className="text-gray-400">{getAge(ticket.createdAt)}</span>
+                      <span className="px-2 py-0.5 bg-surface-secondary rounded text-xs">{ticket.category}</span>
+                      <span className="text-text-muted">{getAge(ticket.createdAt)}</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-3 ml-4">
                     {ticket.replies.length > 0 && (
-                      <span className="text-sm text-gray-500">{ticket.replies.length} replies</span>
+                      <span className="text-sm text-text-muted">{ticket.replies.length} replies</span>
                     )}
                     {getStatusBadge(ticket.status)}
                   </div>

@@ -40,6 +40,18 @@ export interface DashboardData {
     total: number
   }
   rounds: RoundEntry[]
+  runbook: Array<{
+    id: string
+    number: number
+    timing: 'current' | 'next'
+    items: Array<{
+      key: string
+      label: string
+      detail: string
+      status: 'done' | 'pending' | 'blocked'
+      href: string
+    }>
+  }>
 }
 
 export interface RoundEntry {

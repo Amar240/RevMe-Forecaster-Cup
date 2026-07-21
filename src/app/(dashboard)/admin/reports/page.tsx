@@ -17,17 +17,20 @@ interface Supervisor {
   email: string
   teamCount: number
 }
+interface University { id: string; name: string }
 
 export default function AdminReportsPage() {
   const [supervisors, setSupervisors] = useState<Supervisor[]>([])
   const [selectedSupervisor, setSelectedSupervisor] = useState<string>('all')
+  const [universities, setUniversities] = useState<University[]>([])
+  const [selectedUniversity, setSelectedUniversity] = useState('all')
   const [loading, setLoading] = useState(true)
   const [downloading, setDownloading] = useState(false)
 
   useEffect(() => {
     async function fetchSupervisors() {
       try {
-        const res = await csrfFetch('/api/admin/users?role=SUPERVISOR')
+        const [res, universityRes] = await Promise.all([csrfFetch('/api/admin/users?role=SUPERVISOR'), csrfFetch('/api/admin/universities')])
         if (res.ok) {
           const data = await res.json()
           setSupervisors(
@@ -40,6 +43,7 @@ export default function AdminReportsPage() {
             })) || []
           )
         }
+        if (universityRes.ok) setUniversities((await universityRes.json()).universities || [])
       } catch (error) {
         clientLogger.error('Failed to fetch supervisors:', error)
         toast.error('Failed to load supervisors')
@@ -58,6 +62,7 @@ export default function AdminReportsPage() {
       if (selectedSupervisor !== 'all') {
         params.set('supervisorId', selectedSupervisor)
       }
+      if (selectedUniversity !== 'all') params.set('universityId', selectedUniversity)
 
       const res = await csrfFetch(`/api/admin/reports/instructor?${params}`)
       if (!res.ok) {
@@ -121,6 +126,7 @@ export default function AdminReportsPage() {
                 </SelectContent>
               </Select>
             </div>
+            <div><label className="mb-1.5 block text-sm font-medium text-text-secondary">University</label><Select value={selectedUniversity} onValueChange={setSelectedUniversity}><SelectTrigger><SelectValue placeholder="Select university" /></SelectTrigger><SelectContent><SelectItem value="all">All Universities</SelectItem>{universities.map((university) => <SelectItem key={university.id} value={university.id}>{university.name}</SelectItem>)}</SelectContent></Select></div>
             <Button onClick={handleDownload} disabled={downloading} className="w-full">
               <Download className="mr-2 h-4 w-4" />
               {downloading ? 'Generating...' : 'Download CSV Report'}

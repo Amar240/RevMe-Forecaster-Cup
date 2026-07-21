@@ -98,7 +98,7 @@ export default function AdminAuditLogsPage() {
       render: (row: AuditLog) => (
         <div>
           <p className="text-sm font-medium">{new Date(row.createdAt).toLocaleDateString()}</p>
-          <p className="text-xs text-gray-500">{new Date(row.createdAt).toLocaleTimeString()}</p>
+          <p className="text-xs text-text-muted">{new Date(row.createdAt).toLocaleTimeString()}</p>
         </div>
       ),
     },
@@ -117,14 +117,14 @@ export default function AdminAuditLogsPage() {
       header: 'Entity Type',
       sortable: true,
       render: (row: AuditLog) => (
-        <span className="text-sm text-gray-600">{row.entityType}</span>
+        <span className="text-sm text-text-secondary">{row.entityType}</span>
       ),
     },
     {
       key: 'entityId',
       header: 'Entity ID',
       render: (row: AuditLog) => (
-        <span className="font-mono text-xs text-gray-500">{row.entityId || '-'}</span>
+        <span className="font-mono text-xs text-text-muted">{row.entityId || '-'}</span>
       ),
     },
     {
@@ -134,7 +134,7 @@ export default function AdminAuditLogsPage() {
       render: (row: AuditLog) => (
         <div>
           <p className="text-sm font-medium">{row.userName || 'System'}</p>
-          <p className="text-xs text-gray-500">{row.userEmail || '-'}</p>
+          <p className="text-xs text-text-muted">{row.userEmail || '-'}</p>
         </div>
       ),
     },
@@ -142,7 +142,7 @@ export default function AdminAuditLogsPage() {
       key: 'details',
       header: 'Details',
       render: (row: AuditLog) => (
-        <span className="text-xs text-gray-500 max-w-xs truncate block">
+        <span className="text-xs text-text-muted max-w-xs truncate block">
           {row.details ? JSON.stringify(row.details).substring(0, 50) + '...' : '-'}
         </span>
       ),
@@ -151,7 +151,7 @@ export default function AdminAuditLogsPage() {
       key: 'ipAddress',
       header: 'IP Address',
       render: (row: AuditLog) => (
-        <span className="font-mono text-xs text-gray-500">{row.ipAddress || '-'}</span>
+        <span className="font-mono text-xs text-text-muted">{row.ipAddress || '-'}</span>
       ),
     },
   ]
@@ -161,8 +161,8 @@ export default function AdminAuditLogsPage() {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div className="space-y-2">
-            <div className="h-8 w-32 bg-gray-200 rounded animate-pulse" />
-            <div className="h-4 w-48 bg-gray-200 rounded animate-pulse" />
+            <div className="h-8 w-32 bg-muted rounded animate-pulse" />
+            <div className="h-4 w-48 bg-muted rounded animate-pulse" />
           </div>
         </div>
         <Card>
@@ -188,8 +188,8 @@ export default function AdminAuditLogsPage() {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div className="space-y-2">
-            <div className="h-8 w-32 bg-gray-200 rounded animate-pulse" />
-            <div className="h-4 w-48 bg-gray-200 rounded animate-pulse" />
+            <div className="h-8 w-32 bg-muted rounded animate-pulse" />
+            <div className="h-4 w-48 bg-muted rounded animate-pulse" />
           </div>
         </div>
         <Card>
@@ -221,38 +221,38 @@ export default function AdminAuditLogsPage() {
       </div>
 
       <div className="grid md:grid-cols-3 gap-4">
-        <Card className="bg-gradient-to-br from-purple-50 to-white border-purple-100">
+        <Card className="bg-gradient-to-br from-purple-50 to-white border-accent/30">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Total Logs</p>
-                <p className="text-3xl font-bold text-purple-600">{totalLogs}</p>
+                <p className="text-sm text-text-secondary">Total Logs</p>
+                <p className="text-3xl font-bold text-accent">{totalLogs}</p>
               </div>
-              <FileText className="h-8 w-8 text-purple-200" />
+              <FileText className="h-8 w-8 text-accent" />
             </div>
           </CardContent>
         </Card>
-        <Card className="bg-gradient-to-br from-blue-50 to-white border-blue-100">
+        <Card className="bg-gradient-to-br from-blue-50 to-white border-info/30">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Today</p>
-                <p className="text-3xl font-bold text-blue-600">
+                <p className="text-sm text-text-secondary">Today</p>
+                <p className="text-3xl font-bold text-info">
                   {logs.filter(l => new Date(l.createdAt).toDateString() === new Date().toDateString()).length}
                 </p>
               </div>
-              <FileText className="h-8 w-8 text-blue-200" />
+              <FileText className="h-8 w-8 text-info" />
             </div>
           </CardContent>
         </Card>
-        <Card className="bg-gradient-to-br from-green-50 to-white border-green-100">
+        <Card className="bg-gradient-to-br from-green-50 to-white border-success/30">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Unique Actions</p>
-                <p className="text-3xl font-bold text-green-600">{uniqueActions.length}</p>
+                <p className="text-sm text-text-secondary">Unique Actions</p>
+                <p className="text-3xl font-bold text-success">{uniqueActions.length}</p>
               </div>
-              <FileText className="h-8 w-8 text-green-200" />
+              <FileText className="h-8 w-8 text-success" />
             </div>
           </CardContent>
         </Card>

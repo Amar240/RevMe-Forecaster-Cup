@@ -54,7 +54,7 @@ export function ActualUnlockDialog({
           <Button
             onClick={onUnlock}
             disabled={actionLoading === roundId || unlockReason.trim().length < 5}
-            className="flex-1 bg-amber-600 hover:bg-amber-700"
+            className="flex-1 bg-warning hover:bg-warning"
           >
             {actionLoading === roundId ? 'Unlocking...' : 'Unlock'}
           </Button>

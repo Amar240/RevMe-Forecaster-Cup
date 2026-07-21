@@ -68,6 +68,7 @@ function makeDashboardData(overrides: Partial<DashboardData> = {}): DashboardDat
         isScored: false,
       },
     ],
+    runbook: [],
     ...overrides,
   }
 }
