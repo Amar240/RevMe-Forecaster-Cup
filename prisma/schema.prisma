@@ -81,6 +81,17 @@ enum ArchiveStatus {
   FAILED
 }
 
+enum ImportBatchRole {
+  SUPERVISOR
+  ADMIN
+}
+
+enum ImportBatchStatus {
+  PREVIEWED
+  CONFIRMED
+  COMPLETED
+}
+
 enum WarningType {
   MISSED_SUBMISSION
   LATE_SUBMISSION
@@ -165,6 +176,7 @@ model User {
   marketInfosUpdated       MarketInfo[]     @relation("MarketInfoUpdatedBy")
   marketRoundUpdates       MarketRoundUpdate[] @relation("MarketRoundUpdateCreator")
   seasonArchives           SeasonArchive[]
+  importBatches            ImportBatch[]
   emailVerificationCodes   EmailVerificationCode[]
 
   @@index([email])
@@ -195,6 +207,7 @@ model University {
 
   users User[]
   teams Team[]
+  importBatches ImportBatch[]
 
   @@index([normalizedName])
 }
@@ -226,12 +239,15 @@ model Team {
   predictionErrors PredictionError[]
   scoreAggregates  ScoreAggregate[]
   supportTickets   SupportTicket[] @relation("TicketTeam")
+  importBatchId    String?
+  importBatch      ImportBatch? @relation(fields: [importBatchId], references: [id])
 
   @@index([supervisorId])
   @@index([universityId])
   @@index([status])
   @@index([seasonId])
   @@index([externalTeamId])
+  @@index([importBatchId])
   @@unique([seasonId, externalTeamId])
 }
 
@@ -269,6 +285,30 @@ model Season {
   marketInfos        MarketInfo[]
   marketRoundUpdates MarketRoundUpdate[]
   archives           SeasonArchive[]
+  importBatches       ImportBatch[]
+}
+
+model ImportBatch {
+  id           String            @id @default(cuid())
+  uploaderId   String
+  uploader     User              @relation(fields: [uploaderId], references: [id])
+  uploaderRole ImportBatchRole
+  seasonId     String
+  season       Season            @relation(fields: [seasonId], references: [id])
+  universityId String?
+  university   University?       @relation(fields: [universityId], references: [id])
+  fileName     String
+  fileHash     String
+  s3Key        String?
+  status       ImportBatchStatus @default(PREVIEWED)
+  summaryJson  Json
+  createdAt    DateTime          @default(now())
+  teams        Team[]
+
+  @@index([uploaderId])
+  @@index([seasonId])
+  @@index([universityId])
+  @@index([status])
 }
 
 model SeasonArchive {
@@ -587,6 +627,7 @@ model EmailDispatch {
   success     Boolean  @default(true)
 
   @@unique([type, recipientId, roundId])
+  @@unique([type, recipientId, teamId])
   @@index([type, roundId])
 }
 

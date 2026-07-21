@@ -33,6 +33,7 @@ interface ImportSeasonOption {
 }
 
 interface PreviewResponse {
+  batchId: string
   fileName: string
   season: {
     id: string
@@ -167,6 +168,7 @@ export default function AdminTeamsImportPage() {
       const formData = new FormData()
       formData.append('seasonId', selectedSeasonId)
       formData.append('file', selectedFile)
+      if (preview?.batchId) formData.append('batchId', preview.batchId)
 
       const res = await csrfFetch('/api/admin/teams/import/confirm', {
         method: 'POST',

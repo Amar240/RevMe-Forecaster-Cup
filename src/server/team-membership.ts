@@ -21,10 +21,16 @@ export type TeamMembershipConflict = Prisma.TeamMemberGetPayload<{
 export function getSeasonScopedMembershipFilter(args: {
   seasonId?: string | null
   excludeTeamId?: string
+  excludeTeamStatuses?: Array<'REJECTED' | 'ARCHIVED'>
 }): Prisma.TeamMemberWhereInput {
   return {
     ...(args.excludeTeamId ? { teamId: { not: args.excludeTeamId } } : {}),
-    ...(args.seasonId ? { team: { seasonId: args.seasonId } } : {}),
+    ...(args.seasonId || args.excludeTeamStatuses?.length
+      ? { team: {
+          ...(args.seasonId ? { seasonId: args.seasonId } : {}),
+          ...(args.excludeTeamStatuses?.length ? { status: { notIn: args.excludeTeamStatuses } } : {}),
+        } }
+      : {}),
   }
 }
 
@@ -99,6 +105,7 @@ export async function getSupervisorTeamCountsForSeason(args: {
   supervisorIds: string[]
   seasonId?: string | null
   db?: DbClient
+  excludeStatuses?: Array<'REJECTED' | 'ARCHIVED'>
 }) {
   const db = args.db ?? prisma
   const supervisorIds = Array.from(new Set(args.supervisorIds.filter(Boolean)))
@@ -112,6 +119,7 @@ export async function getSupervisorTeamCountsForSeason(args: {
     where: {
       supervisorId: { in: supervisorIds },
       ...(args.seasonId ? { seasonId: args.seasonId } : {}),
+      ...(args.excludeStatuses?.length ? { status: { notIn: args.excludeStatuses } } : {}),
     },
     _count: { _all: true },
   })

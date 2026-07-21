@@ -29,6 +29,8 @@ function normalizePerson(person: TeamImportPersonInput): TeamImportPersonInput {
     email: normalizeEmail(person.email),
     firstName: person.firstName.trim(),
     lastName: person.lastName.trim(),
+    provenance: person.provenance,
+    warnings: person.warnings ?? [],
   }
 }
 
@@ -82,11 +84,14 @@ function buildPersonSummary(
 
   return {
     email: person.email,
+    firstName: person.firstName,
+    lastName: person.lastName,
     displayName,
     uploadedName,
     matchedName: nameMismatch ? matchedNameValue : null,
     nameMismatch,
     willBeCreated,
+    provenance: person.provenance ?? 'Unknown location',
   }
 }
 
@@ -113,16 +118,18 @@ function buildNameMismatchWarning(args: {
   const matchedName = formatName(args.matchedUser.firstName, args.matchedUser.lastName) ?? args.matchedUser.email
   const label = args.personType === 'submitter' ? 'Submitter' : 'Member'
 
-  return `${label} name mismatch for ${args.person.email}: uploaded "${uploadedName}", matched system user "${matchedName}".`
+  return `${args.person.provenance ?? label}: ${label} name mismatch for ${args.person.email}: uploaded "${uploadedName}", matched system user "${matchedName}".`
 }
 
 export async function validateTeamImport(args: {
   seasonId: string
   parsedFile: ParsedTeamImportFile
+  mode?: 'admin' | 'supervisor'
+  actor?: { id: string; email: string; universityId: string | null }
 }): Promise<TeamImportValidationResult> {
   const season = await prisma.season.findUnique({
     where: { id: args.seasonId },
-    select: { id: true, name: true, status: true },
+    select: { id: true, name: true, status: true, registrationOpen: true },
   })
 
   if (!season) {
@@ -131,6 +138,12 @@ export async function validateTeamImport(args: {
 
   if (season.status === 'COMPLETED') {
     throw new ApiError('Completed seasons cannot accept team imports', 422, 'INVALID_INPUT')
+  }
+  if (args.mode === 'supervisor' && !season.registrationOpen) {
+    throw new ApiError('Team registration is not open for this season', 422, 'INVALID_INPUT')
+  }
+  if (args.mode === 'supervisor' && (!args.actor || !args.actor.universityId)) {
+    throw new ApiError('Supervisor must belong to a university', 422, 'INVALID_INPUT')
   }
 
   const rows = args.parsedFile.rows
@@ -255,7 +268,7 @@ export async function validateTeamImport(args: {
     ? await prisma.teamMember.findMany({
         where: {
           userId: { in: studentUserIds },
-          ...getSeasonScopedMembershipFilter({ seasonId: season.id }),
+          ...getSeasonScopedMembershipFilter({ seasonId: season.id, excludeTeamStatuses: ['REJECTED', 'ARCHIVED'] }),
         },
         select: {
           userId: true,
@@ -281,7 +294,24 @@ export async function validateTeamImport(args: {
     seasonId: season.id,
     supervisorIds: supervisors.map((supervisor) => supervisor.id),
     db: prisma,
+    excludeStatuses: ['REJECTED', 'ARCHIVED'],
   })
+
+  const emailLocations = new Map<string, string[]>()
+  for (const row of rows) {
+    for (const person of [row.submitter, ...row.members]) {
+      const email = normalizeEmail(person.email)
+      if (!email) continue
+      const locations = emailLocations.get(email) ?? []
+      locations.push(person.provenance ?? `Row ${row.rowNumber}`)
+      emailLocations.set(email, locations)
+    }
+  }
+
+  const fileWarnings = [...args.parsedFile.warnings]
+  if (args.parsedFile.metadata.instructorEmail && args.actor?.email && normalizeEmail(args.parsedFile.metadata.instructorEmail) !== normalizeEmail(args.actor.email)) {
+    fileWarnings.push(`Workbook instructor email ${args.parsedFile.metadata.instructorEmail} differs from uploader ${normalizeEmail(args.actor.email)}.`)
+  }
 
   const acceptedSupervisorBatchCounts = new Map<string, number>()
   const previewRows: TeamImportPreviewRow[] = []
@@ -294,52 +324,58 @@ export async function validateTeamImport(args: {
     const externalTeamId = row.teamExternalId.trim()
     const finalTeamName = row.teamName.trim() || externalTeamId
     const submitter = normalizePerson(row.submitter)
-    const members = row.members.map(normalizePerson).filter((member) => Boolean(member.email))
+    const members = row.members.map(normalizePerson).filter((member) => Boolean(member.email || member.firstName || member.lastName))
     const submitterEmail = submitter.email
-    const allPeople = [submitter, ...members].filter((person) => Boolean(person.email))
-    const allEmails = allPeople.map((person) => person.email)
+    const allPeople = [submitter, ...members]
+    const peopleWithEmail = allPeople.filter((person) => Boolean(person.email))
+    const allEmails = peopleWithEmail.map((person) => person.email)
     const memberCount = new Set(allEmails).size
+    const teamProvenance = `Row ${row.rowNumber} · Team`
+    warnings.push(...allPeople.flatMap((person) => person.warnings ?? []))
 
     let university: (typeof allUniversities)[number] | null = null
     let resolvedSupervisor: (typeof supervisors)[number] | null = null
     let autoMatchedSupervisor = false
 
     if (!normalizedUniversityName) {
-      errors.push('University is required')
+      errors.push(`${teamProvenance}: University is required`)
     } else {
       university = universityByKey.get(normalizeUniversityName(normalizedUniversityName)) ?? null
       if (!university) {
-        errors.push('University could not be matched to an existing university')
+        errors.push(`${teamProvenance}: University could not be matched to an existing university`)
       }
+    }
+    if (args.mode === 'supervisor' && university && university.id !== args.actor?.universityId) {
+      errors.push(`${teamProvenance}: Institution must match the uploading supervisor's university`)
     }
 
     if (!externalTeamId) {
-      errors.push('Team identifier is required')
+      errors.push(`${teamProvenance}: Team identifier is required`)
     } else {
       if ((batchExternalIdCounts.get(externalTeamId) ?? 0) > 1) {
-        errors.push('Team identifier appears more than once in this import file')
+        errors.push(`${teamProvenance}: Team identifier appears more than once in this import file`)
       }
       if (existingExternalIdSet.has(externalTeamId)) {
-        errors.push('Team identifier is already used in the selected season')
+        errors.push(`${teamProvenance}: Team identifier is already used in the selected season`)
       }
     }
 
     if (!finalTeamName) {
-      errors.push('Team name is required')
+      errors.push(`${teamProvenance}: Team name is required`)
     } else {
       const teamNameKey = normalizeTeamNameKey(finalTeamName)
       if ((batchTeamNameCounts.get(teamNameKey) ?? 0) > 1) {
-        errors.push('Team name appears more than once in this import file')
+        errors.push(`${teamProvenance}: Team name appears more than once in this import file`)
       }
       if (existingTeamNameSet.has(teamNameKey)) {
-        errors.push('A team with this name already exists in this season')
+        errors.push(`${teamProvenance}: A team with this name already exists in this season`)
       }
     }
 
     if (!submitterEmail) {
-      errors.push('Submitter email is required')
+      errors.push(`${submitter.provenance}: Submitter email is required`)
     } else if (!emailSchema.safeParse(submitterEmail).success) {
-      errors.push('Submitter email is not valid')
+      errors.push(`${submitter.provenance}: Submitter email is not valid`)
     }
 
     const duplicateEmails = Array.from(
@@ -353,15 +389,22 @@ export async function validateTeamImport(args: {
     )
 
     if (duplicateEmails.length > 0) {
-      errors.push(`Duplicate team member email(s): ${duplicateEmails.join(', ')}`)
+      errors.push(`${teamProvenance}: Duplicate team member email(s): ${duplicateEmails.join(', ')}`)
+    }
+
+    for (const person of peopleWithEmail) {
+      const locations = emailLocations.get(person.email) ?? []
+      if (locations.length > 1) {
+        errors.push(`${person.provenance}: ${person.email} also appears at ${locations.filter((location) => location !== person.provenance).join(', ')}`)
+      }
     }
 
     if (memberCount === 0) {
-      errors.push('At least one student email is required')
+      errors.push(`${teamProvenance}: At least one student email is required`)
     }
 
     if (memberCount > MAX_TEAM_MEMBERS) {
-      errors.push(`Teams can include at most ${MAX_TEAM_MEMBERS} students`)
+      errors.push(`${teamProvenance}: Teams can include at most ${MAX_TEAM_MEMBERS} students`)
     }
 
     const studentEntries = allPeople.map((person, index) => ({
@@ -373,8 +416,12 @@ export async function validateTeamImport(args: {
     const peopleToProvision: TeamImportPersonToProvision[] = []
 
     for (const entry of studentEntries) {
+      if (!entry.person.email) {
+        if (entry.personType === 'member') errors.push(`${entry.person.provenance}: Student email is required`)
+        continue
+      }
       if (!emailSchema.safeParse(entry.person.email).success) {
-        errors.push(`Student email is not valid: ${entry.person.email}`)
+        errors.push(`${entry.person.provenance}: Student email is not valid: ${entry.person.email}`)
         continue
       }
 
@@ -392,12 +439,12 @@ export async function validateTeamImport(args: {
       }
 
       if (entry.user.role !== 'STUDENT') {
-        errors.push(`User is not a student: ${entry.person.email}`)
+        errors.push(`${entry.person.provenance}: User is not a student: ${entry.person.email}`)
         continue
       }
 
       if (!entry.user.universityId || !sameUniversity(university, entry.user.university)) {
-        errors.push(`Student must belong to the same university as the team: ${entry.person.email}`)
+        errors.push(`${entry.person.provenance}: Student must belong to the same university as the team: ${entry.person.email}`)
       }
 
       if (getUploadedNameMismatch(entry.person, entry.user)) {
@@ -413,20 +460,23 @@ export async function validateTeamImport(args: {
       const existingMembership = existingMembershipsByUserId.get(entry.user.id)
       if (existingMembership) {
         errors.push(
-          `Student is already assigned to ${existingMembership.team.name} (${existingMembership.team.displayId}) in the selected season`
+          `${entry.person.provenance}: Student is already assigned to ${existingMembership.team.name} (${existingMembership.team.displayId}) in the selected season`
         )
       }
     }
 
-    const supervisorEmail = normalizeEmail(row.supervisorEmail)
-    if (supervisorEmail) {
+    const supervisorEmail = args.mode === 'supervisor' ? normalizeEmail(args.actor?.email) : normalizeEmail(row.supervisorEmail)
+    if (args.mode === 'supervisor') {
+      resolvedSupervisor = supervisors.find((supervisor) => supervisor.id === args.actor?.id) ?? null
+      if (!resolvedSupervisor) errors.push(`${teamProvenance}: Uploading supervisor account could not be resolved`)
+    } else if (supervisorEmail) {
       const supervisorUser = usersByEmail.get(supervisorEmail) ?? null
       if (!supervisorUser) {
-        errors.push(`Supervisor not found: ${supervisorEmail}`)
+        errors.push(`${teamProvenance}: Supervisor not found: ${supervisorEmail}`)
       } else if (supervisorUser.role !== 'SUPERVISOR') {
-        errors.push(`User is not a supervisor: ${supervisorEmail}`)
+        errors.push(`${teamProvenance}: User is not a supervisor: ${supervisorEmail}`)
       } else if (!supervisorUser.universityId || !sameUniversity(university, supervisorUser.university)) {
-        errors.push(`Supervisor must belong to the same university as the team: ${supervisorEmail}`)
+        errors.push(`${teamProvenance}: Supervisor must belong to the same university as the team: ${supervisorEmail}`)
       } else {
         resolvedSupervisor = supervisorUser
       }
@@ -439,19 +489,19 @@ export async function validateTeamImport(args: {
         resolvedSupervisor = matchingSupervisors[0]
         autoMatchedSupervisor = true
       } else if (matchingSupervisors.length === 0) {
-        errors.push('Legacy row could not be matched to a supervisor for that university')
+        errors.push(`${teamProvenance}: Legacy row could not be matched to a supervisor for that university`)
       } else {
-        errors.push('Legacy row matches multiple supervisors for that university')
+        errors.push(`${teamProvenance}: Legacy row matches multiple supervisors for that university`)
       }
     } else {
-      errors.push('Supervisor email is required')
+      errors.push(`${teamProvenance}: Supervisor email is required`)
     }
 
     if (resolvedSupervisor) {
       const existingCount = existingSupervisorTeamCounts.get(resolvedSupervisor.id) ?? 0
       const batchCount = acceptedSupervisorBatchCounts.get(resolvedSupervisor.id) ?? 0
       if (existingCount + batchCount >= SUPERVISOR_TEAM_CAP) {
-        errors.push(`Supervisor already manages the maximum of ${SUPERVISOR_TEAM_CAP} teams`)
+        errors.push(`${teamProvenance}: Supervisor already manages the maximum of ${SUPERVISOR_TEAM_CAP} teams`)
       }
     }
 
@@ -523,10 +573,6 @@ export async function validateTeamImport(args: {
       continue
     }
 
-    if (!submitterUser || submitterUser.role !== 'STUDENT') {
-      continue
-    }
-
     const resolvedMemberIds: string[] = []
     for (const entry of studentEntries) {
       if (entry.user && entry.user.role === 'STUDENT') {
@@ -552,7 +598,7 @@ export async function validateTeamImport(args: {
       seasonId: season.id,
       universityId: university.id,
       supervisorId: resolvedSupervisor.id,
-      submitterUserId: submitterUser.id,
+      submitterUserId: submitterUser?.role === 'STUDENT' ? submitterUser.id : null,
       memberUserIds: resolvedMemberIds,
       peopleToProvision,
     })
@@ -575,6 +621,9 @@ export async function validateTeamImport(args: {
       fileType: args.parsedFile.fileType,
       detectedFormats: args.parsedFile.detectedFormats,
       accountsToProvision,
+      existingAccounts: new Set(validRows.flatMap((row) => [row.submitterUserId, ...row.memberUserIds].filter(Boolean))).size,
     },
+    metadata: args.parsedFile.metadata,
+    fileWarnings,
   }
 }

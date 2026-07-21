@@ -43,8 +43,11 @@ export interface PendingTeam {
   university: { name: string }
   members: { user: { firstName: string; lastName: string; email: string } }[]
   season: { name: string } | null
+  importBatch?: { id: string; fileName: string; createdAt: string; status: string } | null
 }
 
 export interface PendingTeamsResponse {
   teams: PendingTeam[]
+  groups: Array<{ batch: { id: string; fileName: string; createdAt: string; status: string }; teams: PendingTeam[] }>
+  unbatched: PendingTeam[]
 }

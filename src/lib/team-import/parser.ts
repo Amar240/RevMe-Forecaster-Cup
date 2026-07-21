@@ -5,7 +5,9 @@ import type {
   ParsedTeamImportRow,
   TeamImportFileType,
   TeamImportPersonInput,
+  TeamImportMetadata,
 } from './types'
+import { cleanImportCell, TEAM_IMPORT_EXAMPLE_MARKER } from './overrides'
 
 const XML_ENTITY_MAP: Record<string, string> = {
   amp: '&',
@@ -40,7 +42,7 @@ function decodeXmlText(value: string) {
 }
 
 function normalizeWhitespace(value: string | null | undefined) {
-  return (value ?? '').replace(/\r/g, '').trim()
+  return cleanImportCell(value)
 }
 
 function canonicalizeHeader(value: string | null | undefined) {
@@ -54,12 +56,20 @@ function isBlankRow(row: string[]) {
 function createPersonInput(
   email: string | undefined,
   firstName: string | undefined,
-  lastName: string | undefined
+  lastName: string | undefined,
+  provenance: string
 ): TeamImportPersonInput {
+  const cleanFirstName = normalizeWhitespace(firstName)
+  const cleanLastName = normalizeWhitespace(lastName)
+  const warnings = !cleanLastName && /^(?:\p{Lu}[\p{L}'’-]*)(?:\s+\p{Lu}[\p{L}'’-]*)+/u.test(cleanFirstName)
+    ? [`${provenance}: possible glued name — check split`]
+    : []
   return {
-    email: email ?? '',
-    firstName: firstName ?? '',
-    lastName: lastName ?? '',
+    email: normalizeWhitespace(email).toLowerCase(),
+    firstName: cleanFirstName,
+    lastName: cleanLastName,
+    provenance,
+    warnings,
   }
 }
 
@@ -111,19 +121,39 @@ function parseCsv(content: string) {
   return rows.map((row) => row.map((cell) => normalizeWhitespace(cell)))
 }
 
-function findLegacyHeaderRow(rows: string[][]) {
-  return rows.findIndex((row, index) => {
+type LegacyHeaderLocation = {
+  groupHeaderRowIndex: number
+  subHeaderRowIndex: number
+  dataStartRowIndex: number
+}
+
+function findLegacyHeader(rows: string[][]): LegacyHeaderLocation | null {
+  for (let index = 0; index < Math.min(rows.length, 20); index += 1) {
+    const row = rows[index] ?? []
     const canonical = row.map(canonicalizeHeader)
     const nextRow = rows[index + 1] ?? []
     const nextCanonical = nextRow.map(canonicalizeHeader)
     const emailHeaderCount = nextCanonical.filter((value) => value === 'email').length
 
-    return canonical.includes('institution') && canonical.includes('teamid') && emailHeaderCount >= 1
-  })
+    if (canonical.includes('institution') && canonical.includes('teamid') && emailHeaderCount >= 1) {
+      return { groupHeaderRowIndex: index, subHeaderRowIndex: index + 1, dataStartRowIndex: index + 2 }
+    }
+
+    const sameRowEmailHeaderCount = canonical.filter((value) => value === 'email').length
+    if (canonical.includes('institution') && canonical.includes('teamid') && sameRowEmailHeaderCount >= 1) {
+      return {
+        groupHeaderRowIndex: Math.max(0, index - 1),
+        subHeaderRowIndex: index,
+        dataStartRowIndex: index + 1,
+      }
+    }
+  }
+
+  return null
 }
 
 function findNormalizedHeaderRow(rows: string[][]) {
-  return rows.findIndex((row) => {
+  return rows.slice(0, 20).findIndex((row) => {
     const canonical = row.map(canonicalizeHeader)
     const matches =
       Number(canonical.some((value) => normalizedHeaderAliases.universityName.has(value))) +
@@ -136,6 +166,29 @@ function findNormalizedHeaderRow(rows: string[][]) {
   })
 }
 
+function harvestMetadata(rows: string[][]): TeamImportMetadata {
+  const metadata: TeamImportMetadata = {
+    universityName: null,
+    instructorName: null,
+    instructorEmail: null,
+    declaredTeamCount: null,
+  }
+
+  for (const row of rows.slice(0, 20)) {
+    const label = canonicalizeHeader(row[1])
+    const value = normalizeWhitespace(row[2])
+    if (!label || !value) continue
+    if ((label === 'youruniversity' || label === 'university' || label === 'institution') && !metadata.universityName) metadata.universityName = value
+    else if (label === 'instructorsname' || label === 'instructorname') metadata.instructorName = value
+    else if (label === 'instructorsemail' || label === 'instructoremail') metadata.instructorEmail = value.toLowerCase()
+    else if (label.startsWith('numberofteams')) {
+      const parsed = Number(value)
+      metadata.declaredTeamCount = Number.isInteger(parsed) && parsed >= 0 ? parsed : null
+    }
+  }
+  return metadata
+}
+
 function getHeaderIndex(row: string[], aliases: Set<string>) {
   return row.findIndex((value) => aliases.has(canonicalizeHeader(value)))
 }
@@ -144,8 +197,10 @@ function getCellValue(row: string[], index: number) {
   return index >= 0 ? row[index] ?? '' : ''
 }
 
-function hasEmail(person: TeamImportPersonInput) {
-  return Boolean(person.email.trim())
+function hasPersonValue(person: TeamImportPersonInput) { return Boolean(person.email || person.firstName || person.lastName) }
+function isExampleRow(row: string[]) { return row.some((value) => normalizeWhitespace(value) === TEAM_IMPORT_EXAMPLE_MARKER) }
+function isTeamRow(row: string[], institutionIndex: number, externalTeamIdIndex: number, emailIndexes: number[]) {
+  return Boolean(normalizeWhitespace(getCellValue(row, institutionIndex)) || normalizeWhitespace(getCellValue(row, externalTeamIdIndex)) || emailIndexes.some((index) => normalizeWhitespace(getCellValue(row, index))))
 }
 
 function getLegacyPersonColumns(subHeaderRow: string[]) {
@@ -176,17 +231,23 @@ function getLegacyPersonColumns(subHeaderRow: string[]) {
 }
 
 function parseLegacyWorkbookRows(rows: string[][]) {
-  const headerRowIndex = findLegacyHeaderRow(rows)
-  if (headerRowIndex === -1) {
+  const header = findLegacyHeader(rows)
+  if (!header) {
     throw new ApiError('Unsupported workbook format', 422, 'INVALID_INPUT')
   }
 
-  const groupHeaderRow = rows[headerRowIndex] ?? []
-  const subHeaderRow = rows[headerRowIndex + 1] ?? []
+  const groupHeaderRow = rows[header.groupHeaderRowIndex] ?? []
+  const subHeaderRow = rows[header.subHeaderRowIndex] ?? []
 
-  const institutionIndex = getHeaderIndex(groupHeaderRow, normalizedHeaderAliases.universityName)
-  const externalTeamIdIndex = getHeaderIndex(groupHeaderRow, normalizedHeaderAliases.teamExternalId)
-  const teamNameIndex = getHeaderIndex(groupHeaderRow, normalizedHeaderAliases.teamName)
+  const institutionIndex = getHeaderIndex(groupHeaderRow, normalizedHeaderAliases.universityName) >= 0
+    ? getHeaderIndex(groupHeaderRow, normalizedHeaderAliases.universityName)
+    : getHeaderIndex(subHeaderRow, normalizedHeaderAliases.universityName)
+  const externalTeamIdIndex = getHeaderIndex(groupHeaderRow, normalizedHeaderAliases.teamExternalId) >= 0
+    ? getHeaderIndex(groupHeaderRow, normalizedHeaderAliases.teamExternalId)
+    : getHeaderIndex(subHeaderRow, normalizedHeaderAliases.teamExternalId)
+  const teamNameIndex = getHeaderIndex(groupHeaderRow, normalizedHeaderAliases.teamName) >= 0
+    ? getHeaderIndex(groupHeaderRow, normalizedHeaderAliases.teamName)
+    : getHeaderIndex(subHeaderRow, normalizedHeaderAliases.teamName)
 
   const personColumns = getLegacyPersonColumns(subHeaderRow)
 
@@ -197,9 +258,9 @@ function parseLegacyWorkbookRows(rows: string[][]) {
   let ignoredEmptyRows = 0
   const parsedRows: ParsedTeamImportRow[] = []
 
-  for (let rowIndex = headerRowIndex + 2; rowIndex < rows.length; rowIndex += 1) {
+  for (let rowIndex = header.dataStartRowIndex; rowIndex < rows.length; rowIndex += 1) {
     const row = rows[rowIndex] ?? []
-    if (isBlankRow(row)) {
+    if (isBlankRow(row) || isExampleRow(row) || !isTeamRow(row, institutionIndex, externalTeamIdIndex, [personColumns.submitter.emailIndex, ...personColumns.members.map((person) => person.emailIndex)])) {
       ignoredEmptyRows += 1
       continue
     }
@@ -207,18 +268,20 @@ function parseLegacyWorkbookRows(rows: string[][]) {
     const submitter = createPersonInput(
       getCellValue(row, personColumns.submitter.emailIndex),
       getCellValue(row, personColumns.submitter.firstNameIndex),
-      getCellValue(row, personColumns.submitter.lastNameIndex)
+      getCellValue(row, personColumns.submitter.lastNameIndex),
+      `Row ${rowIndex + 1} · Corresponding Team Member`
     )
 
     const members = personColumns.members
-      .map((person) =>
+      .map((person, memberIndex) =>
         createPersonInput(
           getCellValue(row, person.emailIndex),
           getCellValue(row, person.firstNameIndex),
-          getCellValue(row, person.lastNameIndex)
+          getCellValue(row, person.lastNameIndex),
+          `Row ${rowIndex + 1} · Additional Member ${memberIndex + 1}`
         )
       )
-      .filter(hasEmail)
+      .filter(hasPersonValue)
 
     parsedRows.push({
       rowNumber: rowIndex + 1,
@@ -298,7 +361,7 @@ function parseNormalizedRows(rows: string[][]) {
 
   for (let rowIndex = headerRowIndex + 1; rowIndex < rows.length; rowIndex += 1) {
     const row = rows[rowIndex] ?? []
-    if (isBlankRow(row)) {
+    if (isBlankRow(row) || isExampleRow(row) || !isTeamRow(row, institutionIndex, externalTeamIdIndex, [submitterEmailIndex, ...memberIndexes.map((member) => member.emailIndex)])) {
       ignoredEmptyRows += 1
       continue
     }
@@ -306,18 +369,20 @@ function parseNormalizedRows(rows: string[][]) {
     const submitter = createPersonInput(
       getCellValue(row, submitterEmailIndex),
       getCellValue(row, submitterFirstNameIndex),
-      getCellValue(row, submitterLastNameIndex)
+      getCellValue(row, submitterLastNameIndex),
+      `Row ${rowIndex + 1} · Corresponding Team Member`
     )
 
     const members = memberIndexes
-      .map((member) =>
+      .map((member, memberIndex) =>
         createPersonInput(
           getCellValue(row, member.emailIndex),
           getCellValue(row, member.firstNameIndex),
-          getCellValue(row, member.lastNameIndex)
+          getCellValue(row, member.lastNameIndex),
+          `Row ${rowIndex + 1} · Additional Member ${memberIndex + 1}`
         )
       )
-      .filter(hasEmail)
+      .filter(hasPersonValue)
 
     parsedRows.push({
       rowNumber: rowIndex + 1,
@@ -338,15 +403,20 @@ function parseNormalizedRows(rows: string[][]) {
 }
 
 function parseImportedRows(fileName: string, fileType: TeamImportFileType, rows: string[][]): ParsedTeamImportFile {
-  const legacyHeaderRowIndex = fileType === 'xlsx' ? findLegacyHeaderRow(rows) : -1
+  const metadata = harvestMetadata(rows)
+  const legacyHeader = fileType === 'xlsx' ? findLegacyHeader(rows) : null
 
-  if (legacyHeaderRowIndex !== -1) {
+  if (legacyHeader) {
     const parsed = parseLegacyWorkbookRows(rows)
     return {
       fileName,
       fileType,
       detectedFormats: ['legacy'],
       ignoredEmptyRows: parsed.ignoredEmptyRows,
+      metadata,
+      warnings: metadata.declaredTeamCount !== null && metadata.declaredTeamCount !== parsed.rows.length
+        ? [`Workbook declares ${metadata.declaredTeamCount} teams but ${parsed.rows.length} team rows were parsed.`]
+        : [],
       rows: parsed.rows,
     }
   }
@@ -357,6 +427,10 @@ function parseImportedRows(fileName: string, fileType: TeamImportFileType, rows:
     fileType,
     detectedFormats: ['normalized'],
     ignoredEmptyRows: parsed.ignoredEmptyRows,
+    metadata,
+    warnings: metadata.declaredTeamCount !== null && metadata.declaredTeamCount !== parsed.rows.length
+      ? [`Workbook declares ${metadata.declaredTeamCount} teams but ${parsed.rows.length} team rows were parsed.`]
+      : [],
     rows: parsed.rows,
   }
 }
@@ -436,22 +510,28 @@ function parseSharedStrings(xml: string) {
 }
 
 function resolveFirstWorksheetPath(entries: Map<string, Buffer>) {
-  if (entries.has('xl/worksheets/sheet1.xml')) {
-    return 'xl/worksheets/sheet1.xml'
-  }
-
   const workbookXml = entries.get('xl/workbook.xml')?.toString('utf8')
   const relationshipsXml = entries.get('xl/_rels/workbook.xml.rels')?.toString('utf8')
   if (!workbookXml || !relationshipsXml) {
+    // Retain compatibility with the minimal one-sheet XLSX files accepted by
+    // the original importer and used by integrations that omit workbook rels.
+    if (entries.has('xl/worksheets/sheet1.xml')) return 'xl/worksheets/sheet1.xml'
     throw new ApiError('Workbook is missing sheet metadata', 422, 'INVALID_INPUT')
   }
 
-  const firstSheetMatch = workbookXml.match(/<sheet\b[^>]*r:id="([^"]+)"/)
-  if (!firstSheetMatch) {
+  const sheets = Array.from(workbookXml.matchAll(/<sheet\b([^>]*)\/?\s*>/g), (match) => ({
+    name: match[1].match(/\bname="([^"]+)"/)?.[1],
+    relationshipId: match[1].match(/\br:id="([^"]+)"/)?.[1],
+  })).filter((sheet): sheet is { name: string | undefined; relationshipId: string } => Boolean(sheet.relationshipId))
+  const selectedSheet = sheets.find((sheet) => sheet.name === 'Registration Form') ?? sheets[0]
+  if (!selectedSheet) {
+    if (workbookXml.includes('Registration Form') && entries.has('xl/worksheets/sheet2.xml')) {
+      return 'xl/worksheets/sheet2.xml'
+    }
     throw new ApiError('Workbook does not contain any sheets', 422, 'INVALID_INPUT')
   }
 
-  const relationshipId = firstSheetMatch[1]
+  const relationshipId = selectedSheet.relationshipId
   const relationshipMatch = relationshipsXml.match(
     new RegExp(`<Relationship\\b[^>]*Id="${relationshipId}"[^>]*Target="([^"]+)"`, 'i')
   )
@@ -472,11 +552,11 @@ function parseWorksheetRows(xml: string, sharedStrings: string[]) {
     const rowNumber = Number(match[1])
     const rowContent = match[2]
     const row: string[] = []
-    const cellMatches = rowContent.matchAll(/<c\b([^>]*)>([\s\S]*?)<\/c>|<c\b([^>]*)\/>/g)
+    const cellMatches = rowContent.matchAll(/<c\b([^>]*?)\/>|<c\b([^>]*)>([\s\S]*?)<\/c>/g)
 
     for (const cellMatch of cellMatches) {
-      const attributes = cellMatch[1] ?? cellMatch[3] ?? ''
-      const cellContent = cellMatch[2] ?? ''
+      const attributes = cellMatch[1] ?? cellMatch[2] ?? ''
+      const cellContent = cellMatch[3] ?? ''
       const referenceMatch = attributes.match(/\br="([A-Z]+\d+)"/)
       if (!referenceMatch) {
         continue

@@ -67,6 +67,7 @@ const supervisorNav: NavItem[] = [
   { name: 'Join Requests', href: '/supervisor/requests', icon: Inbox, badgeKey: 'joinRequests' },
   { name: 'Support Inbox', href: '/supervisor/support-inbox', icon: Inbox },
   { name: 'My Teams', href: '/teams', icon: Users },
+  { name: 'Import Teams', href: '/supervisor/import', icon: Upload },
   { name: 'Reports', href: '/reports', icon: FileText },
   { name: 'Leaderboards', href: '/leaderboards', icon: Trophy },
   { name: 'Scores', href: '/scores', icon: Target },

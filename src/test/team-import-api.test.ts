@@ -102,7 +102,7 @@ describe('team import API', () => {
     const csv = buildCsv([
       ['universityName', 'teamExternalId', 'teamName', 'supervisorEmail', 'submitterEmail', 'member1Email'],
       ['API Import University', 'api-001', 'Preview Team', 'supervisor@team-import-api.test', 'submitter@team-import-api.test', 'teammate@team-import-api.test'],
-      ['API Import University', 'api-002', 'Invalid Team', 'supervisor@team-import-api.test', 'assigned@team-import-api.test', 'teammate@team-import-api.test'],
+      ['API Import University', 'api-002', 'Invalid Team', 'supervisor@team-import-api.test', 'assigned@team-import-api.test', 'invalid-row-member@team-import-api.test'],
     ])
 
     const res = await previewTeamImport(
@@ -244,7 +244,7 @@ describe('team import API', () => {
     const csv = buildCsv([
       ['universityName', 'teamExternalId', 'teamName', 'supervisorEmail', 'submitterEmail', 'member1Email'],
       ['API Import University', 'api-301', 'Created Team', 'supervisor@team-import-api.test', 'submitter@team-import-api.test', 'teammate@team-import-api.test'],
-      ['API Import University', 'api-302', 'Skipped Team', 'supervisor@team-import-api.test', 'assigned@team-import-api.test', 'teammate@team-import-api.test'],
+      ['API Import University', 'api-302', 'Skipped Team', 'supervisor@team-import-api.test', 'assigned@team-import-api.test', 'skipped-row-member@team-import-api.test'],
     ])
 
     const res = await confirmTeamImport(

@@ -2,20 +2,35 @@ import type { SeasonStatus } from '@prisma/client'
 
 export type TeamImportFileType = 'csv' | 'xlsx'
 export type TeamImportFormat = 'legacy' | 'normalized'
+export type TeamImportColumnLabel = 'Team' | 'Corresponding Team Member' | 'Additional Member 1' | 'Additional Member 2' | 'Additional Member 3' | 'Additional Member 4'
+export type TeamImportOverrideField = 'teamName' | 'teamExternalId' | 'firstName' | 'lastName' | 'email'
+export interface TeamImportOverride { rowNumber: number; columnLabel: TeamImportColumnLabel; field: TeamImportOverrideField; original: string; value: string }
 
 export interface TeamImportPersonInput {
   email: string
   firstName: string
   lastName: string
+  provenance?: string
+  warnings?: string[]
+}
+
+export interface TeamImportMetadata {
+  universityName: string | null
+  instructorName: string | null
+  instructorEmail: string | null
+  declaredTeamCount: number | null
 }
 
 export interface TeamImportPersonSummary {
   email: string
+  firstName: string
+  lastName: string
   displayName: string
   uploadedName: string | null
   matchedName: string | null
   nameMismatch: boolean
   willBeCreated: boolean
+  provenance: string
 }
 
 export interface ParsedTeamImportRow {
@@ -34,6 +49,8 @@ export interface ParsedTeamImportFile {
   fileType: TeamImportFileType
   detectedFormats: TeamImportFormat[]
   ignoredEmptyRows: number
+  metadata: TeamImportMetadata
+  warnings: string[]
   rows: ParsedTeamImportRow[]
 }
 
@@ -65,6 +82,7 @@ export interface TeamImportPreviewSummary {
   fileType: TeamImportFileType
   detectedFormats: TeamImportFormat[]
   accountsToProvision: number
+  existingAccounts: number
 }
 
 export interface TeamImportSeasonSummary {
@@ -96,6 +114,8 @@ export interface TeamImportValidationResult {
   rows: TeamImportPreviewRow[]
   validRows: ValidatedTeamImportRow[]
   summary: TeamImportPreviewSummary
+  metadata: TeamImportMetadata
+  fileWarnings: string[]
 }
 
 export interface TeamImportResultRow {

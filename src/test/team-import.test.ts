@@ -166,7 +166,7 @@ describe('team import parser and validation', () => {
       teamName: 'Revenue Makers',
       supervisorEmail: 'SUPERVISOR@IMPORT.TEST',
       submitter: {
-        email: 'Submitter@Import.Test',
+        email: 'submitter@import.test',
         firstName: 'Sam',
         lastName: 'Submitter',
       },
@@ -197,7 +197,7 @@ describe('team import parser and validation', () => {
     expect(parsed.rows[0].members[0].lastName).toBe('Member')
   })
 
-  it('parses the legacy workbook layout and ignores name-only member slots without email', async () => {
+  it('parses the legacy workbook layout and retains name-only member slots for validation', async () => {
     const parsed = await parseTeamImportFile({
       fileName: 'legacy.xlsx',
       fileBuffer: buildXlsx([
@@ -232,7 +232,9 @@ describe('team import parser and validation', () => {
         },
       ],
     })
-    expect(parsed.rows[1].members).toHaveLength(0)
+    expect(parsed.rows[1].members).toEqual([
+      expect.objectContaining({ firstName: 'NameOnly', lastName: 'Member', email: '' }),
+    ])
   })
 
   it('validates fallback team name, same-university students, and same-season membership conflicts only', async () => {
@@ -287,8 +289,8 @@ describe('team import parser and validation', () => {
         [
           'universityName,teamExternalId,teamName,supervisorEmail,submitterEmail,member1Email',
           'Import University,ok-001,,supervisor@import.test,submitter@import.test,member1@import.test',
-          'Import University,ok-002,,supervisor@import.test,prior-season@import.test,member1@import.test',
-          'Import University,bad-001,,supervisor@import.test,assigned@import.test,member1@import.test',
+          'Import University,ok-002,,supervisor@import.test,prior-season@import.test,member2@import.test',
+          'Import University,bad-001,,supervisor@import.test,assigned@import.test,member3@import.test',
         ].join('\n'),
         'utf8'
       ),
