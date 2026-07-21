@@ -622,6 +622,7 @@ export async function validateTeamImport(args: {
       detectedFormats: args.parsedFile.detectedFormats,
       accountsToProvision,
       existingAccounts: new Set(validRows.flatMap((row) => [row.submitterUserId, ...row.memberUserIds].filter(Boolean))).size,
+      excludedRows: 0,
     },
     metadata: args.parsedFile.metadata,
     fileWarnings,

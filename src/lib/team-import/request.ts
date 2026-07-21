@@ -1,6 +1,7 @@
 import { ApiError } from '@/server/http'
 import { parseTeamImportOverrides } from './overrides'
 import { parseColumnMapping } from './assist'
+import { parseExcludedRowNumbers } from './exclusions'
 
 type FileLike = FormDataEntryValue & {
   name?: string
@@ -20,6 +21,7 @@ export async function readTeamImportFormData(request: Request) {
   const fileHashEntry = formData.get('fileHash')
   const overridesEntry = formData.get('overrides')
   const columnMappingEntry = formData.get('columnMapping')
+  const excludedRowsEntry = formData.get('excludedRowNumbers')
 
   if (typeof seasonIdEntry !== 'string' || !seasonIdEntry.trim()) {
     throw new ApiError('Season is required', 400, 'INVALID_INPUT')
@@ -40,5 +42,6 @@ export async function readTeamImportFormData(request: Request) {
     fileHash: typeof fileHashEntry === 'string' && fileHashEntry.trim() ? fileHashEntry.trim() : null,
     overrides: parseTeamImportOverrides(typeof overridesEntry === 'string' ? overridesEntry : null),
     columnMapping: parseColumnMapping(typeof columnMappingEntry === 'string' ? columnMappingEntry : null),
+    excludedRowNumbers: parseExcludedRowNumbers(typeof excludedRowsEntry === 'string' ? excludedRowsEntry : null),
   }
 }

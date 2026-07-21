@@ -89,6 +89,7 @@ export interface TeamImportPreviewRow {
   warnings: string[]
   warningCount: number
   errors: string[]
+  excluded?: boolean
 }
 
 export interface TeamImportPreviewSummary {
@@ -101,6 +102,7 @@ export interface TeamImportPreviewSummary {
   detectedFormats: TeamImportFormat[]
   accountsToProvision: number
   existingAccounts: number
+  excludedRows: number
 }
 
 export interface TeamImportSeasonSummary {

@@ -57,6 +57,7 @@ export async function importValidatedTeams(args: {
   validation: TeamImportValidationResult
   overrides?: TeamImportOverride[]
   columnMapping?: TeamImportColumnMapping | null
+  excludedRowNumbers?: number[]
 }): Promise<TeamImportConfirmResult> {
   const uniquePeople = new Map<string, TeamImportPersonToProvision>()
   for (const person of args.validation.validRows.flatMap((row) => row.peopleToProvision)) {
@@ -143,7 +144,7 @@ export async function importValidatedTeams(args: {
 
     const skippedRows = args.validation.rows
       .filter((row) => !row.valid)
-      .map((row) => buildResultRow(row, 'skipped', { reason: row.errors.join('; ') }))
+      .map((row) => buildResultRow(row, 'skipped', { reason: row.excluded ? 'Removed from import by supervisor' : row.errors.join('; ') }))
     const rows = [...createdRows, ...skippedRows].sort((left, right) => left.rowNumber - right.rowNumber)
     const result: TeamImportConfirmResult = {
       season: args.validation.season,
@@ -170,6 +171,7 @@ export async function importValidatedTeams(args: {
           result,
           provisionedByTeam,
           overrides: args.overrides ?? [],
+          excludedRowNumbers: args.excludedRowNumbers ?? [],
           columnMapping: args.columnMapping ?? null,
           ...(existingSummary.assist ? { assist: existingSummary.assist } : {}),
         })) as Prisma.InputJsonValue,

@@ -7,13 +7,15 @@ import { createSeasonWithRounds, createUniversity, createUser } from './fixtures
 import { POST as previewImport } from '@/app/api/supervisor/roster-import/preview/route'
 import { POST as confirmImport } from '@/app/api/supervisor/roster-import/confirm/route'
 import { GET as getHistory } from '@/app/api/supervisor/roster-import/route'
+import { POST as withdrawTeam } from '@/app/api/supervisor/roster-import/teams/[teamId]/withdraw/route'
 
-function request(url: string, file: Buffer, options: { batchId?: string; fileHash?: string; overrides?: unknown[] } = {}) {
+function request(url: string, file: Buffer, options: { batchId?: string; fileHash?: string; overrides?: unknown[]; excludedRowNumbers?: number[] } = {}) {
   const form = new FormData()
   form.append('file', new Blob([new Uint8Array(file)]), 'registration-vinuni-sample.xlsx')
   if (options.batchId) form.append('batchId', options.batchId)
   if (options.fileHash) form.append('fileHash', options.fileHash)
   form.append('overrides', JSON.stringify(options.overrides ?? []))
+  form.append('excludedRowNumbers', JSON.stringify(options.excludedRowNumbers ?? []))
   return new NextRequest(url, { method: 'POST', body: form })
 }
 
@@ -111,5 +113,33 @@ describe('supervisor roster import API', () => {
     await loginAs(supervisor.id)
     await prisma.season.updateMany({ data: { registrationOpen: false } })
     expect((await previewImport(request('http://localhost/api/supervisor/roster-import/preview', file))).status).toBe(422)
+  })
+
+  it('excludes rows before validation and confirms them as skipped', async () => {
+    const initial = await (await previewImport(request('http://localhost/api/supervisor/roster-import/preview', file))).json()
+    const removedRow = initial.rows[0].rowNumber
+    const checkedResponse = await previewImport(request('http://localhost/api/supervisor/roster-import/preview', file, { batchId: initial.batchId, fileHash: initial.fileHash, excludedRowNumbers: [removedRow] }))
+    const checked = await checkedResponse.json()
+    expect(checkedResponse.status).toBe(200)
+    expect(checked.summary).toMatchObject({ totalRows: 6, validRows: 5, invalidRows: 0, excludedRows: 1 })
+    expect(checked.rows.find((row: { rowNumber: number }) => row.rowNumber === removedRow)).toMatchObject({ excluded: true })
+
+    const confirmedResponse = await confirmImport(request('http://localhost/api/supervisor/roster-import/confirm', file, { batchId: checked.batchId, fileHash: checked.fileHash, excludedRowNumbers: [removedRow] }))
+    const confirmed = await confirmedResponse.json()
+    expect(confirmedResponse.status).toBe(200)
+    expect(confirmed.summary).toMatchObject({ teamsCreated: 5, skippedRows: 1, excludedRows: 1 })
+    expect(confirmed.rows.find((row: { rowNumber: number }) => row.rowNumber === removedRow)).toMatchObject({ status: 'skipped', reason: 'Removed from import by supervisor' })
+  })
+
+  it('withdraws only a pending team owned by the importing supervisor', async () => {
+    const preview = await (await previewImport(request('http://localhost/api/supervisor/roster-import/preview', file))).json()
+    await confirmImport(request('http://localhost/api/supervisor/roster-import/confirm', file, { batchId: preview.batchId, fileHash: preview.fileHash }))
+    const team = await prisma.team.findFirstOrThrow({ where: { importBatchId: preview.batchId } })
+    await prisma.season.updateMany({ data: { registrationOpen: false } })
+    const response = await withdrawTeam(new NextRequest(`http://localhost/api/supervisor/roster-import/teams/${team.id}/withdraw`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: 'Wrong roster row' }) }), { params: { teamId: team.id } })
+    expect(response.status).toBe(200)
+    expect(await prisma.team.findUniqueOrThrow({ where: { id: team.id } })).toMatchObject({ status: 'REJECTED', rejectionReason: 'Withdrawn by supervisor: Wrong roster row' })
+    expect(await prisma.teamMember.count({ where: { teamId: team.id } })).toBeGreaterThan(0)
+    expect(await prisma.auditLog.findFirst({ where: { entityId: team.id, action: 'IMPORTED_TEAM_WITHDRAWN' } })).toBeTruthy()
   })
 })
