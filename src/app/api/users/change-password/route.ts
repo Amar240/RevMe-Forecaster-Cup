@@ -27,6 +27,7 @@ export async function POST(request: NextRequest) {
       throw new ApiError('User not found', 404, 'NOT_FOUND')
     }
 
+    if (!fullUser.passwordHash) throw new ApiError('Set a password using password reset before changing it.', 409, 'CONFLICT')
     const valid = await verifyPassword(currentPassword, fullUser.passwordHash)
     if (!valid) {
       throw new ApiError('Current password is incorrect', 400, 'INVALID_INPUT')

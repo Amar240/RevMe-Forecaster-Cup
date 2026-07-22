@@ -11,6 +11,7 @@ import { PasswordInput } from '@/components/ui/password-input'
 import { Label } from '@/components/ui/label'
 import { AlertBanner } from '@/components/ui/alert-banner'
 import { AuthShell } from '@/components/auth/auth-shell'
+import { GoogleSignIn } from '@/components/auth/google-sign-in'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,6 +26,10 @@ function LoginPageContent() {
 
   useEffect(() => {
     setSuccess(searchParams.get('verified') === '1' ? 'Your email has been verified.' : '')
+    const oauthError = searchParams.get('error')
+    if (oauthError === 'oauth_state') setError('Google sign-in expired or could not be verified. Please try again.')
+    if (oauthError === 'oauth_verify') setError('Google could not verify your sign-in. Please try again.')
+    if (oauthError === 'oauth_unverified_email') setError('Google has not verified that email. Sign in with your password instead.')
   }, [searchParams])
 
   useEffect(() => {
@@ -70,6 +75,7 @@ function LoginPageContent() {
   return (
     <AuthShell title="Welcome back" description="Sign in to continue to your dashboard.">
         <form onSubmit={handleSubmit} className="space-y-5">
+          <GoogleSignIn />
           {success && (
             <AlertBanner variant="success" className="shadow-none">
               {success}

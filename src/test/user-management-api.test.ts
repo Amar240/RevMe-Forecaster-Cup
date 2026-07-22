@@ -100,7 +100,7 @@ describe('admin student management', () => {
     expect(createdUser?.resetToken).toBeNull()
     expect(createdUser?.resetTokenExpiry).toBeNull()
     expect(createdUser?.rulesAcknowledgedAt).toBeTruthy()
-    expect(await verifyPassword('LocalPass123!', createdUser!.passwordHash)).toBe(true)
+    expect(await verifyPassword('LocalPass123!', createdUser!.passwordHash!)).toBe(true)
 
     const loginReq = makeRequest(`${BASE}/api/auth/login`, {
       method: 'POST',
@@ -587,7 +587,7 @@ describe('admin supervisor management', () => {
     expect(createdSupervisor?.resetToken).toBeNull()
     expect(createdSupervisor?.resetTokenExpiry).toBeNull()
     expect(createdSupervisor?.rulesAcknowledgedAt).toBeNull()
-    expect(await verifyPassword('LocalPass123!', createdSupervisor!.passwordHash)).toBe(true)
+    expect(await verifyPassword('LocalPass123!', createdSupervisor!.passwordHash!)).toBe(true)
 
     const loginReq = makeRequest(`${BASE}/api/auth/login`, {
       method: 'POST',

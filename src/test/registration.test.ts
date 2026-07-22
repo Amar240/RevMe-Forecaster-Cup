@@ -324,7 +324,7 @@ describe('Registration and auth flow', () => {
     expect(updatedUser?.resetTokenExpiry).toBeNull()
     expect(updatedUser?.emailVerified).toBe(true)
     expect(updatedUser?.emailVerifiedAt).not.toBeNull()
-    expect(await bcrypt.compare('NewPassword456!', updatedUser!.passwordHash)).toBe(true)
+    expect(await bcrypt.compare('NewPassword456!', updatedUser!.passwordHash!)).toBe(true)
   })
 
   it('returns 400 for an expired reset token', async () => {

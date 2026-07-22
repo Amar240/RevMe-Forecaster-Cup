@@ -13,6 +13,7 @@ const AUTH_PATHS = new Set([
   '/api/auth/reset-password',
   '/api/auth/verify-email',
   '/api/auth/resend-verification',
+  '/api/auth/google/complete-profile',
 ])
 const SENSITIVE_PATH_PREFIXES = [
   '/api/submissions',

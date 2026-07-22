@@ -56,6 +56,13 @@ describe('POST /api/auth/login', () => {
     expect(res.status).toBe(401)
   })
 
+  it('returns 401 for a Google-only account without invoking password verification', async () => {
+    const uni = await createUniversity()
+    await prisma.user.create({ data: { email: 'google-only@test.com', passwordHash: null, firstName: 'Google', lastName: 'Only', role: 'STUDENT', universityId: uni.id, emailVerified: true } })
+    const res = await loginHandler(makeRequest(`${BASE}/api/auth/login`, { method: 'POST', body: { email: 'google-only@test.com', password: 'anything' } }))
+    expect(res.status).toBe(401)
+  })
+
   it('returns 403 for inactive users', async () => {
     const uni = await createUniversity()
     await createUser({

@@ -137,7 +137,7 @@ enum ActualRevisionAction {
 model User {
   id                   String    @id @default(cuid())
   email                String    @unique
-  passwordHash         String
+  passwordHash         String?
   firstName            String
   lastName             String
   role                 Role      @default(STUDENT)
@@ -178,9 +178,23 @@ model User {
   seasonArchives           SeasonArchive[]
   importBatches            ImportBatch[]
   emailVerificationCodes   EmailVerificationCode[]
+  oauthAccounts             OAuthAccount[]
 
   @@index([email])
   @@index([role])
+}
+
+model OAuthAccount {
+  id                String   @id @default(cuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider          String
+  providerAccountId String
+  email             String
+  createdAt         DateTime @default(now())
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
 }
 
 model EmailVerificationCode {

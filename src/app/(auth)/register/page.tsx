@@ -13,6 +13,7 @@ import { AlertBanner } from '@/components/ui/alert-banner'
 import { AuthShell } from '@/components/auth/auth-shell'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { COUNTRIES } from '@/lib/countries'
+import { GoogleSignIn } from '@/components/auth/google-sign-in'
 
 export const dynamic = 'force-dynamic'
 
@@ -129,6 +130,7 @@ export default function RegisterPage() {
   return (
     <AuthShell title="Create your account" description="Register to start your competition profile.">
         <form onSubmit={handleSubmit} className="space-y-5">
+          <GoogleSignIn />
           {error && (
             <AlertBanner variant="error" className="shadow-none">
               {error}

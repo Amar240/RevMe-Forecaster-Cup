@@ -17,3 +17,10 @@ export async function getCurrentSession(): Promise<SessionResponse | null> {
   if (res.status === 401) return null
   return parseJson<SessionResponse>(res)
 }
+
+export async function disconnectGoogle() {
+  const response = await csrfFetch('/api/users/oauth/google', { method: 'DELETE' })
+  const data = await response.json()
+  if (!response.ok) throw new Error(data.message || 'Failed to disconnect Google')
+  return data
+}

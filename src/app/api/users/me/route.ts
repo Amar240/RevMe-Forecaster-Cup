@@ -21,19 +21,19 @@ export async function GET() {
       const fullUser = await prisma.user.findUnique({
         where: { id: user!.id },
         include: {
-          university: true,
+          university: true, oauthAccounts: { where: { provider: 'GOOGLE' }, select: { email: true } },
         },
       })
 
       return jsonOk({
-        user: fullUser ? { ...fullUser, teamMemberships: [] } : null,
+        user: fullUser ? { ...fullUser, passwordHash: undefined, oauthAccounts: undefined, teamMemberships: [], loginMethods: { hasPassword: Boolean(fullUser.passwordHash), google: { connected: Boolean(fullUser.oauthAccounts[0]), email: fullUser.oauthAccounts[0]?.email ?? null } } } : null,
       })
     }
 
     const fullUser = await prisma.user.findUnique({
       where: { id: user!.id },
       include: {
-        university: true,
+        university: true, oauthAccounts: { where: { provider: 'GOOGLE' }, select: { email: true } },
         teamMemberships: {
           where: { team: { seasonId: operationalSeason.id } },
           include: {
@@ -45,7 +45,7 @@ export async function GET() {
       },
     })
 
-    return jsonOk({ user: fullUser })
+    return jsonOk({ user: fullUser ? { ...fullUser, passwordHash: undefined, oauthAccounts: undefined, loginMethods: { hasPassword: Boolean(fullUser.passwordHash), google: { connected: Boolean(fullUser.oauthAccounts[0]), email: fullUser.oauthAccounts[0]?.email ?? null } } } : null })
   } catch (error) {
     return jsonError(error, 'Failed to get user')
   }

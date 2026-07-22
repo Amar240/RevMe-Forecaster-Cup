@@ -5,45 +5,9 @@ import { sendEmailVerificationEmail } from '@/lib/email'
 import { jsonOk, jsonError, parseJson, ApiError } from '@/server/http'
 import { issueEmailVerificationCode, normalizeVerificationEmail } from '@/server/email-verification'
 import { resolveOrReusePendingUniversity } from '@/server/universities'
-import { z } from 'zod'
+import { registerSchema } from '@/server/registration-schema'
 
 export const dynamic = 'force-dynamic'
-
-const registerSchema = z.object({
-  email: z.string().trim().email(),
-  password: z.string().min(8),
-  firstName: z.string().trim().min(1),
-  lastName: z.string().trim().min(1),
-  role: z.enum(['STUDENT', 'SUPERVISOR']),
-  universitySelectionMode: z.enum(['EXISTING', 'OTHER']).default('EXISTING'),
-  universityId: z.string().trim().min(1).optional(),
-  universityName: z.string().trim().min(1).optional(),
-  country: z.string().trim().min(1).optional(),
-}).superRefine((data, ctx) => {
-  if (data.universitySelectionMode === 'EXISTING' && !data.universityId) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['universityId'],
-      message: 'University is required',
-    })
-  }
-
-  if (data.universitySelectionMode === 'OTHER' && !data.universityName) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['universityName'],
-      message: 'University name is required',
-    })
-  }
-
-  if (data.universitySelectionMode === 'OTHER' && !data.country) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['country'],
-      message: 'Country is required',
-    })
-  }
-})
 
 export async function POST(request: NextRequest) {
   try {

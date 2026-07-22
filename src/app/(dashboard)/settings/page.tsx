@@ -12,6 +12,8 @@ import { PasswordInput } from '@/components/ui/password-input'
 import { Pencil, Check, X, Users, Download, User, Shield, FileText } from 'lucide-react'
 import { PageLoader } from '@/components/ui/page-loader'
 import { toast } from 'sonner'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { disconnectGoogle } from '@/features/auth/api'
 
 interface UserData {
   id: string
@@ -29,6 +31,7 @@ interface UserData {
       supervisor: { firstName: string; lastName: string }
     }
   }>
+  loginMethods: { hasPassword: boolean; google: { connected: boolean; email: string | null } }
 }
 
 export default function SettingsPage() {
@@ -45,6 +48,8 @@ export default function SettingsPage() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [changingPassword, setChangingPassword] = useState(false)
   const [passwordMessage, setPasswordMessage] = useState('')
+  const [disconnectOpen, setDisconnectOpen] = useState(false)
+  const [disconnecting, setDisconnecting] = useState(false)
 
   useEffect(() => {
     fetchUser()
@@ -159,6 +164,8 @@ export default function SettingsPage() {
       toast.error('Failed to download data')
     }
   }
+
+  const handleDisconnectGoogle = async () => { setDisconnecting(true); try { await disconnectGoogle(); setUser((current) => current ? { ...current, loginMethods: { ...current.loginMethods, google: { connected: false, email: null } } } : current); setDisconnectOpen(false); toast.success('Google disconnected') } catch (error) { toast.error(error instanceof Error ? error.message : 'Failed to disconnect Google') } finally { setDisconnecting(false) } }
 
   if (loading) {
     return <PageLoader message="Loading settings..." />
@@ -324,7 +331,7 @@ export default function SettingsPage() {
       )}
 
       {activeTab === 'security' && (
-        <Card>
+        <div className="space-y-6"><Card>
           <CardHeader>
             <CardTitle>Change Password</CardTitle>
             <CardDescription>Update your password to keep your account secure</CardDescription>
@@ -366,8 +373,9 @@ export default function SettingsPage() {
               </Button>
             </form>
           </CardContent>
-        </Card>
+        </Card><Card><CardHeader><CardTitle>Connected accounts</CardTitle><CardDescription>Manage external sign-in methods.</CardDescription></CardHeader><CardContent>{user.loginMethods.google.connected ? <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-medium">Connected: Google</p><p className="text-sm text-text-secondary">{user.loginMethods.google.email}</p></div><div><Button variant="outline" disabled={!user.loginMethods.hasPassword} onClick={() => setDisconnectOpen(true)}>Disconnect Google</Button>{!user.loginMethods.hasPassword && <p className="mt-2 max-w-xs text-xs text-text-muted">Set a password using password reset before disconnecting your only sign-in method.</p>}</div></div> : <p className="text-sm text-text-secondary">No Google account connected.</p>}</CardContent></Card></div>
       )}
+      <ConfirmDialog open={disconnectOpen} onOpenChange={setDisconnectOpen} title="Disconnect Google?" description="You will continue signing in with your RevME password." confirmLabel="Disconnect" loading={disconnecting} onConfirm={handleDisconnectGoogle}/>
 
       {activeTab === 'account' && (
         <>
