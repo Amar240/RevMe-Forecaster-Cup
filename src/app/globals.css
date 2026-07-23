@@ -409,3 +409,128 @@
   font-family: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
   font-variant-numeric: tabular-nums;
 }
+
+/* ============================================================
+   Premium landing utilities
+   ============================================================ */
+
+/* Gradient brand text (navy -> data blue) */
+.text-gradient-brand {
+  background-image: linear-gradient(120deg, var(--primary) 0%, #3b82f6 55%, var(--accent) 130%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.dark .text-gradient-brand {
+  background-image: linear-gradient(120deg, #7aa7df 0%, #93c5fd 55%, var(--accent) 130%);
+}
+
+/* Subtle blueprint grid background (for hero / dark bands) */
+.bg-grid {
+  background-image:
+    linear-gradient(to right, rgba(31, 78, 140, 0.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(31, 78, 140, 0.06) 1px, transparent 1px);
+  background-size: 44px 44px;
+}
+
+.bg-grid-dark {
+  background-image:
+    linear-gradient(to right, rgba(148, 197, 253, 0.08) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(148, 197, 253, 0.08) 1px, transparent 1px);
+  background-size: 44px 44px;
+}
+
+/* Radial mask so grid fades at edges */
+.mask-radial-fade {
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, #000 40%, transparent 100%);
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, #000 40%, transparent 100%);
+}
+
+/* Premium glow */
+.shadow-glow {
+  box-shadow: 0 24px 60px -20px rgba(31, 78, 140, 0.35), 0 8px 24px -12px rgba(31, 78, 140, 0.25);
+}
+
+.shadow-glow-gold {
+  box-shadow: 0 24px 60px -20px rgba(138, 101, 31, 0.4);
+}
+
+/* Gradient hairline border wrapper */
+.gradient-border {
+  position: relative;
+  background-clip: padding-box;
+}
+.gradient-border::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(31, 78, 140, 0.45), rgba(59, 130, 246, 0.15) 45%, rgba(200, 155, 60, 0.35));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* Marquee (logo / university ticker) */
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.animate-marquee {
+  animation: marquee 34s linear infinite;
+}
+.marquee-mask {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 12%, #000 88%, transparent);
+  mask-image: linear-gradient(to right, transparent, #000 12%, #000 88%, transparent);
+}
+
+/* Float + pulse (referenced by tailwind.config animations) */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50% { opacity: 0.9; transform: scale(1.06); }
+}
+@keyframes drift-1 { 0%,100% { transform: translate(0,0); } 50% { transform: translate(18px,-14px); } }
+@keyframes drift-2 { 0%,100% { transform: translate(0,0); } 50% { transform: translate(-16px,12px); } }
+@keyframes drift-3 { 0%,100% { transform: translate(0,0); } 50% { transform: translate(10px,16px); } }
+
+/* Live status dot */
+@keyframes live-ping {
+  0% { transform: scale(1); opacity: 0.7; }
+  75%, 100% { transform: scale(2.2); opacity: 0; }
+}
+.live-ping::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: currentColor;
+  animation: live-ping 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+/* Sparkline draw-in */
+@keyframes dash-in {
+  from { stroke-dashoffset: var(--dash-len, 600); }
+  to { stroke-dashoffset: 0; }
+}
+.animate-draw {
+  stroke-dasharray: var(--dash-len, 600);
+  animation: dash-in 1.6s ease-out forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-marquee,
+  .animate-float,
+  .animate-float-slow,
+  .animate-pulse-glow,
+  .animate-draw,
+  .live-ping::before {
+    animation: none !important;
+  }
+}

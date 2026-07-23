@@ -3,6 +3,23 @@ import { PrismaClient } from '@prisma/client'
 export const prisma = new PrismaClient()
 
 export async function ensureTestSchema() {
+  await prisma.$executeRawUnsafe(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'ImportAssistMode') THEN
+        CREATE TYPE "ImportAssistMode" AS ENUM ('DISABLED', 'ON_DEMAND');
+      END IF;
+    END
+    $$;
+  `)
+  const seasonColumns = await prisma.$queryRaw<{ column_name: string }[]>`
+    SELECT column_name FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'Season'
+  `
+  if (!seasonColumns.some((column) => column.column_name === 'importAssistMode')) {
+    await prisma.$executeRawUnsafe('ALTER TABLE "Season" ADD COLUMN "importAssistMode" "ImportAssistMode" NOT NULL DEFAULT \'DISABLED\'')
+  }
+
   const columns = await prisma.$queryRaw<{ column_name: string }[]>`
     SELECT column_name
     FROM information_schema.columns

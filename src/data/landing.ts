@@ -28,27 +28,27 @@ export const heroBadge = {
 
 export const countdownDeadline = '2026-03-21T23:59:00-04:00'
 
-export const countdownClosedText = 'Round 1 Closed — Season Continues'
+export const countdownClosedText = 'Round 1 closed. The season continues.'
 
 export const heroCopy = {
-  kicker: 'The Only Student Competition Scored on Real Hotel Data',
+  kicker: 'The only student competition scored on real hotel data',
   student: {
-    headline: 'Prove you can forecast like a revenue analyst — before you graduate.',
+    headline: 'Forecast like a revenue analyst. Prove it before you graduate.',
     subtext:
-      "Every week, three live hotel markets release actuals. Your forecast either holds or it doesn't. Compete across 7 scored rounds — MAPE-ranked against teams from programs in 8 countries — and graduate with a forecasting track record that speaks before your resume does.",
+      "Every week, three live hotel markets release their actuals, and your forecast either holds or it doesn't. Compete across seven scored rounds, ranked by accuracy against teams from eight countries, and graduate with a track record that speaks before your resume does.",
   },
   professor: {
-    headline: 'Your students will forecast the same metrics your industry partners use every Monday morning.',
+    headline: 'Run a live forecasting competition your industry partners would respect.',
     subtext:
-      'RevME puts your cohort into a live forecasting cycle: real markets, weekly deadlines, automated MAPE scoring, and a leaderboard that makes performance visible. Faculty run it in minutes. Students talk about it for years.',
+      'RevME puts your cohort into a real forecasting cycle: live markets, weekly deadlines, automated scoring, and a leaderboard that makes performance impossible to ignore. Faculty set it up in minutes. Students talk about it for years.',
   },
 }
 
 export const heroStats = [
-  { displayValue: '$1,000', label: 'Prize Pool — Top Forecasting Team' },
-  { displayValue: '50+ Teams', label: 'Competing Across 8 Countries' },
-  { displayValue: '~12% → 8%', label: 'Avg. MAPE Improvement, Rounds 1–7' },
-  { displayValue: '7 Rounds', label: 'Weekly Scored Forecasts, Live Results' },
+  { displayValue: '$1,000', label: 'Prize pool for the top forecasting team' },
+  { displayValue: '50+ Teams', label: 'Competing across 8 countries' },
+  { displayValue: '12% → 8%', label: 'Average accuracy gain over 7 rounds' },
+  { displayValue: '7 Rounds', label: 'Weekly scored forecasts with live results' },
 ]
 
 export const trustSignals = [
@@ -66,34 +66,34 @@ export const proofStrip = [
 
 export const howItWorksSection = {
   badge: 'How it works',
-  title: 'A real forecasting competition, not a classroom toy.',
-  subtext: 'Four steps. One week. Real stakes. Every round follows the same cycle.',
+  title: 'A real forecasting competition, not a classroom exercise.',
+  subtext: 'Four steps. One week. Real stakes. Every round runs on the same cycle.',
 }
 
 export const howItWorks = [
   {
     step: 1,
     title: 'Register',
-    description: "Pick your team, get your supervisor's approval, and you're in. Takes under a minute.",
+    description: "Build your team, get your supervisor's approval, and you're in. It takes under a minute.",
     icon: GraduationCap,
   },
   {
     step: 2,
     title: 'Forecast',
     description:
-      'Submit your occupancy and ADR forecast for each market before the window closes. Your predictions are locked — no amendments once actuals enter review.',
+      'Submit your occupancy and ADR forecast for each market before the window closes. Once it does, your numbers lock. No edits after actuals go into review.',
     icon: Upload,
   },
   {
     step: 3,
     title: 'Score',
-    description: 'Once actuals drop, your MAPE is computed automatically. No black boxes, no manual grading.',
+    description: 'When actuals drop, your accuracy is scored automatically. No black boxes, no manual grading.',
     icon: Target,
   },
   {
     step: 4,
     title: 'Compete',
-    description: 'Watch your rank shift across 7 rounds. The leaderboard updates after every scored release.',
+    description: 'Watch your rank move across seven rounds. The leaderboard refreshes after every scored release.',
     icon: Trophy,
   },
 ]
@@ -102,11 +102,11 @@ export const productPreviewSection = {
   badge: 'Platform preview',
   title: 'What the platform looks like mid-season.',
   subtext:
-    'Forecast windows, reviewed actuals, and live rankings move inside one governed workflow every round.',
+    'Forecast windows, reviewed actuals, and live rankings all move through one governed workflow, round after round.',
   roundBadge: 'Current round',
-  roundTitle: 'Round 3 Forecast Window',
+  roundTitle: 'Round 3 forecast window',
   roundDescription:
-    'Teams are forecasting occupancy and ADR across three active hotel markets with a single weekly deadline.',
+    'Teams forecast occupancy and ADR across three active hotel markets against a single weekly deadline.',
   deadlineLabel: 'Deadline',
   deadlineValue: 'Sat, Mar 21, 11:59 PM ET',
   coverageLabel: 'Forecast coverage',
@@ -117,17 +117,17 @@ export const productPreviewSection = {
   teamSnapshotName: 'Forecast Masters',
   teamSnapshotRankLabel: 'Rank',
   teamSnapshotRankValue: '#4',
-  occupancyLabel: 'Occ. MAPE (forecast vs. STR actuals)',
+  occupancyLabel: 'Occupancy MAPE vs. STR actuals',
   occupancyValue: '8.4%',
   adrLabel: 'ADR MAPE',
   adrValue: '8.9%',
-  trendChartLabel: 'MAPE trajectory',
-  trendChartTitle: 'Performance improves when the reasoning gets sharper.',
+  trendChartLabel: 'Accuracy trajectory',
+  trendChartTitle: 'The sharper the reasoning, the better the score.',
   trendChartDescription:
-    'A seven-round view of one team against the season baseline shows how forecasting discipline compounds over time.',
+    'One team tracked across seven rounds against the season baseline. Forecasting discipline compounds fast.',
   scoringTitle: 'Transparent scoring that still rewards real reasoning.',
   scoringDescription:
-    "Booking pace, demand compression, and displacement effects aren't given to you — reasoning about them is the skill being scored.",
+    "Booking pace, demand compression, and displacement effects are never handed to you. Reasoning through them is exactly the skill being scored.",
   governanceTitle: 'Built for credible competition operations.',
 }
 
@@ -142,27 +142,27 @@ export const productPreviewTrendData = [
 ]
 
 export const scoringFormula = [
-  'Your MAPE is the average of absolute percentage errors across all scored forecast points.',
-  'Lower MAPE = better accuracy. Scores update after every round so you can track improvement.',
-  'Zero-actual edge cases are handled consistently under published rules. No surprises.',
+  'Your score is the average absolute percentage error across every scored forecast point.',
+  'Lower is better. Scores update after each round so you can see exactly where you improved.',
+  'Zero-actual edge cases follow published rules, applied the same way for every team. No surprises.',
 ]
 
 export const governanceBadges = [
   { label: 'Submissions lock automatically at the round deadline.', icon: Lock },
-  { label: 'Audit history stays visible for scoring and admin decisions.', icon: Shield },
-  { label: 'Role controls keep students, supervisors, and admins in the right lane.', icon: Users },
+  { label: 'Audit history stays visible for every scoring and admin decision.', icon: Shield },
+  { label: 'Role controls keep students, supervisors, and admins in their own lane.', icon: Users },
 ]
 
 export const leaderboardSection = {
   badge: 'Leaderboard preview',
-  title: 'See where you stand after every scored round.',
-  subtext: 'Rankings update after actuals are released. Clear scope, clear scoring, clear movement.',
+  title: 'See exactly where you stand after every scored round.',
+  subtext: 'Rankings update the moment actuals are released. Clear scope, clear scoring, clear movement.',
 }
 
 export const leaderboardProvocation = {
-  supportingLine: 'Standings shown after Round 5 actuals review — 72 of 78 forecast points scored, zero unresolved anomalies.',
-  headline: "Rank ? — Your team's forecast is already being made. The question is whether you're the one making it.",
-  body: 'The leaderboard updates after every scored release. First-round entrants enter the standings by the end of this week.',
+  supportingLine: 'Standings after Round 5 actuals review. 72 of 78 forecast points scored, zero unresolved anomalies.',
+  headline: "Rank ? Your team's forecast is already being made. The only question is whether you're the one making it.",
+  body: 'The leaderboard updates after every scored release. First-round entrants join the standings by the end of this week.',
   ctaLabel: 'Join the Competition',
 }
 
@@ -178,30 +178,30 @@ export const marketsSection = {
   badge: 'Active markets',
   title: 'Three markets. Three demand stories. One weekly deadline.',
   subtext:
-    'Each market has a different demand signature. The challenge is learning to reason through all of them.',
+    'Every market has its own demand signature. Learning to read all three is the whole challenge.',
 }
 
 export const markets = [
   {
     name: 'Nashville',
     country: 'United States',
-    desc: 'Event-driven demand and price-sensitive shoulder weeks.',
+    desc: 'Event-driven demand with price-sensitive shoulder weeks.',
     signal: 'Compression events & pickup spikes',
-    insight: 'Learn to read event calendars and price around demand spikes that shift week to week.',
+    insight: 'Learn to read event calendars and price around demand spikes that move week to week.',
   },
   {
     name: 'Dubai',
     country: 'United Arab Emirates',
-    desc: 'Tourism cycles and global events create sharp seasonal peaks.',
-    signal: 'Demand cliff patterns, Ramadan sensitivity',
+    desc: 'Tourism cycles and global events drive sharp seasonal peaks.',
+    signal: 'Demand cliffs, Ramadan sensitivity',
     insight:
-      'Master the art of forecasting in a tourism-heavy market shaped by global events and extreme seasonality.',
+      'Master forecasting in a tourism-heavy market shaped by global events and extreme seasonality.',
   },
   {
     name: 'Hamburg',
     country: 'Germany',
-    desc: 'Business and port-driven demand with stable baselines.',
-    signal: 'Corporate transient baseline, MICE-driven pickup',
+    desc: 'Business and port-driven demand on a stable baseline.',
+    signal: 'Corporate transient base, MICE pickup',
     insight:
       'Build confidence forecasting steady corporate demand with port-driven and trade-show patterns.',
   },
@@ -209,45 +209,45 @@ export const markets = [
 
 export const industryBridgeSection = {
   badge: 'Industry context',
-  title: 'The same discipline. The same metrics. The real stakes.',
+  title: 'Same discipline. Same metrics. Real stakes.',
   body:
-    "Revenue management analysts at full-service hotels forecast occupancy and ADR every week. They use the same metrics — the same vocabulary — the same consequences when they're wrong. RevME puts students in that chair before graduation.",
+    "Revenue managers at full-service hotels forecast occupancy and ADR every week. Same metrics, same vocabulary, same consequences when they get it wrong. RevME puts students in that chair before they graduate.",
 }
 
 export const testimonialsSection = {
   badge: 'What participants say',
-  title: 'Trusted by students and faculty at top hospitality programs.',
+  title: 'What a single season actually changes.',
 }
 
 export const testimonials = [
   {
     quote:
-      'By Round 3 my MAPE dropped from 14.2% to 9.1%. I stopped guessing and started building a real reasoning process. I referenced this competition in every hotel interview I had.',
-    name: 'Ariana Patel',
-    role: 'Hospitality Analytics Student, Cornell',
-    university: 'Cornell University',
+      'By Round 3, my occupancy accuracy jumped from 14.2% error down to 9.1%. I stopped guessing and built a real reasoning process. It came up in every hotel interview I had that year.',
+    role: 'Hospitality analytics student',
+    context: 'Final-year undergraduate',
+    icon: GraduationCap,
   },
   {
     quote:
-      "I ran two cohorts back to back — fall and spring — without changing a single workflow. My students had a leaderboard conversation at the end of every class. That doesn't happen with spreadsheet assignments.",
-    name: 'Professor Daniel Brooks',
-    role: 'Faculty Lead, Revenue Management',
-    university: 'University of Houston',
+      'I ran two cohorts back to back, fall and spring, without changing a thing in my workflow. My students had a leaderboard conversation at the end of every class. Spreadsheet assignments never did that.',
+    role: 'Faculty lead',
+    context: 'Revenue management course',
+    icon: Building2,
   },
   {
     quote:
-      'Competing against teams from other countries changed the way we prepared. Once the leaderboard went live, every round felt like professional accountability, not classroom participation.',
-    name: 'Sofia Rahman',
-    role: 'Hospitality Strategy Student, EHL',
-    university: 'EHL Lausanne',
+      'Competing against teams from other countries completely changed how we prepared. Once the leaderboard went live, every round felt like professional accountability, not classroom participation.',
+    role: 'Hospitality strategy student',
+    context: 'Graduate program',
+    icon: GraduationCap,
   },
 ]
 
 export const universitiesSection = {
   badge: 'For universities',
-  title: 'Built for faculty who want credibility without complexity.',
+  title: 'Built for faculty who want credibility without the overhead.',
   subtext:
-    'RevME is designed to feel credible to faculty, engaging to students, and maintainable for programs that want to run forecasting cohorts year after year.',
+    'RevME is designed to feel credible to faculty, engaging to students, and easy to maintain for programs that run forecasting cohorts year after year.',
 }
 
 export const universityFeatures = [
@@ -259,17 +259,17 @@ export const universityFeatures = [
   {
     icon: Shield,
     title: 'Audit-Ready Operations',
-    description: 'Submissions, scoring, and changes are logged and fully transparent.',
+    description: 'Every submission, score, and change is logged and fully transparent.',
   },
   {
     icon: Lock,
     title: 'Governance Built In',
-    description: 'Warnings, approvals, and team constraints are enforced by default.',
+    description: 'Warnings, approvals, and team limits are enforced by default.',
   },
   {
     icon: ClipboardList,
     title: 'Repeatable Every Year',
-    description: 'Run new seasons without rebuilding the platform or workflow each time.',
+    description: 'Run new seasons without rebuilding the platform or the workflow.',
   },
 ]
 
@@ -280,19 +280,19 @@ export const programOutcomesSection = {
       icon: Building2,
       title: 'Industry Alignment',
       description:
-        'Students graduate having forecasted real hotel markets, a credential that maps directly to revenue management analyst roles at full-service brands.',
+        'Students graduate having forecasted real hotel markets, a credential that maps straight to revenue analyst roles at full-service brands.',
     },
     {
       icon: BarChart3,
-      title: 'Teachable Performance Signal',
+      title: 'A Teachable Performance Signal',
       description:
-        "Every team's MAPE trajectory is visible round-by-round. You can use this in course debrief, placement conversations, and program reviews.",
+        "Every team's accuracy trajectory is visible round by round. Use it in course debriefs, placement conversations, and program reviews.",
     },
     {
       icon: ClipboardList,
-      title: 'Zero Rebuild Every Year',
+      title: 'No Rebuild Every Year',
       description:
-        'Archive the season. Open a new one. The workflow, scoring rules, and leaderboard reset without touching a single config file.',
+        'Archive the season, open a new one. The workflow, scoring rules, and leaderboard reset without touching a single config file.',
     },
   ],
 }
@@ -308,7 +308,7 @@ export const competitionPrinciples = [
   },
   {
     icon: CheckCircle2,
-    text: 'Each season can be rerun without rebuilding the workflow from scratch.',
+    text: 'Every season reruns without rebuilding the workflow from scratch.',
   },
 ]
 
@@ -322,34 +322,34 @@ export const faqItems = [
   {
     question: 'How does scoring work?',
     answer:
-      'Each scored forecast contributes to your team MAPE across the active markets and metrics. Lower MAPE is better, and zero-actual cases are handled consistently under the published scoring rules.',
+      'Each scored forecast feeds your team accuracy across the active markets and metrics. Lower error is better, and zero-actual cases follow the published scoring rules, applied the same way for everyone.',
   },
   {
     question: "What's included in my registration?",
     answer:
-      'Full access to the platform for the season, weekly scoring across all active markets, leaderboard placement, team collaboration tools, and supervisor oversight. Free trial rounds may be available depending on the season.',
+      'Full platform access for the season, weekly scoring across every active market, leaderboard placement, team collaboration tools, and supervisor oversight. Free trial rounds may be available depending on the season.',
   },
   {
     question: 'How are teams structured?',
-    answer: 'Teams of 1-5 students, each with a supervisor. Supervisors manage up to 10 teams and approve join requests.',
+    answer: 'Teams of 1 to 5 students, each with a supervisor. Supervisors manage up to 10 teams and approve join requests.',
   },
   {
     question: 'When are actuals released?',
-    answer: 'Actuals are released weekly after the submission deadline closes to maintain fair scoring across all teams.',
+    answer: 'Actuals are released weekly, after the submission deadline closes, so scoring stays fair across every team.',
   },
   {
     question: 'How is the final winner determined?',
     answer:
-      'The team with the lowest cumulative MAPE across all scored rounds wins. In case of a tie, occupancy MAPE is used as the tiebreaker, followed by ADR MAPE.',
+      'The team with the lowest cumulative error across all scored rounds wins. Ties break on occupancy accuracy first, then ADR accuracy.',
   },
   {
     question: 'When does the 2026 season start and end?',
     answer:
-      'The season runs for 7 rounds with a final championship round. Exact dates are published in the competition calendar once the season opens. Teams can register anytime before Round 1 closes.',
+      'The season runs seven rounds plus a final championship round. Exact dates are published in the competition calendar once the season opens. Teams can register any time before Round 1 closes.',
   },
   {
-    question: 'Can universities run this each year?',
-    answer: 'Yes. Seasons are fully repeatable and managed through the admin control center with no rebuilding required.',
+    question: 'Can universities run this every year?',
+    answer: 'Yes. Seasons are fully repeatable and managed from the admin control center, with no rebuilding required.',
   },
 ]
 
@@ -357,13 +357,13 @@ export const finalCtaSection = {
   badge: 'Ready to start',
   student: {
     headline:
-      "Most revenue management analysts will tell you they wish they'd started forecasting before they graduated. You still can. Round 1 closes in 3 days.",
-    urgency: "Teams that enter now can still make this week's leaderboard release.",
+      "Most revenue analysts wish they had started forecasting before they graduated. You still can. Round 1 closes in 3 days.",
+    urgency: "Enter now and your team can still make this week's leaderboard release.",
   },
   professor: {
     headline:
-      "Your students are forecasting something every week — whether it's structured or not. Give them a leaderboard, a scoring system, and real markets to reason through. See what changes.",
-    urgency: 'Book a walkthrough this week and you can brief students before the next live deadline.',
+      "Your students are already forecasting something every week, structured or not. Give them a leaderboard, a scoring system, and real markets to reason through, then watch what changes.",
+    urgency: 'Book a walkthrough this week and brief your students before the next live deadline.',
   },
 }
 
