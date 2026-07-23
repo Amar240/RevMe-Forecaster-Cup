@@ -23,12 +23,20 @@ export const columnMappingSchema = z.object({
 
 export const repairOutputSchema = z.object({ repairs: z.array(z.object({
   rowNumber: z.number().int().positive(),
-  columnLabel: z.enum(['Corresponding Team Member', 'Additional Member 1', 'Additional Member 2', 'Additional Member 3', 'Additional Member 4']),
-  field: z.enum(['firstName', 'lastName', 'email']),
+  columnLabel: z.enum(['Team', 'Corresponding Team Member', 'Additional Member 1', 'Additional Member 2', 'Additional Member 3', 'Additional Member 4']),
+  field: z.enum(['teamName', 'teamExternalId', 'firstName', 'lastName', 'email']),
   suggestion: z.string().trim().min(1).max(320),
   reason: z.string().trim().min(1).max(240),
   confidence: z.number().min(0).max(1),
-})).max(100) })
+})).max(100) }).superRefine((value, ctx) => value.repairs.forEach((repair, index) => {
+  const teamField = repair.field === 'teamName' || repair.field === 'teamExternalId'
+  if (teamField !== (repair.columnLabel === 'Team')) ctx.addIssue({ code: 'custom', path: ['repairs', index], message: 'Repair field does not match its column label' })
+}))
+
+export const explanationOutputSchema = z.object({
+  summary: z.string().trim().min(1).max(600),
+  nextSteps: z.array(z.string().trim().min(1).max(300)).min(1).max(8),
+})
 
 export const assistOutcomeSchema = z.object({ batchId: z.string().min(1).max(64), suggestionId: z.string().length(64), outcome: z.enum(['ACCEPTED', 'REJECTED']) })
 
@@ -43,4 +51,20 @@ export function parseColumnMapping(value: string | null): TeamImportColumnMappin
 
 export function suggestionId(value: Omit<ImportAssistSuggestion, 'id' | 'outcome'>) {
   return crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex')
+}
+
+export function importAssistContextFingerprint(value: {
+  fileHash: string
+  columnMapping?: TeamImportColumnMapping | null
+  overrides?: unknown[]
+  excludedRowNumbers?: number[]
+  diagnosticCodes?: string[]
+}) {
+  return crypto.createHash('sha256').update(JSON.stringify({
+    fileHash: value.fileHash,
+    columnMapping: value.columnMapping ?? null,
+    overrides: value.overrides ?? [],
+    excludedRowNumbers: [...(value.excludedRowNumbers ?? [])].sort((a, b) => a - b),
+    diagnosticCodes: [...(value.diagnosticCodes ?? [])].sort(),
+  })).digest('hex')
 }

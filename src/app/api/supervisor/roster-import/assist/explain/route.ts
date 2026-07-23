@@ -1,6 +1,6 @@
 import { requireUserOrResponse, jsonOk, jsonError, ApiError } from '@/server/http'
 import { readTeamImportFormData } from '@/lib/team-import/request'
-import { suggestRosterRepairs } from '@/server/roster-import-assist'
+import { explainRosterIssues } from '@/server/roster-import-assist'
 import { importAssistSeason, requireImportAssistEnabled } from '../route-utils'
 
 export async function POST(request: Request) {
@@ -13,6 +13,6 @@ export async function POST(request: Request) {
     form.set('seasonId', seasonId)
     const data = await readTeamImportFormData(new Request(request.url, { method: 'POST', body: form }))
     if (!data.batchId || !data.fileHash) throw new ApiError('Batch and file hash are required', 400, 'INVALID_INPUT')
-    return jsonOk(await suggestRosterRepairs({ actor: user!, seasonId, batchId: data.batchId, fileHash: data.fileHash, fileName: data.fileName, fileBuffer: data.fileBuffer, columnMapping: data.columnMapping, overrides: data.overrides, excludedRowNumbers: data.excludedRowNumbers }))
-  } catch (error) { return jsonError(error, 'Import repair assistance is unavailable') }
+    return jsonOk(await explainRosterIssues({ actor: user!, seasonId, batchId: data.batchId, fileHash: data.fileHash, fileName: data.fileName, fileBuffer: data.fileBuffer, columnMapping: data.columnMapping, overrides: data.overrides, excludedRowNumbers: data.excludedRowNumbers }))
+  } catch (error) { return jsonError(error, 'Import explanation assistance is unavailable') }
 }

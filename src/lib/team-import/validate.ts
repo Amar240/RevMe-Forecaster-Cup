@@ -15,6 +15,7 @@ import type {
   TeamImportValidationResult,
   ValidatedTeamImportRow,
 } from './types'
+import { diagnosticForLegacyMessage } from './diagnostic-catalog'
 
 const MAX_TEAM_MEMBERS = 5
 const SUPERVISOR_TEAM_CAP = 10
@@ -565,6 +566,10 @@ export async function validateTeamImport(args: {
       warnings,
       warningCount: warnings.length,
       errors,
+      diagnostics: [
+        ...errors.map((message) => diagnosticForLegacyMessage(message, 'ERROR')),
+        ...warnings.map((message) => diagnosticForLegacyMessage(message, 'WARNING')),
+      ],
     }
 
     previewRows.push(preview)

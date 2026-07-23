@@ -6,6 +6,53 @@ import { buildRosterTemplate } from '@/lib/team-import/template'
 import { columnMappingSchema } from '@/lib/team-import/assist'
 
 describe('VinUniversity roster workbook parser', () => {
+  it('accepts a legacy two-row registration form exported as CSV', async () => {
+    const csv = [
+      ',Your University,VinUniversity,,,,,,,,',
+      ",Instructor's Name,Eric Olson,,,,,,,,",
+      ",Instructor's Email,eolson23@msudenver.edu,,,,,,,,",
+      ',Number of teams (no more than 10),6,,,,,,,,',
+      ',,,,,,,,,,',
+      ",,,Team's selected name (optional),Corresponding Team Member,,,Additional Team Members,,,",
+      ',Institution,TeamID,,First Name,Last Name,Email,First Name,Last Name,Email',
+      ',VinUniversity,VinUniversity1,,Linh Chi,Tran,23chi.tl@vinuni.edu.vn,Dieu Trang,Vu,23trang.vd@vinuni.edu.vn',
+      ',VinUniversity,VinUniversity2,,Xuan Truong,Tran,24truong.tx@vinuni.edu.vn,Minh Anh,Nguyen,24anh.nm@vinuni.edu.vn',
+      ',VinUniversity,VinUniversity3,,Canh Thuan,Thai,23thuan.tc@vinuni.edu.vn,Quang Minh,Le,23minh.lq@vinuni.edu.vn',
+      ',VinUniversity,VinUniversity4,,Hoang Anh,Pham,24anh.ph@vinuni.edu.vn,Ngoc Linh,Tran,24linh.tn@vinuni.edu.vn',
+      ',VinUniversity,VinUniversity5,,Duc Bao,Duy Hoang,24duy.hdb@vinuni.edu.vn,Thanh Dat,Nguyen,24dat.nt@vinuni.edu.vn',
+      ',VinUniversity,VinUniversity6,,Anh Vu,Au,24vu.aa@vinuni.edu.vn,Van Anh,Nguyen,25anh.vn@vinuni.edu.vn',
+    ].join('\n')
+
+    const parsed = await parseTeamImportFile({
+      fileName: 'Forecaster Cup Registration Form.csv',
+      fileBuffer: Buffer.from(csv),
+    })
+
+    expect(parsed.fileType).toBe('csv')
+    expect(parsed.detectedFormats).toEqual(['legacy'])
+    expect(parsed.metadata).toEqual({
+      universityName: 'VinUniversity',
+      instructorName: 'Eric Olson',
+      instructorEmail: 'eolson23@msudenver.edu',
+      declaredTeamCount: 6,
+    })
+    expect(parsed.rows).toHaveLength(6)
+    expect(parsed.rows.map((row) => row.teamExternalId)).toEqual([
+      'VinUniversity1',
+      'VinUniversity2',
+      'VinUniversity3',
+      'VinUniversity4',
+      'VinUniversity5',
+      'VinUniversity6',
+    ])
+    expect(parsed.rows[0].submitter).toMatchObject({
+      firstName: 'Linh Chi',
+      lastName: 'Tran',
+      email: '23chi.tl@vinuni.edu.vn',
+      provenance: 'Row 8 · Corresponding Team Member',
+    })
+  })
+
   it('parses metadata, all six teams, hygiene, provenance, and glued-name warnings', async () => {
     const fileBuffer = await readFile('src/test/fixtures/registration-vinuni-sample.xlsx')
     const parsed = await parseTeamImportFile({ fileName: 'registration-vinuni-sample.xlsx', fileBuffer })

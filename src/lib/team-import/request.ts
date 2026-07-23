@@ -2,6 +2,8 @@ import { ApiError } from '@/server/http'
 import { parseTeamImportOverrides } from './overrides'
 import { parseColumnMapping } from './assist'
 import { parseExcludedRowNumbers } from './exclusions'
+import { importErrorDetails } from './diagnostic-catalog'
+import { validateTeamImportUpload } from './file-validation'
 
 type FileLike = FormDataEntryValue & {
   name?: string
@@ -28,16 +30,20 @@ export async function readTeamImportFormData(request: Request) {
   }
 
   if (!isFileLike(fileEntry) || !(fileEntry.name ?? '').trim()) {
-    throw new ApiError('Import file is required', 400, 'INVALID_INPUT')
+    throw new ApiError('Import file is required', 400, 'INVALID_INPUT', importErrorDetails('FILE_REQUIRED', 'Import file is required'))
   }
   if ((fileEntry.size ?? 0) > 10 * 1024 * 1024) {
-    throw new ApiError('Import file must be 10 MB or smaller', 413, 'INVALID_INPUT')
+    throw new ApiError('Import file must be 10 MB or smaller', 413, 'INVALID_INPUT', importErrorDetails('FILE_TOO_LARGE', 'Import file must be 10 MB or smaller'))
   }
+
+  const fileName = fileEntry.name!.trim()
+  const fileBuffer = Buffer.from(await fileEntry.arrayBuffer())
+  validateTeamImportUpload(fileName, fileBuffer)
 
   return {
     seasonId: seasonIdEntry.trim(),
-    fileName: fileEntry.name!.trim(),
-    fileBuffer: Buffer.from(await fileEntry.arrayBuffer()),
+    fileName,
+    fileBuffer,
     batchId: typeof batchIdEntry === 'string' && batchIdEntry.trim() ? batchIdEntry.trim() : null,
     fileHash: typeof fileHashEntry === 'string' && fileHashEntry.trim() ? fileHashEntry.trim() : null,
     overrides: parseTeamImportOverrides(typeof overridesEntry === 'string' ? overridesEntry : null),

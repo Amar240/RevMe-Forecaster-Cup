@@ -79,7 +79,7 @@ export async function rejectPendingTeam(actor: Actor, teamId: string, reason: st
 export async function getPendingApprovalGroups() {
   const teams = await prisma.team.findMany({
     where: { status: 'PENDING_APPROVAL' },
-    include: { supervisor: { select: { id: true, firstName: true, lastName: true, email: true } }, university: { select: { id: true, name: true } }, members: { include: { user: { select: { id: true, firstName: true, lastName: true, email: true } } } }, season: { select: { id: true, name: true } }, importBatch: { select: { id: true, fileName: true, createdAt: true, status: true } } },
+    include: { supervisor: { select: { id: true, firstName: true, lastName: true, email: true } }, university: { select: { id: true, name: true } }, members: { include: { user: { select: { id: true, firstName: true, lastName: true, email: true } } }, orderBy: [{ isSubmitter: 'desc' }, { joinedAt: 'asc' }] }, season: { select: { id: true, name: true } }, importBatch: { select: { id: true, fileName: true, createdAt: true, status: true } } },
     orderBy: { createdAt: 'desc' },
   })
   const batchMap = new Map<string, { batch: NonNullable<(typeof teams)[number]['importBatch']>; teams: typeof teams }>()

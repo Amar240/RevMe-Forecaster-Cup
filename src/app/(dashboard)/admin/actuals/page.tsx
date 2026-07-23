@@ -44,10 +44,8 @@ export default function AdminActualsPage() {
   const [pageSize] = useState(50)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
-  const [bulkSubmitting, setBulkSubmitting] = useState(false)
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null)
   const [activeTab, setActiveTab] = useState<'single' | 'bulk' | 'view'>('single')
-  const [bulkData, setBulkData] = useState('')
   const [seasonName, setSeasonName] = useState('')
   const [expandedRounds, setExpandedRounds] = useState<Set<string>>(new Set())
   const [editingActual, setEditingActual] = useState<ActualSummary | null>(null)
@@ -61,7 +59,6 @@ export default function AdminActualsPage() {
   const [voidReason, setVoidReason] = useState('')
   const [showVoided, setShowVoided] = useState(false)
   const [singleEntryReason, setSingleEntryReason] = useState('')
-  const [bulkReason, setBulkReason] = useState('')
   const [viewSearch, setViewSearch] = useState('')
   const [viewRoundId, setViewRoundId] = useState('all')
   const [viewMarketId, setViewMarketId] = useState('all')
@@ -164,40 +161,6 @@ export default function AdminActualsPage() {
     finally { setSubmitting(false) }
   }
 
-  const handleBulkUpload = async () => {
-    const lockedNums = rounds.filter(r => r.isLockedActuals || r.lastScoredAt).map(r => r.number)
-    const lines = bulkData.trim().split('\n').filter(line => line.trim())
-    const targetsLocked = lines.some(line => { const p = line.split(',').map(s => s.trim()); return p.length >= 1 && lockedNums.includes(parseInt(p[0])) })
-    if (targetsLocked && bulkReason.trim().length < 5) {
-      setResult({ success: false, message: 'Reason is required when uploading to locked/scored rounds (min 5 chars)' }); return
-    }
-    setBulkSubmitting(true); setResult(null)
-    try {
-      let successCount = 0, errorCount = 0; const errors: string[] = []
-      for (const line of lines) {
-        const parts = line.split(',').map(p => p.trim())
-        if (parts.length < 5) { errorCount++; errors.push(`Invalid format: ${line.substring(0, 30)}...`); continue }
-        const [roundNum, marketName, weekOffset, occupancy, adr] = parts
-        const round = rounds.find(r => r.number === parseInt(roundNum))
-        const market = markets.find(m => m.name.toLowerCase() === marketName.toLowerCase())
-        if (!round || !market) { errorCount++; errors.push(`Round/Market not found: ${roundNum}, ${marketName}`); continue }
-        const reasonToSend = (round.isLockedActuals || round.lastScoredAt) ? bulkReason : undefined
-        try {
-          const res = await Promise.allSettled([
-            createActual({ roundId: round.id, marketId: market.id, weekOffset: parseInt(weekOffset), metric: 'OCCUPANCY', value: parseFloat(occupancy), source: 'BULK', reason: reasonToSend }),
-            createActual({ roundId: round.id, marketId: market.id, weekOffset: parseInt(weekOffset), metric: 'ADR', value: parseFloat(adr), source: 'BULK', reason: reasonToSend }),
-          ])
-          if (res.every(r => r.status === 'fulfilled')) successCount++; else { errorCount++; errors.push(`Row ${roundNum}/${marketName}: Failed`) }
-        } catch { errorCount++; errors.push(`Row ${roundNum}/${marketName}: Error`) }
-      }
-      let message = `Processed ${successCount + errorCount} rows: ${successCount} successful, ${errorCount} errors`
-      if (errors.length > 0 && errors.length <= 3) message += ` - ${errors.join('; ')}`
-      setResult({ success: errorCount === 0, message })
-      if (successCount > 0) { setBulkReason(''); fetchData() }
-    } catch { setResult({ success: false, message: 'Bulk upload failed' }) }
-    finally { setBulkSubmitting(false) }
-  }
-
   const toggleRound = (roundId: string) => {
     const next = new Set(expandedRounds)
     if (next.has(roundId)) next.delete(roundId); else next.add(roundId)
@@ -296,7 +259,7 @@ export default function AdminActualsPage() {
                 <ActualsUploadForm rounds={rounds} markets={markets} formData={formData} setFormData={setFormData} singleEntryReason={singleEntryReason} setSingleEntryReason={setSingleEntryReason} submitting={submitting} onSubmit={handleSubmit} selectedRoundIsLocked={selectedRoundIsLocked} />
               )}
               {activeTab === 'bulk' && (
-                <ActualsBulkUpload rounds={rounds} markets={markets} bulkData={bulkData} setBulkData={setBulkData} bulkReason={bulkReason} setBulkReason={setBulkReason} bulkSubmitting={bulkSubmitting} onSubmit={handleBulkUpload} seasonName={seasonName} />
+                <ActualsBulkUpload rounds={rounds} markets={markets} seasonName={seasonName} onImported={() => { setResult({ success: true, message: 'Actuals imported successfully' }); void fetchData() }} />
               )}
               {activeTab === 'view' && (
                 <ActualsViewer filteredActuals={filteredActuals} rounds={rounds} markets={markets} viewSearch={viewSearch} setViewSearch={setViewSearch} viewRoundId={viewRoundId} setViewRoundId={setViewRoundId} viewMarketId={viewMarketId} setViewMarketId={setViewMarketId} viewMetric={viewMetric} setViewMetric={setViewMetric} showVoided={showVoided} onToggleShowVoided={(v) => { setShowVoided(v); setPage(1) }} page={page} totalPages={totalPages} totalActuals={totalActuals} setPage={setPage} actionLoading={actionLoading} onEdit={openEditDrawer} onVoid={setVoidingActual} onUnvoid={handleUnvoidActual} />

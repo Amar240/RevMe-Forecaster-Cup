@@ -1,5 +1,5 @@
 import { csrfFetch } from '@/lib/csrf'
-import type { ActualDetailsResponse, ActualsResponse, ActualsSummaryResponse } from '@/features/actuals/types'
+import type { ActualDetailsResponse, ActualImportOverride, ActualImportPreview, ActualsResponse, ActualsSummaryResponse } from '@/features/actuals/types'
 
 async function parseJson<T>(res: Response): Promise<T> {
   const data = await res.json()
@@ -91,4 +91,29 @@ export async function unlockRoundActuals(roundId: string, reason: string) {
     body: JSON.stringify({ reason }),
   })
   return parseJson<{ message: string }>(res)
+}
+
+function actualImportForm(file: File, overrides: ActualImportOverride[], extra?: { fileHash?: string; reason?: string }) {
+  const form = new FormData()
+  form.set('file', file)
+  form.set('overrides', JSON.stringify(overrides))
+  if (extra?.fileHash) form.set('fileHash', extra.fileHash)
+  if (extra?.reason) form.set('reason', extra.reason)
+  return form
+}
+
+export async function previewActualsFile(file: File, overrides: ActualImportOverride[] = []) {
+  const res = await csrfFetch('/api/admin/actuals/import/preview', {
+    method: 'POST',
+    body: actualImportForm(file, overrides),
+  })
+  return parseJson<ActualImportPreview>(res)
+}
+
+export async function confirmActualsFile(file: File, fileHash: string, overrides: ActualImportOverride[], reason?: string) {
+  const res = await csrfFetch('/api/admin/actuals/import/confirm', {
+    method: 'POST',
+    body: actualImportForm(file, overrides, { fileHash, reason }),
+  })
+  return parseJson<{ message: string; summary: ActualImportPreview['summary'] & { writtenRows: number } }>(res)
 }

@@ -12,6 +12,8 @@ import type { TeamImportColumnMapping, TeamImportOverride } from '@/lib/team-imp
 import { applyTeamImportOverrides } from '@/lib/team-import/overrides'
 import { isImportAssistEnabled } from '@/server/import-assist'
 import { logAuditAction } from '@/lib/audit'
+import { importErrorDetails } from '@/lib/team-import/diagnostic-catalog'
+import { importAssistContextFingerprint } from '@/lib/team-import/assist'
 
 type ImportActor = Pick<User, 'id' | 'email' | 'role' | 'universityId' | 'isActive' | 'hasFullAccess'>
 
@@ -28,7 +30,7 @@ function excludedPerson(person: ParsedTeamImportRow['submitter']): TeamImportPer
 }
 
 function excludedPreview(row: ParsedTeamImportRow): TeamImportPreviewRow {
-  return { rowNumber: row.rowNumber, format: row.format, teamExternalId: row.teamExternalId, teamName: row.teamName || row.teamExternalId, universityName: row.universityName, supervisorEmail: row.supervisorEmail, supervisorLabel: null, submitterEmail: row.submitter.email, submitter: excludedPerson(row.submitter), members: row.members.map(excludedPerson), memberCount: [row.submitter, ...row.members].filter((person) => person.email).length, valid: false, autoMatchedSupervisor: false, warnings: [], warningCount: 0, errors: [], excluded: true }
+  return { rowNumber: row.rowNumber, format: row.format, teamExternalId: row.teamExternalId, teamName: row.teamName || row.teamExternalId, universityName: row.universityName, supervisorEmail: row.supervisorEmail, supervisorLabel: null, submitterEmail: row.submitter.email, submitter: excludedPerson(row.submitter), members: row.members.map(excludedPerson), memberCount: [row.submitter, ...row.members].filter((person) => person.email).length, valid: false, autoMatchedSupervisor: false, warnings: [], warningCount: 0, errors: [], diagnostics: [], excluded: true }
 }
 
 function splitExcludedRows<T extends { rows: ParsedTeamImportRow[] }>(parsedFile: T, excludedRowNumbers: number[]) {
@@ -40,11 +42,11 @@ function splitExcludedRows<T extends { rows: ParsedTeamImportRow[] }>(parsedFile
 }
 
 export async function getSupervisorImportSeason(actor: ImportActor) {
-  if (actor.role !== 'SUPERVISOR') throw new ApiError('Supervisor access required', 403, 'FORBIDDEN')
+  if (actor.role !== 'SUPERVISOR') throw new ApiError('Supervisor access required', 403, 'FORBIDDEN', importErrorDetails('AUTH_FORBIDDEN', 'Supervisor access required'))
   if (!actor.universityId) throw new ApiError('Supervisor must belong to a university', 422, 'INVALID_INPUT')
   const season = await getCurrentOperationalSeason({ select: { id: true, name: true, status: true, registrationOpen: true } })
-  if (!season) throw new ApiError('No operational season is available', 422, 'INVALID_INPUT')
-  if (!season.registrationOpen) throw new ApiError('Team registration is not open', 422, 'INVALID_INPUT')
+  if (!season) throw new ApiError('No operational season is available', 422, 'INVALID_INPUT', importErrorDetails('SEASON_UNAVAILABLE', 'No operational season is available'))
+  if (!season.registrationOpen) throw new ApiError('Team registration is not open', 422, 'INVALID_INPUT', importErrorDetails('SEASON_REGISTRATION_CLOSED', 'Team registration is not open'))
   return season
 }
 
@@ -68,7 +70,7 @@ export async function previewRosterImport(args: {
     if (existingBatch.uploaderId !== args.actor.id) throw new ApiError('Import batch does not belong to this user', 403, 'FORBIDDEN')
     if (existingBatch.seasonId !== args.seasonId || existingBatch.uploaderRole !== (args.mode === 'supervisor' ? 'SUPERVISOR' : 'ADMIN')) throw new ApiError('Import batch does not match this request', 409, 'CONFLICT')
     if (existingBatch.status !== 'PREVIEWED') throw new ApiError('Only previewed batches can be re-checked', 409, 'CONFLICT')
-    if (!args.submittedFileHash || args.submittedFileHash !== hash || existingBatch.fileHash !== hash) throw new ApiError('Workbook has changed since preview; preview it again', 409, 'CONFLICT')
+    if (!args.submittedFileHash || args.submittedFileHash !== hash || existingBatch.fileHash !== hash) throw new ApiError('Workbook has changed since preview; preview it again', 409, 'CONFLICT', importErrorDetails('STALE_FILE_HASH', 'Workbook has changed since preview; preview it again'))
   }
   const parsedFile = applyTeamImportOverrides(await parseTeamImportFile({ fileName: args.fileName, fileBuffer: args.fileBuffer, columnMapping: args.columnMapping }), overrides)
   const excludedRowNumbers = args.excludedRowNumbers ?? []
@@ -81,8 +83,38 @@ export async function previewRosterImport(args: {
   })
   validation.rows = [...validation.rows, ...excludedRows].sort((a, b) => a.rowNumber - b.rowNumber)
   validation.summary = { ...validation.summary, totalRows: validation.summary.totalRows + excludedRows.length, excludedRows: excludedRows.length }
-  const previous = existingBatch?.summaryJson as { assist?: unknown } | undefined
-  const summaryJson = jsonValue({ metadata: validation.metadata, fileWarnings: validation.fileWarnings, preview: { summary: validation.summary, rows: validation.rows }, overrides, excludedRowNumbers, columnMapping: args.columnMapping ?? null, ...(previous?.assist ? { assist: previous.assist } : {}) })
+  const previous = existingBatch?.summaryJson as { assist?: { suggestions?: Array<{
+    id: string
+    outcome?: string
+    rowNumber?: number
+    columnLabel?: string
+    field?: string
+    suggestion?: string
+    deterministicValidationFailed?: boolean
+    [key: string]: unknown
+  }>; [key: string]: unknown } } | undefined
+  const diagnosticCodes = validation.rows.flatMap((row) => row.diagnostics.map((diagnostic) => diagnostic.code))
+  const contextFingerprint = importAssistContextFingerprint({ fileHash: hash, columnMapping: args.columnMapping, overrides, excludedRowNumbers, diagnosticCodes })
+  const suggestions = previous?.assist?.suggestions?.map((suggestion) => {
+    if (suggestion.outcome !== 'ACCEPTED' || !suggestion.rowNumber || !suggestion.columnLabel || !suggestion.field) return suggestion
+    const applied = overrides.some((item) => item.rowNumber === suggestion.rowNumber && item.columnLabel === suggestion.columnLabel && item.field === suggestion.field && item.value === suggestion.suggestion)
+    const failed = applied && validation.rows.some((row) => row.rowNumber === suggestion.rowNumber && row.diagnostics.some((diagnostic) =>
+      diagnostic.severity === 'ERROR' &&
+      diagnostic.target?.columnLabel === suggestion.columnLabel &&
+      (diagnostic.target?.field === undefined || diagnostic.target.field === suggestion.field)
+    ))
+    return failed ? { ...suggestion, deterministicValidationFailed: true } : suggestion
+  })
+  const previousAssist = { ...(previous?.assist ?? {}), ...(suggestions ? { suggestions } : {}) }
+  const summaryJson = jsonValue({
+    metadata: validation.metadata,
+    fileWarnings: validation.fileWarnings,
+    preview: { summary: validation.summary, rows: validation.rows },
+    overrides,
+    excludedRowNumbers,
+    columnMapping: args.columnMapping ?? null,
+    assist: { ...previousAssist, contextFingerprint },
+  })
   const batch = existingBatch ? await prisma.importBatch.update({ where: { id: existingBatch.id }, data: { summaryJson } }) : await prisma.importBatch.create({
     data: {
       uploaderId: args.actor.id,
@@ -99,6 +131,7 @@ export async function previewRosterImport(args: {
     const s3Key = await archiveImportFile({ seasonId: args.seasonId, batchId: batch.id, fileName: args.fileName, fileBuffer: args.fileBuffer })
     if (s3Key) await prisma.importBatch.update({ where: { id: batch.id }, data: { s3Key } })
   }
+  const assistEnabled = isImportAssistEnabled() && (await prisma.season.findUnique({ where: { id: args.seasonId }, select: { importAssistMode: true } }))?.importAssistMode === 'ON_DEMAND'
   return {
     batchId: batch.id,
     fileHash: hash,
@@ -110,7 +143,7 @@ export async function previewRosterImport(args: {
     fileWarnings: validation.fileWarnings,
     summary: validation.summary,
     rows: validation.rows,
-    ...(isImportAssistEnabled() ? { assist: { layoutEligible: !args.columnMapping && getTeamImportHeaderCoverage(readTeamImportGrid({ fileName: args.fileName, fileBuffer: args.fileBuffer })) < 0.8 } } : {}),
+    ...(assistEnabled ? { assist: { layoutEligible: !args.columnMapping && getTeamImportHeaderCoverage(readTeamImportGrid({ fileName: args.fileName, fileBuffer: args.fileBuffer })) < 0.8 } } : {}),
   }
 }
 

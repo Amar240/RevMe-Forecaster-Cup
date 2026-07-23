@@ -28,7 +28,12 @@ Use this file to track all deployment decisions and runtime values for each envi
 - Health endpoint:
 - Environment variables source (SSM/Secrets Manager):
 - When `BEDROCK_IMPORT_ASSIST=true`, grant the instance role `bedrock:InvokeModel`
-  only for the ARN of `BEDROCK_IMPORT_MODEL` (default: `anthropic.claude-3-haiku-20240307-v1:0`).
+  only for the configured inference-profile ARN and its permitted destination-model ARNs.
+  The default is `us.anthropic.claude-haiku-4-5-20251001-v1:0`, which may route
+  roster data among US regions. Deployments requiring one-region processing must
+  override `BEDROCK_IMPORT_MODEL` with an approved regional model or profile.
+- After deploying new import-assist schemas, run `npm run prewarm:import-assist`
+  once with the production Bedrock role. The task sends synthetic data only.
 
 ## Monitoring
 - CloudWatch dashboard:

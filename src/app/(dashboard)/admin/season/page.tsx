@@ -16,6 +16,7 @@ import { AlertBanner } from '@/components/ui/alert-banner'
 import { PageLoader } from '@/components/ui/page-loader'
 import { csrfFetch } from '@/lib/csrf'
 import { toast } from 'sonner'
+import { ImportAssistControl } from '@/components/admin/import-assist-control'
 
 interface MarketOption {
   id: string
@@ -383,6 +384,7 @@ export default function AdminSeasonPage() {
 
       {season ? (
         <div className="space-y-6">
+          <ImportAssistControl seasonId={season.id} />
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">

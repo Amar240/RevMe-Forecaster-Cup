@@ -35,6 +35,17 @@ describe('roster import approval', () => {
     const pending = await pendingResponse.json()
     expect(pending.groups).toHaveLength(1)
     expect(pending.groups[0].teams[0].id).toBe(team.id)
+    expect(pending.groups[0].teams[0].members).toEqual([
+      expect.objectContaining({
+        isSubmitter: true,
+        user: expect.objectContaining({
+          id: student.id,
+          firstName: 'New',
+          lastName: 'Student',
+          email: 'provisioned-student@test.edu',
+        }),
+      }),
+    ])
 
     const response = await processApproval(makeRequest('http://localhost/api/admin/teams/pending', { method: 'POST', body: { action: 'approve-batch', batchId: batch.id } }))
     expect(response.status).toBe(200)

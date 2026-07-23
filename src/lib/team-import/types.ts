@@ -1,4 +1,5 @@
 import type { SeasonStatus } from '@prisma/client'
+import type { ImportDiagnostic } from './diagnostics'
 
 export type TeamImportFileType = 'csv' | 'xlsx'
 export type TeamImportFormat = 'legacy' | 'normalized'
@@ -22,6 +23,8 @@ export interface ImportAssistSuggestion {
   reason: string
   confidence: number
   outcome: ImportAssistOutcome
+  contextFingerprint?: string
+  sourceValue?: string
 }
 
 export interface TeamImportPersonInput {
@@ -89,6 +92,7 @@ export interface TeamImportPreviewRow {
   warnings: string[]
   warningCount: number
   errors: string[]
+  diagnostics: ImportDiagnostic[]
   excluded?: boolean
 }
 

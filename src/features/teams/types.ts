@@ -41,7 +41,11 @@ export interface PendingTeam {
   createdAt: string
   supervisor: { firstName: string; lastName: string; email: string }
   university: { name: string }
-  members: { user: { firstName: string; lastName: string; email: string } }[]
+  members: {
+    id: string
+    isSubmitter: boolean
+    user: { id: string; firstName: string; lastName: string; email: string }
+  }[]
   season: { name: string } | null
   importBatch?: { id: string; fileName: string; createdAt: string; status: string } | null
 }

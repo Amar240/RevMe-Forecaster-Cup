@@ -56,3 +56,7 @@ export async function updateRoundStatus(input: {
   })
   return parseJson<{ message: string }>(res)
 }
+
+export type ImportAssistStatus = { seasonId: string; infrastructureAvailable: boolean; mode: 'DISABLED' | 'ON_DEMAND'; effective: boolean; model: string; usage: { calls: number; inputTokens: number; outputTokens: number; accepted: number; rejected: number; failedRevalidation: number } }
+export async function getImportAssistStatus(seasonId: string) { return parseJson<ImportAssistStatus>(await csrfFetch(`/api/admin/seasons/${seasonId}/import-assist`)) }
+export async function updateImportAssistMode(seasonId: string, mode: 'DISABLED' | 'ON_DEMAND') { return parseJson<ImportAssistStatus>(await csrfFetch(`/api/admin/seasons/${seasonId}/import-assist`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode }) })) }

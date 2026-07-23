@@ -92,6 +92,11 @@ enum ImportBatchStatus {
   COMPLETED
 }
 
+enum ImportAssistMode {
+  DISABLED
+  ON_DEMAND
+}
+
 enum WarningType {
   MISSED_SUBMISSION
   LATE_SUBMISSION
@@ -284,6 +289,7 @@ model Season {
   name             String
   status           SeasonStatus @default(DRAFT)
   registrationOpen Boolean      @default(false)
+  importAssistMode ImportAssistMode @default(DISABLED)
   startDate        DateTime
   endDate          DateTime
   createdAt        DateTime     @default(now())

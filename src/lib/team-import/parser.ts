@@ -10,6 +10,7 @@ import type {
   TeamImportMetadata,
 } from './types'
 import { cleanImportCell, TEAM_IMPORT_EXAMPLE_MARKER } from './overrides'
+import { importErrorDetails } from './diagnostic-catalog'
 
 const XML_ENTITY_MAP: Record<string, string> = {
   amp: '&',
@@ -235,7 +236,7 @@ function getLegacyPersonColumns(subHeaderRow: string[]) {
 function parseLegacyWorkbookRows(rows: string[][]) {
   const header = findLegacyHeader(rows)
   if (!header) {
-    throw new ApiError('Unsupported workbook format', 422, 'INVALID_INPUT')
+    throw new ApiError('Unsupported workbook format', 422, 'INVALID_INPUT', { ...importErrorDetails('LAYOUT_UNRECOGNIZED', 'Unsupported workbook format'), assistEligibility: { layout: true } })
   }
 
   const groupHeaderRow = rows[header.groupHeaderRowIndex] ?? []
@@ -254,7 +255,7 @@ function parseLegacyWorkbookRows(rows: string[][]) {
   const personColumns = getLegacyPersonColumns(subHeaderRow)
 
   if (!personColumns.submitter || institutionIndex === -1 || externalTeamIdIndex === -1) {
-    throw new ApiError('Legacy workbook is missing required team columns', 422, 'INVALID_INPUT')
+    throw new ApiError('Legacy workbook is missing required team columns', 422, 'INVALID_INPUT', { ...importErrorDetails('LAYOUT_REQUIRED_COLUMNS_MISSING', 'Legacy workbook is missing required team columns'), assistEligibility: { layout: true } })
   }
 
   let ignoredEmptyRows = 0
@@ -306,7 +307,7 @@ function parseLegacyWorkbookRows(rows: string[][]) {
 function parseNormalizedRows(rows: string[][]) {
   const headerRowIndex = findNormalizedHeaderRow(rows)
   if (headerRowIndex === -1) {
-    throw new ApiError('Import file does not match the expected normalized template', 422, 'INVALID_INPUT')
+    throw new ApiError('Import file does not match the expected normalized template', 422, 'INVALID_INPUT', { ...importErrorDetails('LAYOUT_UNRECOGNIZED', 'Import file does not match the expected normalized template'), assistEligibility: { layout: true } })
   }
 
   const headerRow = rows[headerRowIndex] ?? []
@@ -319,7 +320,7 @@ function parseNormalizedRows(rows: string[][]) {
   const submitterLastNameIndex = getHeaderIndex(headerRow, normalizedHeaderAliases.submitterLastName)
 
   if (institutionIndex === -1 || externalTeamIdIndex === -1 || submitterEmailIndex === -1) {
-    throw new ApiError('Import file is missing one or more required columns', 422, 'INVALID_INPUT')
+    throw new ApiError('Import file is missing one or more required columns', 422, 'INVALID_INPUT', { ...importErrorDetails('LAYOUT_REQUIRED_COLUMNS_MISSING', 'Import file is missing one or more required columns'), assistEligibility: { layout: true } })
   }
 
   const memberIndexes = Array.from(
@@ -406,7 +407,9 @@ function parseNormalizedRows(rows: string[][]) {
 
 function parseImportedRows(fileName: string, fileType: TeamImportFileType, rows: string[][]): ParsedTeamImportFile {
   const metadata = harvestMetadata(rows)
-  const legacyHeader = fileType === 'xlsx' ? findLegacyHeader(rows) : null
+  // Header shape determines the roster format. Legacy registration forms are
+  // valid whether they were saved as an Excel workbook or exported as CSV.
+  const legacyHeader = findLegacyHeader(rows)
 
   if (legacyHeader) {
     const parsed = parseLegacyWorkbookRows(rows)
@@ -460,39 +463,55 @@ function readZipEntries(buffer: Buffer) {
   }
 
   if (endOffset === -1) {
-    throw new ApiError('Invalid XLSX file', 422, 'INVALID_INPUT')
+    throw new ApiError('This Excel workbook is damaged or incomplete. Save it again as .xlsx or use a fresh RevME template.', 422, 'INVALID_INPUT', importErrorDetails('WORKBOOK_UNREADABLE', 'This Excel workbook is damaged or incomplete. Save it again as .xlsx or use a fresh RevME template.'))
   }
 
   const totalEntries = buffer.readUInt16LE(endOffset + 10)
   const centralDirectoryOffset = buffer.readUInt32LE(endOffset + 16)
   const entries = new Map<string, Buffer>()
+  let totalUncompressedBytes = 0
+  const unsafe = (message: string): never => { throw new ApiError(message, 422, 'INVALID_INPUT', importErrorDetails('WORKBOOK_UNSAFE', message)) }
+  if (totalEntries > 512) unsafe('This workbook contains too many internal files to process safely. Save the registration sheet into a new .xlsx file.')
 
   let offset = centralDirectoryOffset
   for (let count = 0; count < totalEntries; count += 1) {
+    if (offset < 0 || offset + 46 > buffer.length) unsafe('This workbook has a damaged ZIP directory. Save it again as .xlsx.')
     if (buffer.readUInt32LE(offset) !== 0x02014b50) {
-      throw new ApiError('Invalid XLSX central directory', 422, 'INVALID_INPUT')
+      unsafe('This workbook has a damaged ZIP directory. Save it again as .xlsx.')
     }
 
+    const flags = buffer.readUInt16LE(offset + 8)
     const compressionMethod = buffer.readUInt16LE(offset + 10)
     const compressedSize = buffer.readUInt32LE(offset + 20)
+    const uncompressedSize = buffer.readUInt32LE(offset + 24)
     const fileNameLength = buffer.readUInt16LE(offset + 28)
     const extraFieldLength = buffer.readUInt16LE(offset + 30)
     const fileCommentLength = buffer.readUInt16LE(offset + 32)
     const localHeaderOffset = buffer.readUInt32LE(offset + 42)
     const fileName = buffer.toString('utf8', offset + 46, offset + 46 + fileNameLength)
 
+    if (flags & 0x1) unsafe('Encrypted Excel workbooks are not supported. Remove workbook encryption and try again.')
+    if (!fileName || fileName.startsWith('/') || fileName.includes('\\') || fileName.split('/').includes('..')) unsafe('This workbook contains an unsafe internal file path.')
+    if (entries.has(fileName)) unsafe('This workbook contains duplicate internal files and cannot be processed safely.')
+    if (uncompressedSize > 20 * 1024 * 1024) unsafe('This workbook contains an unusually large worksheet. Use the RevME template and include only roster data.')
+    totalUncompressedBytes += uncompressedSize
+    if (totalUncompressedBytes > 50 * 1024 * 1024) unsafe('This workbook expands beyond the safe processing limit. Use the RevME template and include only roster data.')
+    if (compressedSize > 0 && uncompressedSize > 1024 * 1024 && uncompressedSize / compressedSize > 1000) unsafe('This workbook has an unsafe compression ratio. Save the roster into a new .xlsx file.')
+    if (localHeaderOffset < 0 || localHeaderOffset + 30 > buffer.length || buffer.readUInt32LE(localHeaderOffset) !== 0x04034b50) unsafe('This workbook contains a damaged worksheet entry.')
+
     const localFileNameLength = buffer.readUInt16LE(localHeaderOffset + 26)
     const localExtraFieldLength = buffer.readUInt16LE(localHeaderOffset + 28)
     const dataStart = localHeaderOffset + 30 + localFileNameLength + localExtraFieldLength
     const compressedData = buffer.subarray(dataStart, dataStart + compressedSize)
+    if (dataStart < 0 || dataStart + compressedSize > buffer.length) unsafe('This workbook contains an incomplete worksheet entry.')
 
-    let data: Buffer
+    let data: Buffer = Buffer.alloc(0)
     if (compressionMethod === 0) {
       data = Buffer.from(compressedData)
     } else if (compressionMethod === 8) {
       data = inflateRawSync(compressedData)
     } else {
-      throw new ApiError('Unsupported XLSX compression method', 422, 'INVALID_INPUT')
+      unsafe('This workbook uses an unsupported compression method. Save it again as .xlsx.')
     }
 
     entries.set(fileName, data)
@@ -518,7 +537,7 @@ function resolveFirstWorksheetPath(entries: Map<string, Buffer>) {
     // Retain compatibility with the minimal one-sheet XLSX files accepted by
     // the original importer and used by integrations that omit workbook rels.
     if (entries.has('xl/worksheets/sheet1.xml')) return 'xl/worksheets/sheet1.xml'
-    throw new ApiError('Workbook is missing sheet metadata', 422, 'INVALID_INPUT')
+    throw new ApiError('Workbook is missing sheet metadata', 422, 'INVALID_INPUT', importErrorDetails('WORKBOOK_UNREADABLE', 'Workbook is missing sheet metadata'))
   }
 
   const sheets = Array.from(workbookXml.matchAll(/<sheet\b([^>]*)\/?\s*>/g), (match) => ({
@@ -530,7 +549,7 @@ function resolveFirstWorksheetPath(entries: Map<string, Buffer>) {
     if (workbookXml.includes('Registration Form') && entries.has('xl/worksheets/sheet2.xml')) {
       return 'xl/worksheets/sheet2.xml'
     }
-    throw new ApiError('Workbook does not contain any sheets', 422, 'INVALID_INPUT')
+    throw new ApiError('Workbook does not contain any sheets', 422, 'INVALID_INPUT', importErrorDetails('WORKBOOK_UNREADABLE', 'Workbook does not contain any sheets'))
   }
 
   const relationshipId = selectedSheet.relationshipId
@@ -539,7 +558,7 @@ function resolveFirstWorksheetPath(entries: Map<string, Buffer>) {
   )
 
   if (!relationshipMatch) {
-    throw new ApiError('Workbook is missing the first sheet reference', 422, 'INVALID_INPUT')
+    throw new ApiError('We could not read the worksheets in this Excel file. Save it again as an Excel Workbook (.xlsx) or use a fresh RevME template, then retry.', 422, 'INVALID_INPUT', importErrorDetails('WORKBOOK_UNREADABLE', 'We could not read the worksheets in this Excel file. Save it again as an Excel Workbook (.xlsx) or use a fresh RevME template, then retry.'))
   }
 
   const target = relationshipMatch[1].replace(/^\.\//, '')
@@ -595,7 +614,7 @@ function parseXlsx(buffer: Buffer) {
   const worksheetXml = entries.get(worksheetPath)?.toString('utf8')
 
   if (!worksheetXml) {
-    throw new ApiError('Workbook could not be read', 422, 'INVALID_INPUT')
+    throw new ApiError('Workbook could not be read', 422, 'INVALID_INPUT', importErrorDetails('WORKBOOK_UNREADABLE', 'Workbook could not be read'))
   }
 
   return parseWorksheetRows(worksheetXml, sharedStrings)
@@ -652,7 +671,7 @@ function getFileType(fileName: string): TeamImportFileType {
   const normalized = fileName.trim().toLowerCase()
   if (normalized.endsWith('.csv')) return 'csv'
   if (normalized.endsWith('.xlsx')) return 'xlsx'
-  throw new ApiError('Only .csv and .xlsx files are supported', 422, 'INVALID_INPUT')
+  throw new ApiError('Only .csv and .xlsx files are supported', 422, 'INVALID_INPUT', importErrorDetails('FILE_UNSUPPORTED', 'Only .csv and .xlsx files are supported'))
 }
 
 export async function parseTeamImportFile(args: {
@@ -663,6 +682,12 @@ export async function parseTeamImportFile(args: {
   const fileName = args.fileName.trim() || 'team-import'
   const fileType = getFileType(fileName)
   const rows = readTeamImportGrid(args)
-
-  return args.columnMapping ? parseMappedRows(fileName, fileType, rows, args.columnMapping) : parseImportedRows(fileName, fileType, rows)
+  try {
+    return args.columnMapping ? parseMappedRows(fileName, fileType, rows, args.columnMapping) : parseImportedRows(fileName, fileType, rows)
+  } catch (error) {
+    if (error instanceof ApiError && error.details && typeof error.details === 'object' && 'assistEligibility' in error.details) {
+      error.details = { ...error.details, mappingContext: { rows: rows.slice(0, 10) } }
+    }
+    throw error
+  }
 }
