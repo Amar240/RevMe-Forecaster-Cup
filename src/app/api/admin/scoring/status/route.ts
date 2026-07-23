@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/db'
 import { requireAdminOrResponse, jsonOk, jsonError } from '@/server/http'
+import { getCurrentOperationalSeason } from '@/server/season'
 
 export const dynamic = 'force-dynamic'
 
@@ -8,24 +9,23 @@ export async function GET() {
     const { response } = await requireAdminOrResponse()
     if (response) return response
 
-    const activeSeason = await prisma.season.findFirst({
-      where: { status: 'ACTIVE' },
+    const operationalSeason = await getCurrentOperationalSeason({
       include: { rounds: { orderBy: { number: 'asc' } }, markets: { where: { isActive: true } } },
     })
 
-    if (!activeSeason) return jsonOk({ seasonName: '', rounds: [], recentRuns: [] })
+    if (!operationalSeason) return jsonOk({ seasonName: '', rounds: [], recentRuns: [] })
 
-    const activeTeamsCount = await prisma.team.count({ where: { seasonId: activeSeason.id, status: 'ACTIVE' } })
-    const marketCount = activeSeason.markets.length
+    const activeTeamsCount = await prisma.team.count({ where: { seasonId: operationalSeason.id, status: 'ACTIVE' } })
+    const marketCount = operationalSeason.markets.length
 
     const roundStatuses = await Promise.all(
-      activeSeason.rounds.map(async (round) => {
+      operationalSeason.rounds.map(async (round) => {
         const expectedWeekOffsets = round.isFinal ? 1 : 2
         const expectedActuals = marketCount * 2 * expectedWeekOffsets
-        const actualsCount = await prisma.actual.count({ where: { seasonId: activeSeason.id, roundId: round.id, isVoided: false } })
+        const actualsCount = await prisma.actual.count({ where: { seasonId: operationalSeason.id, roundId: round.id, isVoided: false } })
         const submissionsCount = await prisma.submission.count({ where: { roundId: round.id } })
         const teamsWithSubmissions = await prisma.submission.groupBy({ by: ['teamId'], where: { roundId: round.id } })
-        const aggregatesExist = await prisma.scoreAggregate.count({ where: { seasonId: activeSeason.id, roundId: round.id } })
+        const aggregatesExist = await prisma.scoreAggregate.count({ where: { seasonId: operationalSeason.id, roundId: round.id } })
 
         return {
           id: round.id, number: round.number, isFinal: round.isFinal,
@@ -40,7 +40,7 @@ export async function GET() {
     )
 
     const recentRuns = await prisma.scoringRun.findMany({
-      where: { seasonId: activeSeason.id }, orderBy: { startedAt: 'desc' }, take: 10,
+      where: { seasonId: operationalSeason.id }, orderBy: { startedAt: 'desc' }, take: 10,
       include: { triggeredByAdmin: { select: { email: true } } },
     })
 
@@ -51,8 +51,8 @@ export async function GET() {
       actualsVersionAtRun: run.actualsVersionAtRun, summaryJson: run.summaryJson,
     }))
 
-    const hasStaleScores = activeSeason.rounds.some(r => r.scoresStale)
-    return jsonOk({ seasonName: activeSeason.name, rounds: roundStatuses, recentRuns: formattedRuns, hasStaleScores })
+    const hasStaleScores = operationalSeason.rounds.some(r => r.scoresStale)
+    return jsonOk({ seasonName: operationalSeason.name, rounds: roundStatuses, recentRuns: formattedRuns, hasStaleScores })
   } catch (error) {
     return jsonError(error, 'Failed to get scoring status')
   }

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireAdminOrResponse, jsonError } from '@/server/http'
+import { getCurrentOperationalSeason } from '@/server/season'
 
 export const dynamic = 'force-dynamic'
 
@@ -9,12 +10,25 @@ export async function GET() {
     const { response } = await requireAdminOrResponse()
     if (response) return response
 
+    const operationalSeason = await getCurrentOperationalSeason()
+    if (!operationalSeason) {
+      return new NextResponse('', {
+        headers: {
+          'Content-Type': 'text/csv',
+          'Content-Disposition': 'attachment; filename="all-submissions.csv"',
+        },
+      })
+    }
+
     const submissions = await prisma.submission.findMany({
+      where: { round: { seasonId: operationalSeason.id } },
       include: { team: true, round: true, submittedBy: true, values: { include: { market: true } } },
       orderBy: [{ round: { number: 'asc' } }, { team: { displayId: 'asc' } }],
     })
 
-    const errors = await prisma.predictionError.findMany()
+    const errors = await prisma.predictionError.findMany({
+      where: { seasonId: operationalSeason.id },
+    })
     const errorMap = new Map<string, number>()
     for (const err of errors) {
       errorMap.set(`${err.teamId}-${err.roundId}-${err.marketId}-${err.metric}-${err.weekOffset}`, err.absError)

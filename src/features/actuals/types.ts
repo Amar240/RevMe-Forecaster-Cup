@@ -66,3 +66,46 @@ export interface ActualsSummaryResponse {
 export interface ActualDetailsResponse {
   actual: ActualDetails
 }
+
+export interface ActualImportOverride {
+  rowNumber: number
+  occupancy?: number
+  adr?: number
+  excluded?: boolean
+}
+
+export interface ActualImportRow {
+  rowNumber: number
+  roundNumber: number | null
+  roundId: string | null
+  marketName: string
+  marketId: string | null
+  weekOffset: number | null
+  occupancy: number | null
+  adr: number | null
+  existingOccupancy: number | null
+  existingAdr: number | null
+  occupancyAction: 'CREATE' | 'REPLACE' | 'UNCHANGED' | 'INVALID'
+  adrAction: 'CREATE' | 'REPLACE' | 'UNCHANGED' | 'INVALID'
+  lockedOrScored: boolean
+  excluded: boolean
+  valid: boolean
+  errors: string[]
+  warnings: string[]
+}
+
+export interface ActualImportPreview {
+  fileName: string
+  fileHash: string
+  rows: ActualImportRow[]
+  summary: {
+    sourceRows: number
+    readyRows: number
+    invalidRows: number
+    excludedRows: number
+    newValues: number
+    changedValues: number
+    unchangedValues: number
+    lockedRows: number
+  }
+}

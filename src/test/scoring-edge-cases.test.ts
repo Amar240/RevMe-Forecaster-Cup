@@ -114,6 +114,25 @@ describe('Scoring edge cases', () => {
     expect(result.submissionsProcessed).toBe(1)
   })
 
+  it('round-scoped rescoring preserves the full-season aggregate', async () => {
+    const { season, rounds } = await createSeasonWithRounds()
+    const markets = await createMarkets(season.id)
+    const uni = await createUniversity('Aggregate Scope University')
+    const supervisor = await createUser({ email: 'aggregate-sup@test.com', role: 'SUPERVISOR', universityId: uni.id })
+    const student = await createUser({ email: 'aggregate-student@test.com', role: 'STUDENT', universityId: uni.id })
+    const team = await createTeam({ name: 'Aggregate Team', supervisorId: supervisor.id, universityId: uni.id, seasonId: season.id })
+    await addTeamMember(team.id, student.id, true)
+    for (const [index, predicted] of [80, 50].entries()) {
+      await createSubmission({ teamId: team.id, roundId: rounds[index].id, submittedById: student.id, values: [{ marketId: markets[0].id, metric: 'OCCUPANCY', weekOffset: 1, value: predicted }] })
+      await createActual({ seasonId: season.id, roundId: rounds[index].id, marketId: markets[0].id, metric: 'OCCUPANCY', weekOffset: 1, value: 100, createdById: adminUser.id })
+    }
+    expect((await runScoring(season.id, adminUser.id)).status).toBe('SUCCESS')
+    expect((await runScoring(season.id, adminUser.id, 'ROUND', rounds[1].id)).status).toBe('SUCCESS')
+    const aggregate = await prisma.scoreAggregate.findFirstOrThrow({ where: { seasonId: season.id, teamId: team.id, metric: 'OCCUPANCY', scopeType: 'SEASON' } })
+    expect(aggregate.mape).toBeCloseTo(0.35)
+    expect(aggregate.nErrors).toBe(2)
+  })
+
   it('scoring when no submissions exist returns SUCCESS with 0 counts', async () => {
     const { season } = await createSeasonWithRounds()
     await createMarkets(season.id)

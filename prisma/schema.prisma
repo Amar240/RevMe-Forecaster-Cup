@@ -19,6 +19,7 @@ enum TeamStatus {
   PENDING_APPROVAL
   APPROVED
   ACTIVE
+  ARCHIVED
   REJECTED
   DISQUALIFIED
 }
@@ -73,6 +74,29 @@ enum SeasonStatus {
   COMPLETED
 }
 
+enum ArchiveStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum ImportBatchRole {
+  SUPERVISOR
+  ADMIN
+}
+
+enum ImportBatchStatus {
+  PREVIEWED
+  CONFIRMED
+  COMPLETED
+}
+
+enum ImportAssistMode {
+  DISABLED
+  ON_DEMAND
+}
+
 enum WarningType {
   MISSED_SUBMISSION
   LATE_SUBMISSION
@@ -118,11 +142,13 @@ enum ActualRevisionAction {
 model User {
   id                   String    @id @default(cuid())
   email                String    @unique
-  passwordHash         String
+  passwordHash         String?
   firstName            String
   lastName             String
   role                 Role      @default(STUDENT)
   emailVerified        Boolean   @default(false)
+  emailVerifiedAt      DateTime?
+  isActive             Boolean   @default(true)
   resetToken           String?
   resetTokenExpiry     DateTime?
   rulesAcknowledgedAt  DateTime?
@@ -154,25 +180,62 @@ model User {
   roundsScored             Round[]          @relation("RoundScorer")
   marketInfosUpdated       MarketInfo[]     @relation("MarketInfoUpdatedBy")
   marketRoundUpdates       MarketRoundUpdate[] @relation("MarketRoundUpdateCreator")
+  seasonArchives           SeasonArchive[]
+  importBatches            ImportBatch[]
+  emailVerificationCodes   EmailVerificationCode[]
+  oauthAccounts             OAuthAccount[]
 
   @@index([email])
   @@index([role])
 }
 
+model OAuthAccount {
+  id                String   @id @default(cuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider          String
+  providerAccountId String
+  email             String
+  createdAt         DateTime @default(now())
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model EmailVerificationCode {
+  id        String    @id @default(cuid())
+  userId    String
+  codeHash  String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
 model University {
   id        String   @id @default(cuid())
   name      String   @unique
+  normalizedName String?
+  isListed  Boolean  @default(true)
   country   String?
   createdAt DateTime @default(now())
 
   users User[]
   teams Team[]
+  importBatches ImportBatch[]
+
+  @@index([normalizedName])
 }
 
 model Team {
   id                 String     @id @default(cuid())
   name               String
   displayId          String     @unique
+  externalTeamId     String?
   status             TeamStatus @default(PENDING_APPROVAL)
   disqualifiedAt     DateTime?
   disqualifiedReason String?
@@ -183,8 +246,8 @@ model Team {
   createdAt          DateTime   @default(now())
   updatedAt          DateTime   @updatedAt
 
-  supervisorId String
-  supervisor   User       @relation("Supervisor", fields: [supervisorId], references: [id])
+  supervisorId String?
+  supervisor   User?      @relation("Supervisor", fields: [supervisorId], references: [id])
   universityId String
   university   University @relation(fields: [universityId], references: [id])
   seasonId     String?
@@ -195,11 +258,16 @@ model Team {
   predictionErrors PredictionError[]
   scoreAggregates  ScoreAggregate[]
   supportTickets   SupportTicket[] @relation("TicketTeam")
+  importBatchId    String?
+  importBatch      ImportBatch? @relation(fields: [importBatchId], references: [id])
 
   @@index([supervisorId])
   @@index([universityId])
   @@index([status])
   @@index([seasonId])
+  @@index([externalTeamId])
+  @@index([importBatchId])
+  @@unique([seasonId, externalTeamId])
 }
 
 model TeamMember {
@@ -221,6 +289,7 @@ model Season {
   name             String
   status           SeasonStatus @default(DRAFT)
   registrationOpen Boolean      @default(false)
+  importAssistMode ImportAssistMode @default(DISABLED)
   startDate        DateTime
   endDate          DateTime
   createdAt        DateTime     @default(now())
@@ -235,6 +304,52 @@ model Season {
   joinRequests       JoinRequest[]
   marketInfos        MarketInfo[]
   marketRoundUpdates MarketRoundUpdate[]
+  archives           SeasonArchive[]
+  importBatches       ImportBatch[]
+}
+
+model ImportBatch {
+  id           String            @id @default(cuid())
+  uploaderId   String
+  uploader     User              @relation(fields: [uploaderId], references: [id])
+  uploaderRole ImportBatchRole
+  seasonId     String
+  season       Season            @relation(fields: [seasonId], references: [id])
+  universityId String?
+  university   University?       @relation(fields: [universityId], references: [id])
+  fileName     String
+  fileHash     String
+  s3Key        String?
+  status       ImportBatchStatus @default(PREVIEWED)
+  summaryJson  Json
+  createdAt    DateTime          @default(now())
+  teams        Team[]
+
+  @@index([uploaderId])
+  @@index([seasonId])
+  @@index([universityId])
+  @@index([status])
+}
+
+model SeasonArchive {
+  id             String        @id @default(cuid())
+  seasonId       String
+  season         Season        @relation(fields: [seasonId], references: [id])
+  status         ArchiveStatus @default(PENDING)
+  version        Int           @default(1)
+  s3Bucket       String?
+  s3Prefix       String?
+  fileManifest   Json?
+  totalSizeBytes Int?
+  errorMessage   String?
+  triggeredById  String
+  triggeredBy    User          @relation(fields: [triggeredById], references: [id])
+  startedAt      DateTime      @default(now())
+  completedAt    DateTime?
+  createdAt      DateTime      @default(now())
+
+  @@unique([seasonId, version])
+  @@index([seasonId])
 }
 
 model Market {
@@ -272,7 +387,10 @@ model Round {
   isFinal  Boolean     @default(false)
   status   RoundStatus @default(UPCOMING)
 
-  isLockedActuals  Boolean   @default(false)
+  isLockedActuals      Boolean   @default(false)
+  leaderboardVisible   Boolean   @default(false)
+  leaderboardReviewed  Boolean   @default(false)
+  participantsNotified Boolean   @default(false)
   lockedAt         DateTime?
   lockedById       String?
   lockedBy         User?     @relation("RoundLocker", fields: [lockedById], references: [id])
@@ -529,6 +647,7 @@ model EmailDispatch {
   success     Boolean  @default(true)
 
   @@unique([type, recipientId, roundId])
+  @@unique([type, recipientId, teamId])
   @@index([type, roundId])
 }
 

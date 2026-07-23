@@ -2,14 +2,18 @@
 
 import { csrfFetch } from '@/lib/csrf'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { PasswordInput } from '@/components/ui/password-input'
 import { Label } from '@/components/ui/label'
-import { BarChart3 } from 'lucide-react'
+import { AlertBanner } from '@/components/ui/alert-banner'
+import { AuthShell } from '@/components/auth/auth-shell'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { COUNTRIES } from '@/lib/countries'
+import { GoogleSignIn } from '@/components/auth/google-sign-in'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,10 +26,38 @@ export default function RegisterPage() {
     firstName: '',
     lastName: '',
     role: 'STUDENT' as 'STUDENT' | 'SUPERVISOR',
-    universityName: '',
+    country: '',
   })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [universities, setUniversities] = useState<{ id: string; name: string }[]>([])
+  const [selectedUniversity, setSelectedUniversity] = useState('')
+  const [customUniversityName, setCustomUniversityName] = useState('')
+
+  useEffect(() => {
+    let cancelled = false
+
+    void (async () => {
+      try {
+        const res = await fetch('/api/universities', {
+          credentials: 'same-origin',
+        })
+        const data = await res.json() as { universities?: { id: string; name: string }[] }
+
+        if (!cancelled) {
+          setUniversities(data.universities || [])
+        }
+      } catch {
+        if (!cancelled) {
+          setUniversities([])
+        }
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -41,13 +73,41 @@ export default function RegisterPage() {
       return
     }
 
+    if (!selectedUniversity) {
+      setError('Please select your university')
+      return
+    }
+
+    if (selectedUniversity === 'other' && !customUniversityName.trim()) {
+      setError('Please enter your university name')
+      return
+    }
+
+    if (!formData.country) {
+      setError('Please select your country')
+      return
+    }
+
     setLoading(true)
 
     try {
+      const payload = {
+        email: formData.email,
+        password: formData.password,
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        role: formData.role,
+        country: formData.country,
+        universitySelectionMode: selectedUniversity === 'other' ? 'OTHER' as const : 'EXISTING' as const,
+        ...(selectedUniversity === 'other'
+          ? { universityName: customUniversityName.trim() }
+          : { universityId: selectedUniversity }),
+      }
+
       const res = await csrfFetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(payload),
       })
 
       const data = await res.json()
@@ -57,8 +117,9 @@ export default function RegisterPage() {
         return
       }
 
-      router.push('/dashboard')
-      router.refresh()
+      const nextEmail = encodeURIComponent(data.email || formData.email)
+      const emailSent = data.emailSent === false ? '0' : '1'
+      router.push(`/verify-email?email=${nextEmail}&sent=${emailSent}`)
     } catch {
       setError('An error occurred. Please try again.')
     } finally {
@@ -66,58 +127,39 @@ export default function RegisterPage() {
     }
   }
 
-  const inputClasses = "bg-white/5 border-white/10 text-white placeholder:text-slate-500 focus:border-violet-500/50 focus:ring-violet-500/20"
-
   return (
-    <div className="min-h-screen flex items-center justify-center bg-canvas px-4 py-12 relative overflow-hidden">
-      <div className="absolute -top-32 -left-32 w-[400px] h-[400px] rounded-full bg-violet-600/15 blur-[120px] orb-drift-1 pointer-events-none" />
-      <div className="absolute bottom-0 right-0 w-[350px] h-[350px] rounded-full bg-amber-500/10 blur-[100px] orb-drift-2 pointer-events-none" />
-      <div className="absolute inset-0 grain-overlay pointer-events-none" />
-
-      <div className="w-full max-w-md glass-card rounded-2xl p-8 relative">
-        <div className="text-center mb-6">
-          <Link href="/" className="inline-flex items-center justify-center space-x-2 mb-5">
-            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-violet-500 to-blue-500 flex items-center justify-center">
-              <BarChart3 className="h-5 w-5 text-white" />
-            </div>
-            <span className="text-xl font-bold text-white font-display">RevME</span>
-          </Link>
-          <h1 className="text-2xl font-bold text-white">Create your account</h1>
-          <p className="text-sm text-slate-400 mt-1">Join the Forecaster Cup competition</p>
-        </div>
-
+    <AuthShell title="Create your account" description="Register to start your competition profile.">
         <form onSubmit={handleSubmit} className="space-y-5">
+          <GoogleSignIn />
           {error && (
-            <div className="rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-2 text-sm text-rose-300">
+            <AlertBanner variant="error" className="shadow-none">
               {error}
-            </div>
+            </AlertBanner>
           )}
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="firstName" className="text-slate-300 text-sm">First Name</Label>
+              <Label htmlFor="firstName" className="text-sm font-medium text-text-secondary">First Name</Label>
               <Input
                 id="firstName"
                 value={formData.firstName}
                 onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
                 required
-                className={inputClasses}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="lastName" className="text-slate-300 text-sm">Last Name</Label>
+              <Label htmlFor="lastName" className="text-sm font-medium text-text-secondary">Last Name</Label>
               <Input
                 id="lastName"
                 value={formData.lastName}
                 onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
                 required
-                className={inputClasses}
               />
             </div>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="email" className="text-slate-300 text-sm">Email</Label>
+            <Label htmlFor="email" className="text-sm font-medium text-text-secondary">Email</Label>
             <Input
               id="email"
               type="email"
@@ -125,44 +167,92 @@ export default function RegisterPage() {
               value={formData.email}
               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
               required
-              className={inputClasses}
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="universityName" className="text-slate-300 text-sm">University</Label>
-            <Input
+            <Label htmlFor="universityName" className="text-sm font-medium text-text-secondary">University</Label>
+            <select
               id="universityName"
-              placeholder="Your university name"
-              value={formData.universityName}
-              onChange={(e) => setFormData({ ...formData, universityName: e.target.value })}
+              value={selectedUniversity}
+              onChange={(e) => {
+                const value = e.target.value
+                setSelectedUniversity(value)
+                if (value !== 'other') {
+                  setCustomUniversityName('')
+                }
+              }}
+              className="flex h-11 w-full rounded-md border border-input bg-card px-3.5 py-2 text-[15px] text-foreground shadow-sm transition-[border-color,box-shadow,background-color] focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
               required
-              className={inputClasses}
-            />
+            >
+              <option value="" disabled>
+                Select your university
+              </option>
+              {universities.map((university) => (
+                <option key={university.id} value={university.id}>
+                  {university.name}
+                </option>
+              ))}
+              <option value="other">Other</option>
+            </select>
+            {selectedUniversity === 'other' && (
+              <Input
+                placeholder="Enter your university name"
+                value={customUniversityName}
+                onChange={(e) => {
+                  setCustomUniversityName(e.target.value)
+                }}
+                required
+              />
+            )}
+            <p className="text-xs text-text-muted">
+              Select your university from the list. Choose Other if yours is not listed.
+            </p>
           </div>
 
           <div className="space-y-2">
-            <Label className="text-slate-300 text-sm">I am a</Label>
-            <div className="flex gap-3">
+            <Label htmlFor="country" className="text-sm font-medium text-text-secondary">Country</Label>
+            <Select
+              value={formData.country}
+              onValueChange={(country) => setFormData({ ...formData, country })}
+            >
+              <SelectTrigger id="country" aria-label="Country">
+                <SelectValue placeholder="Select your country" />
+              </SelectTrigger>
+              <SelectContent theme="light">
+                {COUNTRIES.map((country) => (
+                  <SelectItem key={country} value={country}>
+                    {country}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-sm font-medium text-text-secondary">I am a</Label>
+            <div className="grid grid-cols-2 gap-3">
               <button
                 type="button"
                 onClick={() => setFormData({ ...formData, role: 'STUDENT' })}
-                className={`flex-1 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                className={`rounded-lg border px-4 py-2.5 text-sm font-medium transition-colors ${
                   formData.role === 'STUDENT'
-                    ? 'bg-gradient-to-r from-violet-600 to-blue-600 text-white shadow-lg shadow-violet-500/20'
-                    : 'bg-white/5 border border-white/10 text-slate-400 hover:text-white hover:bg-white/[0.08]'
+                    ? 'border-primary bg-primary text-primary-foreground shadow-sm'
+                    : 'border-border bg-secondary text-text-secondary hover:border-primary/30 hover:bg-primary-soft'
                 }`}
+                aria-pressed={formData.role === 'STUDENT'}
               >
                 Student
               </button>
               <button
                 type="button"
                 onClick={() => setFormData({ ...formData, role: 'SUPERVISOR' })}
-                className={`flex-1 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                className={`rounded-lg border px-4 py-2.5 text-sm font-medium transition-colors ${
                   formData.role === 'SUPERVISOR'
-                    ? 'bg-gradient-to-r from-violet-600 to-blue-600 text-white shadow-lg shadow-violet-500/20'
-                    : 'bg-white/5 border border-white/10 text-slate-400 hover:text-white hover:bg-white/[0.08]'
+                    ? 'border-primary bg-primary text-primary-foreground shadow-sm'
+                    : 'border-border bg-secondary text-text-secondary hover:border-primary/30 hover:bg-primary-soft'
                 }`}
+                aria-pressed={formData.role === 'SUPERVISOR'}
               >
                 Supervisor
               </button>
@@ -170,42 +260,35 @@ export default function RegisterPage() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="password" className="text-slate-300 text-sm">Password</Label>
+            <Label htmlFor="password" className="text-sm font-medium text-text-secondary">Password</Label>
             <PasswordInput
               id="password"
               value={formData.password}
               onChange={(e) => setFormData({ ...formData, password: e.target.value })}
               required
-              className={inputClasses}
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="confirmPassword" className="text-slate-300 text-sm">Confirm Password</Label>
+            <Label htmlFor="confirmPassword" className="text-sm font-medium text-text-secondary">Confirm Password</Label>
             <PasswordInput
               id="confirmPassword"
               value={formData.confirmPassword}
               onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
               required
-              className={inputClasses}
             />
           </div>
 
-          <Button
-            type="submit"
-            className="w-full bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-500 hover:to-blue-500 text-white shadow-lg shadow-violet-500/20 border-0"
-            disabled={loading}
-          >
+          <Button type="submit" className="w-full" disabled={loading}>
             {loading ? 'Creating account...' : 'Create Account'}
           </Button>
-          <p className="text-sm text-slate-500 text-center">
+          <p className="text-center text-sm text-text-secondary">
             Already have an account?{' '}
-            <Link href="/login" className="text-violet-400 hover:text-violet-300 transition-colors">
+            <Link href="/login" className="font-medium text-primary hover:text-primary-hover">
               Sign in
             </Link>
           </p>
         </form>
-      </div>
-    </div>
+    </AuthShell>
   )
 }

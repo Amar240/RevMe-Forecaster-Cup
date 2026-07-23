@@ -23,7 +23,7 @@ interface HeaderProps {
 
 export function Header({ user, onToggleSidebar }: HeaderProps) {
   const router = useRouter()
-  const { theme, setTheme, resolvedTheme } = useTheme()
+  const { setTheme, resolvedTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => setMounted(true), [])
@@ -39,44 +39,52 @@ export function Header({ user, onToggleSidebar }: HeaderProps) {
   }
 
   return (
-    <header className="bg-[#070B18] border-b border-white/5 sticky top-0 z-40">
-      <div className="flex items-center justify-between h-16 px-4 lg:px-8">
-        <div className="flex items-center space-x-2">
+    <header className="sticky top-0 z-40 border-b border-border bg-background">
+      <div className="flex h-16 items-center justify-between px-4 lg:px-8">
+        <div className="flex items-center gap-3">
           {onToggleSidebar && (
-            <Button variant="ghost" size="sm" className="lg:hidden text-slate-400 hover:text-white hover:bg-white/5" onClick={onToggleSidebar}>
+            <Button variant="ghost" size="icon" className="lg:hidden" onClick={onToggleSidebar}>
               <Menu className="h-5 w-5" />
             </Button>
           )}
-          <Link href="/dashboard" className="flex items-center space-x-3">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-blue-500 flex items-center justify-center">
-              <BarChart3 className="h-4 w-4 text-white" />
+          <Link href="/dashboard" className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
+              <BarChart3 className="h-5 w-5" />
             </div>
-            <span className="text-lg font-bold text-white hidden sm:block">RevME Forecaster Cup</span>
+            <div className="hidden sm:block">
+              <div className="font-display text-lg font-semibold text-foreground">RevME Forecaster Cup</div>
+              <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Academic Analytics Platform</div>
+            </div>
           </Link>
         </div>
 
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           <NotificationsDropdown />
           {mounted && (
-            <Button variant="ghost" size="sm" onClick={toggleTheme} className="h-9 w-9 p-0 text-slate-400 hover:text-white hover:bg-white/5">
+            <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label="Toggle theme">
               {resolvedTheme === 'dark' ? (
-                <Sun className="h-4 w-4 text-yellow-500" />
+                <Sun className="h-4 w-4 text-accent" />
               ) : (
                 <Moon className="h-4 w-4" />
               )}
             </Button>
           )}
-          <div className="flex items-center space-x-2 text-sm text-slate-400">
-            <UserIcon className="h-4 w-4" />
-            <span className="hidden md:inline">
-              {user.firstName} {user.lastName}
-            </span>
-            <span className="text-xs bg-violet-500/10 border border-violet-500/20 text-violet-300 px-2 py-0.5 rounded-full">
+          <div className="hidden items-center gap-2 sm:flex">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-muted text-text-secondary">
+              <UserIcon className="h-4 w-4" />
+            </div>
+            <div className="hidden text-sm md:block">
+              <p className="font-medium text-foreground">
+                {user.firstName} {user.lastName}
+              </p>
+              <p className="text-xs text-text-secondary">{user.email}</p>
+            </div>
+            <span className="inline-flex items-center rounded-full border border-border bg-muted px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-text-secondary">
               {user.role}
             </span>
           </div>
-          <Button variant="ghost" size="sm" onClick={handleLogout} className="text-slate-400 hover:text-white hover:bg-white/5">
-            <LogOut className="h-4 w-4 mr-2" />
+          <Button variant="ghost" size="sm" onClick={handleLogout}>
+            <LogOut className="mr-2 h-4 w-4" />
             <span className="hidden sm:inline">Logout</span>
           </Button>
         </div>

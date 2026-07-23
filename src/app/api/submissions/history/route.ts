@@ -2,26 +2,33 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/server/db'
 import { logger } from '@/server/logger'
 import { requireUserOrResponse, jsonError } from '@/server/http'
+import { getCurrentOperationalSeason } from '@/server/season'
+import { resolveScoreTeam } from '@/server/scoped-score-team'
 
 export const dynamic = 'force-dynamic'
 
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const { user, response } = await requireUserOrResponse()
     if (response) return response
     const authUser = user!
 
-    const teamMember = await prisma.teamMember.findFirst({
-      where: { userId: authUser.id },
-    })
+    const operationalSeason = await getCurrentOperationalSeason()
+    if (!operationalSeason) {
+      return NextResponse.json({ submissions: [] })
+    }
 
-    if (!teamMember) {
+    const team = await resolveScoreTeam({ userId: authUser.id, role: authUser.role, seasonId: operationalSeason.id, requestedTeamId: new URL(request.url).searchParams.get('teamId') })
+    if (!team) {
       return NextResponse.json({ submissions: [] })
     }
 
     const submissions = await prisma.submission.findMany({
-      where: { teamId: teamMember.teamId },
+      where: {
+        teamId: team.id,
+        round: { seasonId: operationalSeason.id },
+      },
       include: {
         round: true,
         values: {
@@ -32,7 +39,7 @@ export async function GET() {
     })
 
     const errors = await prisma.predictionError.findMany({
-      where: { teamId: teamMember.teamId },
+      where: { teamId: team.id, seasonId: operationalSeason.id },
     })
 
     const errorMap = new Map<string, { absError: number; apeError: number | null }>()
@@ -67,7 +74,7 @@ export async function GET() {
           adr: v.adr || 0,
           weekOffset: v.weekOffset,
           submittedAt: sub.submittedAt.toISOString(),
-          round: { number: sub.round.number },
+          round: { id: sub.round.id, number: sub.round.number },
           market: { name: v.marketName },
           score: occError || adrError ? {
             occupancyAE: occError?.absError || 0,
@@ -91,4 +98,3 @@ export async function GET() {
     return jsonError(error, 'Failed to get submissions')
   }
 }
-

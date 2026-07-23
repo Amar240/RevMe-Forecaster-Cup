@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Search, ChevronUp, ChevronDown, ChevronsUpDown, ChevronLeft, ChevronRight, Download } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 export interface Column<T> {
   key: string
@@ -13,6 +14,9 @@ export interface Column<T> {
   render?: (item: T) => React.ReactNode
   className?: string
 }
+
+type DataTableVariant = 'default' | 'compact' | 'leaderboard'
+type DataTableDensity = 'comfortable' | 'compact'
 
 export interface DataTableProps<T> {
   data: T[]
@@ -28,6 +32,8 @@ export interface DataTableProps<T> {
   }[]
   loading?: boolean
   exportFileName?: string
+  variant?: DataTableVariant
+  density?: DataTableDensity
 }
 
 export function DataTable<T extends object>({
@@ -40,6 +46,8 @@ export function DataTable<T extends object>({
   filters = [],
   loading = false,
   exportFileName,
+  variant = 'default',
+  density = 'comfortable',
 }: DataTableProps<T>) {
   const [searchQuery, setSearchQuery] = useState('')
   const [sortKey, setSortKey] = useState<string | null>(null)
@@ -47,6 +55,10 @@ export function DataTable<T extends object>({
   const [currentPage, setCurrentPage] = useState(1)
   const [activeFilters, setActiveFilters] = useState<Record<string, string>>({})
   const [effectivePageSize, setEffectivePageSize] = useState(pageSize)
+
+  const compact = density === 'compact' || variant === 'compact'
+  const headerPadding = compact ? 'px-4 py-2.5' : 'px-4 py-3.5'
+  const cellPadding = compact ? 'px-4 py-2.5' : 'px-4 py-3'
 
   const filteredAndSortedData = useMemo(() => {
     let result = [...data]
@@ -103,11 +115,11 @@ export function DataTable<T extends object>({
   }
 
   const getSortIcon = (key: string) => {
-    if (sortKey !== key) return <ChevronsUpDown className="h-4 w-4 text-gray-400" />
+    if (sortKey !== key) return <ChevronsUpDown className="h-4 w-4 text-muted-foreground" />
     return sortDirection === 'asc' ? (
-      <ChevronUp className="h-4 w-4 text-blue-600" />
+      <ChevronUp className="h-4 w-4 text-primary" />
     ) : (
-      <ChevronDown className="h-4 w-4 text-blue-600" />
+      <ChevronDown className="h-4 w-4 text-primary" />
     )
   }
 
@@ -127,7 +139,7 @@ export function DataTable<T extends object>({
           : str
       })
     )
-    const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n')
+    const csvContent = [headers.join(','), ...rows.map((row) => row.join(','))].join('\n')
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
@@ -140,13 +152,13 @@ export function DataTable<T extends object>({
   if (loading) {
     return (
       <div className="space-y-4">
-        <div className="h-10 w-64 bg-gray-200 animate-pulse rounded-md" />
-        <div className="overflow-x-auto border rounded-lg">
-          <table className="w-full text-sm" role="grid">
+        <div className="h-11 w-64 animate-pulse rounded-md bg-muted" />
+        <div className="overflow-x-auto rounded-lg border border-border bg-card shadow-card">
+          <table className="w-full min-w-[720px] text-sm" role="grid">
             <thead>
-              <tr className="bg-gray-50 border-b" role="row">
+              <tr className="border-b border-border bg-muted" role="row">
                 {columns.map((column) => (
-                  <th key={column.key} className="px-4 py-3 text-left text-gray-600 font-medium">
+                  <th key={column.key} className={cn(headerPadding, 'text-left font-medium text-text-secondary')}>
                     {column.header}
                   </th>
                 ))}
@@ -154,10 +166,10 @@ export function DataTable<T extends object>({
             </thead>
             <tbody>
               {Array.from({ length: 4 }).map((_, rowIndex) => (
-                <tr key={rowIndex} className="border-b last:border-0" role="row">
+                <tr key={rowIndex} className="border-b border-border last:border-0" role="row">
                   {columns.map((column) => (
-                    <td key={column.key} className="px-4 py-3" role="gridcell">
-                      <div className="h-4 bg-gray-200 animate-pulse rounded w-3/4" />
+                    <td key={column.key} className={cellPadding} role="gridcell">
+                      <div className="h-4 w-3/4 animate-pulse rounded bg-muted" />
                     </td>
                   ))}
                 </tr>
@@ -171,10 +183,10 @@ export function DataTable<T extends object>({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row gap-4">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
         {searchKeys.length > 0 && (
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder={searchPlaceholder}
               value={searchQuery}
@@ -186,50 +198,57 @@ export function DataTable<T extends object>({
             />
           </div>
         )}
-        {filters.map((filter) => (
-          <Select
-            key={filter.key}
-            value={activeFilters[filter.key] || 'all'}
-            onValueChange={(value) => {
-              setActiveFilters((prev) => ({ ...prev, [filter.key]: value }))
-              setCurrentPage(1)
-            }}
-          >
-            <SelectTrigger className="h-10 w-[180px]">
-              <SelectValue placeholder={`${filter.label}: All`} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{filter.label}: All</SelectItem>
-              {filter.options.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value}>
-                  {opt.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        ))}
-        {exportFileName && (
-          <Button variant="outline" size="sm" onClick={handleExportCsv} className="h-10">
-            <Download className="h-4 w-4 mr-2" />
-            Export CSV
-          </Button>
-        )}
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap lg:justify-end">
+          {filters.map((filter) => (
+            <Select
+              key={filter.key}
+              value={activeFilters[filter.key] || 'all'}
+              onValueChange={(value) => {
+                setActiveFilters((prev) => ({ ...prev, [filter.key]: value }))
+                setCurrentPage(1)
+              }}
+            >
+              <SelectTrigger className="w-full sm:w-[190px]">
+                <SelectValue placeholder={`${filter.label}: All`} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{filter.label}: All</SelectItem>
+                {filter.options.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ))}
+          {exportFileName && (
+            <Button variant="secondary" size="sm" onClick={handleExportCsv} className="h-11">
+              <Download className="mr-2 h-4 w-4" />
+              Export CSV
+            </Button>
+          )}
+        </div>
       </div>
 
-      <div className="overflow-x-auto border rounded-lg">
-        <table className="w-full text-sm" role="grid">
+      <div
+        className={cn(
+          'overflow-x-auto border border-border bg-card shadow-card',
+          variant === 'leaderboard' ? 'rounded-xl' : 'rounded-lg'
+        )}
+      >
+        <table className="w-full min-w-[720px] text-sm" role="grid">
           <thead>
-            <tr className="bg-gray-50 border-b" role="row">
+            <tr className="border-b border-border bg-muted" role="row">
               {columns.map((column) => (
                 <th
                   key={column.key}
-                  className={`px-4 py-3 text-left text-gray-600 font-medium ${column.className || ''}`}
+                  className={cn(headerPadding, 'text-left font-medium text-text-secondary', column.className)}
                   aria-sort={column.sortable ? getAriaSortValue(column.key) : undefined}
                 >
                   {column.sortable ? (
                     <button
                       onClick={() => handleSort(column.key)}
-                      className="flex items-center space-x-1 hover:text-gray-900"
+                      className="flex items-center gap-1 transition-colors hover:text-foreground"
                     >
                       <span>{column.header}</span>
                       {getSortIcon(column.key)}
@@ -244,15 +263,15 @@ export function DataTable<T extends object>({
           <tbody>
             {paginatedData.length === 0 ? (
               <tr role="row">
-                <td colSpan={columns.length} className="px-4 py-12 text-center text-gray-500" role="gridcell">
+                <td colSpan={columns.length} className="px-4 py-12 text-center text-muted-foreground" role="gridcell">
                   No results found
                 </td>
               </tr>
             ) : (
               paginatedData.map((item, index) => (
-                <tr key={index} className="border-b last:border-0 hover:bg-gray-50" role="row">
+                <tr key={index} className="border-b border-border text-foreground transition-colors last:border-0 hover:bg-secondary" role="row">
                   {columns.map((column) => (
-                    <td key={column.key} className={`px-4 py-3 ${column.className || ''}`} role="gridcell">
+                    <td key={column.key} className={cn(cellPadding, column.className)} role="gridcell">
                       {column.render
                         ? column.render(item)
                         : String(getNestedValue(item, column.key) ?? '-')}
@@ -265,8 +284,8 @@ export function DataTable<T extends object>({
         </table>
       </div>
 
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-gray-500" aria-live="polite">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <p className="text-sm text-text-secondary" aria-live="polite">
           {filteredAndSortedData.length === 0
             ? 'No results'
             : `Showing ${(currentPage - 1) * effectivePageSize + 1} to ${Math.min(
@@ -274,9 +293,9 @@ export function DataTable<T extends object>({
                 filteredAndSortedData.length
               )} of ${filteredAndSortedData.length} results`}
         </p>
-        <div className="flex items-center space-x-4">
-          <div className="flex items-center space-x-2">
-            <span className="text-sm text-gray-600">Rows per page</span>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-text-secondary">Rows per page</span>
             <Select
               value={String(effectivePageSize)}
               onValueChange={(value) => {
@@ -284,7 +303,7 @@ export function DataTable<T extends object>({
                 setCurrentPage(1)
               }}
             >
-              <SelectTrigger className="h-8 w-[70px]">
+              <SelectTrigger className="h-9 w-[78px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -297,23 +316,23 @@ export function DataTable<T extends object>({
             </Select>
           </div>
           {totalPages > 1 && (
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center gap-2">
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
                 disabled={currentPage === 1}
                 aria-label="Go to previous page"
               >
                 <ChevronLeft className="h-4 w-4" />
               </Button>
-              <span className="text-sm text-gray-600">
+              <span className="text-sm text-text-secondary">
                 Page {currentPage} of {totalPages}
               </span>
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
                 disabled={currentPage === totalPages}
                 aria-label="Go to next page"
               >

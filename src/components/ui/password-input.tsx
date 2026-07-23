@@ -17,7 +17,7 @@ export function PasswordInput({ className, ...props }: PasswordInputProps) {
     <div className="relative">
       <Input
         type={showPassword ? 'text' : 'password'}
-        className={cn('pr-10', className)}
+        className={cn('pr-11', className)}
         {...props}
       />
       <Button
@@ -29,9 +29,9 @@ export function PasswordInput({ className, ...props }: PasswordInputProps) {
         aria-label={showPassword ? 'Hide password' : 'Show password'}
       >
         {showPassword ? (
-          <EyeOff className="h-4 w-4 text-gray-500" />
+          <EyeOff className="h-4 w-4 text-muted-foreground" />
         ) : (
-          <Eye className="h-4 w-4 text-gray-500" />
+          <Eye className="h-4 w-4 text-muted-foreground" />
         )}
       </Button>
     </div>

@@ -1,63 +1,66 @@
 import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/db'
-import { hashPassword, createSession } from '@/lib/auth'
-import { sendWelcomeEmail } from '@/lib/email'
+import { hashPassword } from '@/lib/auth'
+import { sendEmailVerificationEmail } from '@/lib/email'
 import { jsonOk, jsonError, parseJson, ApiError } from '@/server/http'
-import { z } from 'zod'
+import { issueEmailVerificationCode, normalizeVerificationEmail } from '@/server/email-verification'
+import { resolveOrReusePendingUniversity } from '@/server/universities'
+import { registerSchema } from '@/server/registration-schema'
 
 export const dynamic = 'force-dynamic'
-
-const registerSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(8),
-  firstName: z.string().min(1),
-  lastName: z.string().min(1),
-  role: z.enum(['STUDENT', 'SUPERVISOR']),
-  universityName: z.string().min(1),
-})
 
 export async function POST(request: NextRequest) {
   try {
     const data = await parseJson(request, registerSchema)
+    const normalizedEmail = normalizeVerificationEmail(data.email)
 
     const existingUser = await prisma.user.findUnique({
-      where: { email: data.email.toLowerCase() },
+      where: { email: normalizedEmail },
     })
 
     if (existingUser) {
       throw new ApiError('Email already registered', 409, 'CONFLICT')
     }
 
-    let university = await prisma.university.findUnique({
-      where: { name: data.universityName },
-    })
+    const university = data.universitySelectionMode === 'EXISTING'
+      ? await prisma.university.findFirst({
+          where: {
+            id: data.universityId,
+            isListed: true,
+          },
+          select: { id: true },
+        })
+      : await resolveOrReusePendingUniversity({
+          name: data.universityName!,
+          country: data.country!,
+        })
 
     if (!university) {
-      university = await prisma.university.create({
-        data: { name: data.universityName },
-      })
+      throw new ApiError('Please select a listed university.', 422, 'INVALID_INPUT')
     }
 
     const passwordHash = await hashPassword(data.password)
 
     const user = await prisma.user.create({
       data: {
-        email: data.email.toLowerCase(),
+        email: normalizedEmail,
         passwordHash,
         firstName: data.firstName,
         lastName: data.lastName,
         role: data.role,
         universityId: university.id,
-        emailVerified: true,
+        emailVerified: false,
+        emailVerifiedAt: null,
       },
     })
 
-    await createSession(user.id)
-
-    sendWelcomeEmail(user.email, user.firstName, user.role as 'STUDENT' | 'SUPERVISOR').catch(() => {})
+    const { code } = await issueEmailVerificationCode(user.id)
+    const emailSent = await sendEmailVerificationEmail(user.email, user.firstName, code)
 
     return jsonOk({
-      message: 'Registration successful',
+      message: emailSent
+        ? 'Registration successful. Verify your email to continue.'
+        : 'Registration successful. Request a new verification code to continue.',
       user: {
         id: user.id,
         email: user.email,
@@ -65,7 +68,10 @@ export async function POST(request: NextRequest) {
         lastName: user.lastName,
         role: user.role,
       },
-    })
+      email: user.email,
+      requiresEmailVerification: true,
+      emailSent,
+    }, 201)
   } catch (error) {
     return jsonError(error, 'Registration failed')
   }

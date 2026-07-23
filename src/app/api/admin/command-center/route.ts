@@ -1,5 +1,8 @@
 import { prisma } from '@/lib/db'
 import { requireAdminOrResponse, jsonOk, jsonError } from '@/server/http'
+import { getCurrentOperationalSeason } from '@/server/season'
+import { getAdminTeamScope, getSeasonTeamWhere } from '@/server/team-scope'
+import { getRoundRunbook } from '@/server/round-runbook'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,11 +17,10 @@ function getRoundStatus(opensAt: Date, closesAt: Date): string {
 
 export async function GET() {
   try {
-    const { user, response } = await requireAdminOrResponse()
+    const { response } = await requireAdminOrResponse()
     if (response) return response
 
-    const activeSeason = await prisma.season.findFirst({
-      where: { status: 'ACTIVE' },
+    const operationalSeason = await getCurrentOperationalSeason({
       include: {
         rounds: {
           orderBy: { number: 'asc' },
@@ -29,24 +31,34 @@ export async function GET() {
         markets: { where: { isActive: true }, include: { market: true } },
       },
     })
+    const teamScope = await getAdminTeamScope({ seasonId: operationalSeason?.id })
 
     const now = new Date()
-    const currentRound = activeSeason?.rounds.find((r) => {
+    const currentRound = operationalSeason?.rounds.find((r) => {
       const isTimeOpen = new Date(r.closesAt) > now && new Date(r.opensAt) <= now
       const hasStatus = 'status' in r
       const isStatusOpen = !hasStatus || r.status === 'OPEN'
       return isTimeOpen && isStatusOpen
     })
 
-    const [totalTeams, activeTeams, disqualifiedTeams, totalUsers, totalSubmissions, totalWarnings, pendingTeamApprovals] = await Promise.all([
-      prisma.team.count(),
-      prisma.team.count({ where: { status: 'ACTIVE' } }),
-      prisma.team.count({ where: { status: 'DISQUALIFIED' } }),
+    const [totalUsers, totalSubmissions, totalWarnings, pendingTeamApprovals, runbook] = await Promise.all([
       prisma.user.count(),
       prisma.submission.count(),
       prisma.warning.count(),
-      prisma.team.count({ where: { status: 'PENDING_APPROVAL' } }),
+      operationalSeason
+        ? prisma.team.count({ where: { seasonId: operationalSeason.id, status: 'PENDING_APPROVAL' } })
+        : Promise.resolve(0),
+      operationalSeason ? getRoundRunbook(operationalSeason.id, now) : Promise.resolve([]),
     ])
+
+    // Warning breakdown for disqualification risk card
+    const teamWarningCounts = await prisma.warning.groupBy({
+      by: ['teamId'],
+      _count: { id: true },
+      where: operationalSeason ? { team: getSeasonTeamWhere(operationalSeason.id) } : {},
+    })
+    const oneWarningTeams = teamWarningCounts.filter((w) => w._count.id === 1).length
+    const twoWarningTeams = teamWarningCounts.filter((w) => w._count.id === 2).length
 
     let currentRoundSubmissions = 0
     if (currentRound) {
@@ -77,38 +89,78 @@ export async function GET() {
       ).sort((a, b) => a - b)
     }
 
-    const activeMarketCount = activeSeason?.markets?.length ?? 0
+    const activeMarketCount = operationalSeason?.markets?.length ?? 0
     const expectedErrors =
       weekOffsets.length > 0
-        ? activeTeams * activeMarketCount * 2 * weekOffsets.length
+        ? teamScope.summary.activeTeams * activeMarketCount * 2 * weekOffsets.length
         : null
 
-    const rounds = (activeSeason?.rounds || []).map((round) => {
-      const hasActuals = round._count.actuals > 0
-      const isScored = round._count.submissions > 0 && hasActuals
-      return {
-        id: round.id,
-        number: round.number,
-        opensAt: round.opensAt.toISOString(),
-        closesAt: round.closesAt.toISOString(),
-        status: getRoundStatus(new Date(round.opensAt), new Date(round.closesAt)),
-        submissionCount: round._count.submissions,
-        hasActuals,
-        isScored,
-      }
-    })
+    const rounds = await Promise.all(
+      (operationalSeason?.rounds || []).map(async (round) => {
+        const expectedWeekOffsets = round.isFinal ? 1 : 2
+        const expectedActuals = activeMarketCount * 2 * expectedWeekOffsets
+        const [actualsCount, aggregatesExist] = await Promise.all([
+          prisma.actual.count({ where: { roundId: round.id, isVoided: false } }),
+          prisma.scoreAggregate.count({ where: { seasonId: operationalSeason!.id, roundId: round.id } }),
+        ])
+        const hasActuals = actualsCount > 0
+        const isScored = aggregatesExist > 0 && actualsCount === expectedActuals
+        return {
+          id: round.id,
+          number: round.number,
+          opensAt: round.opensAt.toISOString(),
+          closesAt: round.closesAt.toISOString(),
+          status: getRoundStatus(new Date(round.opensAt), new Date(round.closesAt)),
+          submissionCount: round._count.submissions,
+          hasActuals,
+          isScored,
+        }
+      })
+    )
 
     return jsonOk({
-      activeSeason: activeSeason ? { id: activeSeason.id, name: activeSeason.name, status: activeSeason.status } : null,
-      currentRound: currentRound ? {
-        id: currentRound.id, number: currentRound.number,
-        opensAt: currentRound.opensAt.toISOString(), closesAt: currentRound.closesAt.toISOString(),
-        status: getRoundStatus(new Date(currentRound.opensAt), new Date(currentRound.closesAt)),
-      } : null,
-      stats: { totalTeams, activeTeams, disqualifiedTeams, totalUsers, totalSubmissions, currentRoundSubmissions, totalWarnings, teamsWithActuals: rounds.filter((r) => r.hasActuals).length, scoredSubmissions },
-      meta: { weekOffsets, lastScoredAt: currentRound?.lastScoredAt ? currentRound.lastScoredAt.toISOString() : null, lastActualsUploadAt: null, expectedErrors, pendingTeamApprovals, activeMarketCount },
-      submissionProgress: { submitted: currentRoundSubmissions, pending: activeTeams - currentRoundSubmissions, total: activeTeams },
+      activeSeason: operationalSeason
+        ? { id: operationalSeason.id, name: operationalSeason.name, status: operationalSeason.status }
+        : null,
+      currentRound: currentRound
+        ? {
+            id: currentRound.id,
+            number: currentRound.number,
+            opensAt: currentRound.opensAt.toISOString(),
+            closesAt: currentRound.closesAt.toISOString(),
+            status: getRoundStatus(new Date(currentRound.opensAt), new Date(currentRound.closesAt)),
+            leaderboardReviewed: currentRound.leaderboardReviewed,
+            participantsNotified: currentRound.participantsNotified,
+          }
+        : null,
+      stats: {
+        totalTeams: teamScope.totalTeams,
+        activeTeams: teamScope.summary.activeTeams,
+        disqualifiedTeams: teamScope.summary.disqualifiedTeams,
+        totalUsers,
+        totalSubmissions,
+        currentRoundSubmissions,
+        totalWarnings,
+        teamsWithActuals: rounds.filter((r) => r.hasActuals).length,
+        scoredSubmissions,
+        oneWarningTeams,
+        twoWarningTeams,
+      },
+      meta: {
+        weekOffsets,
+        lastScoredAt: currentRound?.lastScoredAt ? currentRound.lastScoredAt.toISOString() : null,
+        lastActualsUploadAt: null,
+        expectedErrors,
+        pendingTeamApprovals,
+        activeMarketCount,
+      },
+      submissionProgress: {
+        submitted: currentRoundSubmissions,
+        pending: teamScope.summary.activeTeams - currentRoundSubmissions,
+        total: teamScope.summary.activeTeams,
+      },
       rounds,
+      runbook,
     })
   } catch (error) {
     return jsonError(error, 'Failed to load command center')

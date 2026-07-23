@@ -1,16 +1,33 @@
 import type { Metadata } from 'next'
-import { Inter } from 'next/font/google'
+import { IBM_Plex_Sans, IBM_Plex_Serif, JetBrains_Mono } from 'next/font/google'
 import { Toaster } from 'sonner'
 import { ThemeProvider } from '@/components/theme-provider'
 import './globals.css'
 
-const inter = Inter({ subsets: ['latin'] })
+const body = IBM_Plex_Sans({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-body',
+})
 
-export const dynamic = 'force-dynamic'
+const display = IBM_Plex_Serif({
+  subsets: ['latin'],
+  weight: ['500', '600', '700'],
+  variable: '--font-display',
+})
+
+const mono = JetBrains_Mono({
+  subsets: ['latin'],
+  weight: ['500', '600'],
+  variable: '--font-mono',
+})
 
 export const metadata: Metadata = {
-  title: 'RevME Forecaster Cup',
-  description: 'Hospitality Revenue Management Forecasting Competition Platform',
+  title: {
+    default: 'RevME Forecaster Cup',
+    template: '%s | RevME Forecaster Cup',
+  },
+  description: 'Hospitality revenue management forecasting competition platform.',
 }
 
 export default function RootLayout({
@@ -20,8 +37,8 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={inter.className}>
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+      <body className={`${body.variable} ${display.variable} ${mono.variable} font-body bg-background text-foreground antialiased`}>
+        <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
           {children}
           <Toaster richColors position="top-right" />
         </ThemeProvider>

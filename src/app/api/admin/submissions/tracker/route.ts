@@ -1,32 +1,33 @@
 import { prisma } from '@/lib/db'
 import { requireAdminOrResponse, jsonOk, jsonError } from '@/server/http'
+import { getCurrentOperationalSeason } from '@/server/season'
+import { getActiveTeamWhere } from '@/server/team-scope'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
   try {
-    const { user, response } = await requireAdminOrResponse()
+    const { response } = await requireAdminOrResponse()
     if (response) return response
 
-    const activeSeason = await prisma.season.findFirst({
-      where: { status: 'ACTIVE' },
+    const operationalSeason = await getCurrentOperationalSeason({
       include: {
         rounds: { orderBy: { number: 'asc' } },
         markets: { where: { isActive: true }, include: { market: true } },
       },
     })
 
-    if (!activeSeason) return jsonOk({ teams: [], round: null, markets: [] })
+    if (!operationalSeason) return jsonOk({ teams: [], round: null, markets: [] })
 
     const now = new Date()
-    const currentRound = activeSeason.rounds.find(r => 
+    const currentRound = operationalSeason.rounds.find(r => 
       new Date(r.closesAt) > now && new Date(r.opensAt) <= now
-    ) || activeSeason.rounds.filter(r => new Date(r.closesAt) <= now).pop()
+    ) || operationalSeason.rounds.filter(r => new Date(r.closesAt) <= now).pop()
 
-    if (!currentRound) return jsonOk({ teams: [], round: null, markets: activeSeason.markets.map(m => m.market) })
+    if (!currentRound) return jsonOk({ teams: [], round: null, markets: operationalSeason.markets.map(m => m.market) })
 
     const teams = await prisma.team.findMany({
-      where: { status: 'ACTIVE', seasonId: activeSeason.id },
+      where: getActiveTeamWhere(operationalSeason.id),
       include: {
         supervisor: { select: { firstName: true, lastName: true, email: true } },
         university: { select: { name: true } },
@@ -59,7 +60,7 @@ export async function GET() {
         opensAt: currentRound.opensAt.toISOString(),
         closesAt: currentRound.closesAt.toISOString(),
       },
-      markets: activeSeason.markets.map(m => ({ id: m.market.id, name: m.market.name })),
+      markets: operationalSeason.markets.map(m => ({ id: m.market.id, name: m.market.name })),
       teams: teamData,
       summary: {
         total: teams.length,

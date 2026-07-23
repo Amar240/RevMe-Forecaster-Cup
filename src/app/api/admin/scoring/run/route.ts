@@ -2,7 +2,10 @@ import { NextRequest } from 'next/server'
 import { runScoring } from '@/lib/scoring'
 import { prisma } from '@/lib/db'
 import { logAuditAction } from '@/lib/audit'
+import { normalizeScoringScope } from '@/lib/scoring-admin'
 import { requireAdminOrResponse, jsonOk, jsonError, ApiError } from '@/server/http'
+import { formatIncompleteActualsMessage, getScoringReadinessSummary } from '@/server/scoring-readiness'
+import { getCurrentOperationalSeason } from '@/server/season'
 
 export const dynamic = 'force-dynamic'
 
@@ -40,13 +43,43 @@ export async function POST(request: NextRequest) {
     if (response) return response
 
     const body = await request.json()
-    const { seasonId, scope = 'SEASON', roundId } = body
+    const { seasonId, roundId } = body
+    const scope = normalizeScoringScope(body.scope ?? 'SEASON')
+
+    if (!scope) {
+      throw new ApiError('Invalid scoring scope', 400, 'INVALID_INPUT')
+    }
 
     let targetSeasonId = seasonId
     if (!targetSeasonId) {
-      const activeSeason = await prisma.season.findFirst({ where: { status: 'ACTIVE' } })
-      if (!activeSeason) throw new ApiError('No active season found', 400, 'INVALID_INPUT')
-      targetSeasonId = activeSeason.id
+      const operationalSeason = await getCurrentOperationalSeason({
+        select: { id: true },
+      })
+      if (!operationalSeason) throw new ApiError('No operational season found', 400, 'INVALID_INPUT')
+      targetSeasonId = operationalSeason.id
+    }
+
+    const readiness = await getScoringReadinessSummary({
+      seasonId: targetSeasonId,
+      scope,
+      roundId,
+    })
+    const incompleteChecks = readiness?.checks.filter((check) => !check.actualsComplete) ?? []
+
+    if (incompleteChecks.length > 0) {
+      throw new ApiError(
+        formatIncompleteActualsMessage(incompleteChecks),
+        422,
+        'INVALID_INPUT',
+        {
+          rounds: incompleteChecks.map((check) => ({
+            roundId: check.roundId,
+            roundNumber: check.roundNumber,
+            actualsUploaded: check.actualsUploaded,
+            actualsExpected: check.actualsExpected,
+          })),
+        }
+      )
     }
 
     const result = await runScoring(targetSeasonId, user!.id, scope, roundId)
@@ -58,6 +91,29 @@ export async function POST(request: NextRequest) {
 
     if (result.status === 'FAILED') {
       return jsonOk({ message: `Scoring failed: ${result.errorMessage}`, ...result }, 500)
+    }
+
+    const scoredAt = new Date()
+    const scoredRounds = await prisma.round.findMany({
+      where: {
+        seasonId: targetSeasonId,
+        ...(scope === 'ROUND' && roundId ? { id: roundId } : {}),
+        actuals: { some: { isVoided: false } },
+      },
+      select: { id: true },
+    })
+    if (scoredRounds.length > 0) {
+      await prisma.round.updateMany({
+        where: { id: { in: scoredRounds.map((round) => round.id) } },
+        data: {
+          isLockedActuals: true,
+          lockedAt: scoredAt,
+          lockedById: user!.id,
+          scoresStale: false,
+          lastScoredAt: scoredAt,
+          lastScoredById: user!.id,
+        },
+      })
     }
 
     await notifyLeaderboardRelease(targetSeasonId, roundId)

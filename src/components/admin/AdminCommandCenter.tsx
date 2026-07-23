@@ -1,39 +1,27 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
-import Link from 'next/link'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { RefreshCw } from 'lucide-react'
+import { toast } from 'sonner'
 import { csrfFetch } from '@/lib/csrf'
 import { clientLogger } from '@/lib/client-logger'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import {
-  Users,
-  Send,
-  AlertTriangle,
-  RefreshCw,
-  FileText,
-  Trophy,
-} from 'lucide-react'
-import { toast } from 'sonner'
 import type { DashboardData } from './command-center/command-center-types'
+import { ActionCenter } from './command-center/ActionCenter'
+import { CommandCenterHero } from './command-center/CommandCenterHero'
 import { CommandCenterSkeleton } from './command-center/CommandCenterSkeleton'
-import { QuickActionCard } from './command-center/QuickActionCard'
-import { AutopilotBanner } from './command-center/AutopilotBanner'
-import { RoundLifecycle } from './command-center/RoundLifecycle'
+import { KpiRow } from './command-center/KpiRow'
+import { OperationsSection } from './command-center/OperationsSection'
 import { SubmissionProgress } from './command-center/SubmissionProgress'
-import { ActiveRoundCard } from './command-center/ActiveRoundCard'
-import { OperationalQueues } from './command-center/OperationalQueues'
-import { WeeklyChecklist } from './command-center/WeeklyChecklist'
-import { CompetitionHealthScore } from './command-center/CompetitionHealthScore'
-import { SubmissionTracker } from './command-center/SubmissionTracker'
-import { ActivityFeed } from './command-center/ActivityFeed'
+import { buildCommandCenterDisplay } from './command-center/command-center-display'
+import { RoundRunbook } from './command-center/RoundRunbook'
 
 export function AdminCommandCenter() {
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const [secondsSince, setSecondsSince] = useState(0)
 
   const fetchData = useCallback(async () => {
     try {
@@ -41,6 +29,8 @@ export function AdminCommandCenter() {
       if (res.ok) {
         const result = await res.json()
         setData(result)
+        setLastUpdated(new Date())
+        setSecondsSince(0)
       }
     } catch (error) {
       clientLogger.error('Failed to fetch command center data:', error)
@@ -51,8 +41,22 @@ export function AdminCommandCenter() {
   }, [])
 
   useEffect(() => {
-    fetchData()
+    void fetchData()
   }, [fetchData])
+
+  useEffect(() => {
+    const interval = setInterval(() => void fetchData(), 60_000)
+    return () => clearInterval(interval)
+  }, [fetchData])
+
+  useEffect(() => {
+    if (!lastUpdated) return
+    const tick = setInterval(
+      () => setSecondsSince(Math.floor((Date.now() - lastUpdated.getTime()) / 1000)),
+      1000
+    )
+    return () => clearInterval(tick)
+  }, [lastUpdated])
 
   const handleAction = async (action: string, endpoint: string) => {
     setActionLoading(action)
@@ -61,7 +65,7 @@ export function AdminCommandCenter() {
       const result = await res.json()
       if (res.ok) {
         toast.success(result.message || 'Action completed')
-        fetchData()
+        void fetchData()
       } else {
         toast.error(result.message || 'Action failed')
       }
@@ -73,171 +77,116 @@ export function AdminCommandCenter() {
     }
   }
 
+  const handleChecklistUpdate = async (
+    field: 'leaderboardReviewed' | 'participantsNotified',
+    value: boolean
+  ) => {
+    if (!data?.currentRound) return
+
+    setData((prev) =>
+      prev
+        ? {
+            ...prev,
+            currentRound: prev.currentRound
+              ? { ...prev.currentRound, [field]: value }
+              : null,
+          }
+        : prev
+    )
+
+    try {
+      const res = await csrfFetch(`/api/admin/rounds/${data.currentRound.id}/checklist`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ field, value }),
+      })
+
+      if (!res.ok) {
+        toast.error('Failed to save checklist item')
+        void fetchData()
+      }
+    } catch {
+      toast.error('Failed to save checklist item')
+      void fetchData()
+    }
+  }
+
+  const display = useMemo(() => {
+    if (!data) return null
+    const displayNow = lastUpdated
+      ? new Date(lastUpdated.getTime() + secondsSince * 1000)
+      : new Date()
+    return buildCommandCenterDisplay(data, displayNow)
+  }, [data, lastUpdated, secondsSince])
+
   if (loading) return <CommandCenterSkeleton />
 
-  if (!data) {
+  if (!data || !display) {
     return (
-      <div className="text-center py-12">
-        <p className="text-gray-500 dark:text-gray-400">Failed to load admin dashboard data</p>
-        <Button onClick={fetchData} className="mt-4">Retry</Button>
+      <div className="py-12 text-center">
+        <p className="text-muted-foreground">Failed to load admin dashboard data</p>
+        <Button onClick={fetchData} className="mt-4">
+          Retry
+        </Button>
       </div>
     )
   }
 
-  const currentRoundEntry = data.currentRound
-    ? data.rounds.find((round) => round.id === data.currentRound?.id) ?? null
-    : null
-  const deadlinePassed = data.currentRound
-    ? new Date(data.currentRound.closesAt).getTime() < Date.now()
-    : false
-  const canSendReminders = data.submissionProgress.pending > 0
-  const canUploadActuals = currentRoundEntry ? !currentRoundEntry.hasActuals : true
-  const canRunScoring = currentRoundEntry ? currentRoundEntry.hasActuals && !currentRoundEntry.isScored : true
-
   return (
-    <div className="space-y-8 font-sans">
-      {/* Header */}
-      <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-semibold text-gray-900 dark:text-gray-100">Admin Dashboard</h1>
-          <p className="text-gray-500 dark:text-gray-400 mt-1 text-sm">
-            {data.activeSeason ? `${data.activeSeason.name} - ${data.activeSeason.status}` : 'No active season'}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="min-w-[240px]">
-            <Input placeholder="Search teams, users, universities..." />
-            <div className="mt-1 text-xs text-gray-400 dark:text-gray-500">
-              Search not available on this page. Go to <Link href="/admin/users" className="text-blue-600">Users</Link> or <Link href="/admin/teams" className="text-blue-600">Teams</Link>.
-            </div>
+    <div className="space-y-8">
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2 text-sm font-medium text-text-secondary">
+            <span>Admin Command Center</span>
+            <span className="text-text-muted">/</span>
+            <span>{display.seasonLabel}</span>
           </div>
-          <Select defaultValue={data.activeSeason?.id || ''} aria-label="Season selector">
-            <SelectTrigger className="w-[200px]"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {/* TODO: populate season options from API */}
-              <SelectItem value={data.activeSeason?.id || 'none'}>
-                {data.activeSeason?.name || 'No active season'}
-              </SelectItem>
-            </SelectContent>
-          </Select>
+          <div>
+            <h1 className="text-3xl font-semibold tracking-tight text-foreground">
+              Live competition operations
+            </h1>
+            <p className="mt-1 text-sm text-text-secondary">
+              One place to monitor the round, respond to risk, and keep the season moving.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          {lastUpdated ? (
+            <span className="text-xs font-medium text-text-muted">
+              Refreshed {secondsSince}s ago
+            </span>
+          ) : null}
           <Button variant="outline" onClick={fetchData}>
-            <RefreshCw className="h-4 w-4 mr-2" />
+            <RefreshCw className="mr-2 h-4 w-4" />
             Refresh
           </Button>
         </div>
       </div>
 
-      <WeeklyChecklist
-        currentRound={data.currentRound}
-        submissionProgress={data.submissionProgress}
-        currentRoundEntry={currentRoundEntry}
-        meta={data.meta}
-        stats={data.stats}
-      />
+      <RoundRunbook rounds={data.runbook} />
 
-      <ActiveRoundCard
-        currentRound={data.currentRound}
-        currentRoundEntry={currentRoundEntry}
-        submissionProgress={data.submissionProgress}
-        meta={data.meta}
-        canSendReminders={canSendReminders}
-        canUploadActuals={canUploadActuals}
-        canRunScoring={canRunScoring}
+      <CommandCenterHero
+        display={display}
         onAction={handleAction}
         actionLoading={actionLoading}
       />
 
-      {data.currentRound && <SubmissionTracker />}
+      <KpiRow display={display} />
 
-      {/* Stat Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card className="bg-gradient-to-br from-blue-50 to-white dark:from-blue-950/30 dark:to-gray-900 border-blue-100 dark:border-blue-900">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-500 dark:text-gray-400 flex items-center">
-              <Users className="h-4 w-4 mr-2 text-blue-600" /> Active Teams
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-4xl font-semibold text-blue-600 tabular-nums">{data.stats.activeTeams}</p>
-            {data.stats.disqualifiedTeams > 0 && <p className="text-xs text-gray-500 dark:text-gray-400">{data.stats.disqualifiedTeams} disqualified</p>}
-          </CardContent>
-        </Card>
-        <Card className="bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-950/30 dark:to-gray-900 border-emerald-100 dark:border-emerald-900">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-500 dark:text-gray-400 flex items-center">
-              <Send className="h-4 w-4 mr-2 text-emerald-600" /> This Round
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-4xl font-semibold text-emerald-600 tabular-nums">{data.submissionProgress.submitted}</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400">of {data.submissionProgress.total} teams</p>
-          </CardContent>
-        </Card>
-        <Card className="bg-gradient-to-br from-amber-50 to-white dark:from-amber-950/30 dark:to-gray-900 border-amber-100 dark:border-amber-900">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-500 dark:text-gray-400 flex items-center">
-              <AlertTriangle className="h-4 w-4 mr-2 text-amber-600" /> Warnings
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-4xl font-semibold text-amber-600 tabular-nums">{data.stats.totalWarnings}</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400">total issued</p>
-          </CardContent>
-        </Card>
-        <Card className="bg-gradient-to-br from-purple-50 to-white dark:from-purple-950/30 dark:to-gray-900 border-purple-100 dark:border-purple-900">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-500 dark:text-gray-400 flex items-center">
-              <Users className="h-4 w-4 mr-2 text-purple-600" /> Users
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-4xl font-semibold text-purple-600 tabular-nums">{data.stats.totalUsers}</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400">registered</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <AutopilotBanner
-        submissionProgress={data.submissionProgress}
-        currentRound={data.currentRound}
-        currentRoundEntry={currentRoundEntry}
-        deadlinePassed={deadlinePassed}
-        canSendReminders={canSendReminders}
-        canUploadActuals={canUploadActuals}
-        canRunScoring={canRunScoring}
+      <ActionCenter
+        display={display}
         onAction={handleAction}
         actionLoading={actionLoading}
+        onChecklistUpdate={handleChecklistUpdate}
       />
 
-      <SubmissionProgress
-        stats={data.stats}
-        meta={data.meta}
-        submissionProgress={data.submissionProgress}
-      />
+      <SubmissionProgress data={data} display={display} />
 
-      <CompetitionHealthScore
-        stats={data.stats}
+      <OperationsSection
         submissionProgress={data.submissionProgress}
         meta={data.meta}
       />
-
-      <OperationalQueues
-        submissionProgress={data.submissionProgress}
-        meta={data.meta}
-        stats={data.stats}
-        onAction={handleAction}
-        actionLoading={actionLoading}
-      />
-
-      <RoundLifecycle rounds={data.rounds} onAction={handleAction} actionLoading={actionLoading} />
-
-      <ActivityFeed />
-
-      <div className="grid lg:grid-cols-3 gap-6">
-        <QuickActionCard icon={FileText} title="Submissions Explorer" description="Browse and export all submissions" href="/admin/submissions" />
-        <QuickActionCard icon={Trophy} title="Rankings" description="View and publish rankings" href="/leaderboards" />
-        <QuickActionCard icon={FileText} title="Audit Logs" description="View admin action history" href="/admin/audit-logs" />
-      </div>
     </div>
   )
 }

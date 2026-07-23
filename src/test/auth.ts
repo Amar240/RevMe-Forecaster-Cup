@@ -1,5 +1,6 @@
 import crypto from 'crypto'
 import { prisma } from './db'
+import { hashSessionToken } from '@/lib/auth'
 
 export async function loginAs(userId: string) {
   const token = crypto.randomBytes(32).toString('hex')
@@ -8,7 +9,7 @@ export async function loginAs(userId: string) {
   await prisma.session.create({
     data: {
       userId,
-      token,
+      token: hashSessionToken(token),
       expiresAt,
     },
   })

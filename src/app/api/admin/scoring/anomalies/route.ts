@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/db'
 import { requireAdminOrResponse, jsonOk, jsonError } from '@/server/http'
+import { getCurrentOperationalSeason } from '@/server/season'
 
 export const dynamic = 'force-dynamic'
 
@@ -8,17 +9,16 @@ export async function GET() {
     const { response } = await requireAdminOrResponse('scoring:run')
     if (response) return response
 
-    const activeSeason = await prisma.season.findFirst({
-      where: { status: 'ACTIVE' },
+    const operationalSeason = await getCurrentOperationalSeason({
       include: {
         rounds: { orderBy: { number: 'desc' }, take: 2 },
       },
     })
 
-    if (!activeSeason) return jsonOk({ anomalies: [] })
+    if (!operationalSeason) return jsonOk({ anomalies: [] })
 
-    const latestRound = activeSeason.rounds[0]
-    const previousRound = activeSeason.rounds[1]
+    const latestRound = operationalSeason.rounds[0]
+    const previousRound = operationalSeason.rounds[1]
     if (!latestRound) return jsonOk({ anomalies: [] })
 
     const anomalies: Array<{
@@ -82,7 +82,7 @@ export async function GET() {
 
     if (previousRound) {
       const currentAggregates = await prisma.scoreAggregate.findMany({
-        where: { seasonId: activeSeason.id, scopeType: 'SEASON' },
+        where: { seasonId: operationalSeason.id, scopeType: 'SEASON' },
         include: { team: { select: { name: true } } },
         orderBy: { mape: 'asc' },
       })

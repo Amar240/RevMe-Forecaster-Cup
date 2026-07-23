@@ -34,3 +34,12 @@ export async function rejectTeam(teamId: string, reason?: string): Promise<{ mes
   })
   return parseJson<{ message: string }>(res)
 }
+
+export async function approveImportBatch(batchId: string): Promise<{ message: string }> {
+  const res = await csrfFetch('/api/admin/teams/pending', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ batchId, action: 'approve-batch' }),
+  })
+  return parseJson<{ message: string }>(res)
+}

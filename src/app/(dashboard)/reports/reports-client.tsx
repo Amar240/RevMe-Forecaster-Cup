@@ -1,9 +1,10 @@
 'use client'
 
 import { useState } from 'react'
+import { ChevronDown, ChevronUp, Download, FileText } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { FileText, Download, ChevronDown, ChevronUp } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
 
 interface Prediction {
   round: number
@@ -38,11 +39,20 @@ interface Props {
   teams: TeamData[]
 }
 
+function getErrorVariant(metric: string, error: number) {
+  const lowerBand = metric === 'OCCUPANCY' ? 5 : 10
+  const middleBand = metric === 'OCCUPANCY' ? 10 : 20
+
+  if (error < lowerBand) return 'success'
+  if (error < middleBand) return 'warning'
+  return 'error'
+}
+
 export function SupervisorReportsClient({ teams }: Props) {
   const [expandedTeams, setExpandedTeams] = useState<Set<string>>(new Set())
 
   const toggleTeam = (teamId: string) => {
-    setExpandedTeams(prev => {
+    setExpandedTeams((prev) => {
       const next = new Set(prev)
       if (next.has(teamId)) {
         next.delete(teamId)
@@ -55,20 +65,17 @@ export function SupervisorReportsClient({ teams }: Props) {
 
   const downloadCSV = (team: TeamData) => {
     const headers = ['Round', 'Market', 'Metric', 'Week Offset', 'Predicted', 'Actual', 'Error']
-    const rows = team.predictions.map(p => [
-      p.round,
-      p.market,
-      p.metric,
-      `Week +${p.weekOffset}`,
-      p.metric === 'OCCUPANCY' ? `${p.predicted.toFixed(1)}` : `$${p.predicted.toFixed(2)}`,
-      p.metric === 'OCCUPANCY' ? `${p.actual.toFixed(1)}` : `$${p.actual.toFixed(2)}`,
-      p.metric === 'OCCUPANCY' ? `${p.error.toFixed(2)}` : `$${p.error.toFixed(2)}`,
+    const rows = team.predictions.map((prediction) => [
+      prediction.round,
+      prediction.market,
+      prediction.metric,
+      `Week +${prediction.weekOffset}`,
+      prediction.metric === 'OCCUPANCY' ? `${prediction.predicted.toFixed(1)}` : `$${prediction.predicted.toFixed(2)}`,
+      prediction.metric === 'OCCUPANCY' ? `${prediction.actual.toFixed(1)}` : `$${prediction.actual.toFixed(2)}`,
+      prediction.metric === 'OCCUPANCY' ? `${prediction.error.toFixed(2)}` : `$${prediction.error.toFixed(2)}`,
     ])
 
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(row => row.join(','))
-    ].join('\n')
+    const csvContent = [headers.join(','), ...rows.map((row) => row.join(','))].join('\n')
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
     const link = document.createElement('a')
@@ -88,14 +95,14 @@ export function SupervisorReportsClient({ teams }: Props) {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Reports</h1>
-          <p className="text-gray-600">Team performance summaries</p>
+          <h1 className="text-3xl font-semibold tracking-tight text-foreground">Reports</h1>
+          <p className="text-text-secondary">Team performance summaries</p>
         </div>
         <Card>
           <CardContent className="py-12 text-center">
-            <FileText className="h-12 w-12 mx-auto text-gray-400 mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No Teams</h3>
-            <p className="text-gray-500">No teams to report on.</p>
+            <FileText className="mx-auto mb-4 h-12 w-12 text-text-muted" />
+            <h3 className="mb-2 text-lg font-medium text-foreground">No Teams</h3>
+            <p className="text-muted-foreground">No teams to report on.</p>
           </CardContent>
         </Card>
       </div>
@@ -105,8 +112,8 @@ export function SupervisorReportsClient({ teams }: Props) {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Reports</h1>
-        <p className="text-gray-600">Team performance summaries with detailed predictions</p>
+        <h1 className="text-3xl font-semibold tracking-tight text-foreground">Reports</h1>
+        <p className="text-text-secondary">Team performance summaries with detailed predictions</p>
       </div>
 
       <div className="space-y-6">
@@ -116,131 +123,109 @@ export function SupervisorReportsClient({ teams }: Props) {
           return (
             <Card key={team.id}>
               <CardHeader>
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-4">
                   <div>
                     <CardTitle>{team.name}</CardTitle>
                     <CardDescription>
                       {team.universityName} | Status: {team.status}
                     </CardDescription>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {team.predictions.length > 0 && (
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => downloadCSV(team)}
-                      >
-                        <Download className="h-4 w-4 mr-2" />
-                        Download CSV
-                      </Button>
-                    )}
-                  </div>
+                  {team.predictions.length > 0 && (
+                    <Button variant="outline" size="sm" onClick={() => downloadCSV(team)}>
+                      <Download className="mr-2 h-4 w-4" />
+                      Download CSV
+                    </Button>
+                  )}
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="grid md:grid-cols-5 gap-4 mb-4">
-                  <div className="p-3 bg-gray-50 rounded-lg">
-                    <p className="text-sm text-gray-500">Submissions</p>
-                    <p className="text-xl font-bold">{team.submissionsCount}</p>
+                <div className="mb-4 grid gap-4 md:grid-cols-5">
+                  <div className="rounded-lg border border-border bg-surface-secondary p-4">
+                    <p className="text-sm text-muted-foreground">Submissions</p>
+                    <p className="text-2xl font-semibold text-foreground">{team.submissionsCount}</p>
                   </div>
-                  <div className="p-3 bg-gray-50 rounded-lg">
-                    <p className="text-sm text-gray-500">Scored Predictions</p>
-                    <p className="text-xl font-bold">{team.scoredCount}</p>
+                  <div className="rounded-lg border border-border bg-surface-secondary p-4">
+                    <p className="text-sm text-muted-foreground">Scored Predictions</p>
+                    <p className="text-2xl font-semibold text-foreground">{team.scoredCount}</p>
                   </div>
-                  <div className="p-3 bg-amber-50 rounded-lg">
-                    <p className="text-sm text-amber-600">Final Score</p>
-                    <p className="text-xl font-bold text-amber-700">
+                  <div className="rounded-lg border border-accent/20 bg-accent-soft p-4">
+                    <p className="text-sm text-accent">Final Score</p>
+                    <p className="text-2xl font-semibold text-accent">
                       {(((team.occMAPE + team.adrMAPE) / 2) * 100).toFixed(2)}%
                     </p>
                   </div>
-                  <div className="p-3 bg-blue-50 rounded-lg">
-                    <p className="text-sm text-blue-600">Occupancy MAPE</p>
-                    <p className="text-xl font-bold text-blue-700">
-                      {(team.occMAPE * 100).toFixed(2)}%
-                    </p>
+                  <div className="rounded-lg border border-primary/20 bg-primary-soft p-4">
+                    <p className="text-sm text-primary">Occupancy MAPE</p>
+                    <p className="text-2xl font-semibold text-primary">{(team.occMAPE * 100).toFixed(2)}%</p>
                   </div>
-                  <div className="p-3 bg-emerald-50 rounded-lg">
-                    <p className="text-sm text-emerald-600">ADR MAPE</p>
-                    <p className="text-xl font-bold text-emerald-700">
-                      {(team.adrMAPE * 100).toFixed(2)}%
-                    </p>
+                  <div className="rounded-lg border border-success/20 bg-success-background p-4">
+                    <p className="text-sm text-success">ADR MAPE</p>
+                    <p className="text-2xl font-semibold text-success">{(team.adrMAPE * 100).toFixed(2)}%</p>
                   </div>
                 </div>
 
                 {team.warnings.length > 0 && (
-                  <div className="p-3 bg-amber-50 rounded-lg mb-4">
-                    <p className="text-sm text-amber-700 font-medium">
-                      Warnings: {team.warnings.length}
-                    </p>
-                    <ul className="text-sm text-amber-600 mt-1">
-                      {team.warnings.map((w) => (
-                        <li key={w.id}>Round {w.roundNumber}: {w.message}</li>
+                  <div className="mb-4 rounded-lg border border-warning/20 bg-warning-background p-4">
+                    <p className="font-medium text-foreground">Warnings: {team.warnings.length}</p>
+                    <ul className="mt-2 space-y-1 text-sm text-text-secondary">
+                      {team.warnings.map((warning) => (
+                        <li key={warning.id}>
+                          Round {warning.roundNumber}: {warning.message}
+                        </li>
                       ))}
                     </ul>
                   </div>
                 )}
 
                 {team.predictions.length > 0 && (
-                  <div className="border rounded-lg">
+                  <div className="overflow-hidden rounded-lg border border-border">
                     <button
-                      className="w-full flex items-center justify-between p-3 text-left hover:bg-gray-50"
+                      className="flex w-full items-center justify-between bg-surface-secondary px-4 py-3 text-left transition-colors hover:bg-muted"
                       onClick={() => toggleTeam(team.id)}
                     >
-                      <span className="font-medium text-gray-700">
-                        View Detailed Predictions ({team.predictions.length})
-                      </span>
+                      <span className="font-medium text-foreground">View Detailed Predictions ({team.predictions.length})</span>
                       {isExpanded ? (
-                        <ChevronUp className="h-5 w-5 text-gray-400" />
+                        <ChevronUp className="h-5 w-5 text-text-muted" />
                       ) : (
-                        <ChevronDown className="h-5 w-5 text-gray-400" />
+                        <ChevronDown className="h-5 w-5 text-text-muted" />
                       )}
                     </button>
 
                     {isExpanded && (
-                      <div className="border-t overflow-x-auto">
+                      <div className="overflow-x-auto border-t border-border">
                         <table className="w-full text-sm">
-                          <thead className="bg-gray-50">
+                          <thead className="bg-muted">
                             <tr className="text-left">
-                              <th className="px-3 py-2 font-medium text-gray-600">Round</th>
-                              <th className="px-3 py-2 font-medium text-gray-600">Market</th>
-                              <th className="px-3 py-2 font-medium text-gray-600">Metric</th>
-                              <th className="px-3 py-2 font-medium text-gray-600">Week</th>
-                              <th className="px-3 py-2 font-medium text-gray-600 text-right">Predicted</th>
-                              <th className="px-3 py-2 font-medium text-gray-600 text-right">Actual</th>
-                              <th className="px-3 py-2 font-medium text-gray-600 text-right">Error</th>
+                              <th className="px-4 py-3 font-medium text-muted-foreground">Round</th>
+                              <th className="px-4 py-3 font-medium text-muted-foreground">Market</th>
+                              <th className="px-4 py-3 font-medium text-muted-foreground">Metric</th>
+                              <th className="px-4 py-3 font-medium text-muted-foreground">Week</th>
+                              <th className="px-4 py-3 text-right font-medium text-muted-foreground">Predicted</th>
+                              <th className="px-4 py-3 text-right font-medium text-muted-foreground">Actual</th>
+                              <th className="px-4 py-3 text-right font-medium text-muted-foreground">Error</th>
                             </tr>
                           </thead>
-                          <tbody>
-                            {team.predictions.map((pred, idx) => (
-                              <tr key={idx} className="border-t hover:bg-gray-50">
-                                <td className="px-3 py-2">Round {pred.round}</td>
-                                <td className="px-3 py-2">{pred.market}</td>
-                                <td className="px-3 py-2">
-                                  <span className={`px-2 py-0.5 text-xs rounded ${
-                                    pred.metric === 'OCCUPANCY'
-                                      ? 'bg-blue-100 text-blue-700'
-                                      : 'bg-green-100 text-green-700'
-                                  }`}>
-                                    {pred.metric}
-                                  </span>
+                          <tbody className="divide-y divide-border bg-card">
+                            {team.predictions.map((prediction, idx) => (
+                              <tr key={idx} className="hover:bg-surface-secondary">
+                                <td className="px-4 py-3 text-foreground">Round {prediction.round}</td>
+                                <td className="px-4 py-3 text-text-secondary">{prediction.market}</td>
+                                <td className="px-4 py-3">
+                                  <Badge variant={prediction.metric === 'OCCUPANCY' ? 'info' : 'success'}>
+                                    {prediction.metric}
+                                  </Badge>
                                 </td>
-                                <td className="px-3 py-2">Week +{pred.weekOffset}</td>
-                                <td className="px-3 py-2 text-right font-mono">
-                                  {formatValue(pred.predicted, pred.metric)}
+                                <td className="px-4 py-3 text-text-secondary">Week +{prediction.weekOffset}</td>
+                                <td className="px-4 py-3 text-right font-mono text-foreground">
+                                  {formatValue(prediction.predicted, prediction.metric)}
                                 </td>
-                                <td className="px-3 py-2 text-right font-mono">
-                                  {formatValue(pred.actual, pred.metric)}
+                                <td className="px-4 py-3 text-right font-mono text-foreground">
+                                  {formatValue(prediction.actual, prediction.metric)}
                                 </td>
-                                <td className="px-3 py-2 text-right">
-                                  <span className={`px-2 py-0.5 text-xs rounded font-semibold ${
-                                    pred.error < (pred.metric === 'OCCUPANCY' ? 5 : 10)
-                                      ? 'bg-green-100 text-green-700'
-                                      : pred.error < (pred.metric === 'OCCUPANCY' ? 10 : 20)
-                                      ? 'bg-amber-100 text-amber-700'
-                                      : 'bg-red-100 text-red-700'
-                                  }`}>
-                                    {formatValue(pred.error, pred.metric)}
-                                  </span>
+                                <td className="px-4 py-3 text-right">
+                                  <Badge variant={getErrorVariant(prediction.metric, prediction.error) as 'success' | 'warning' | 'error'}>
+                                    {formatValue(prediction.error, prediction.metric)}
+                                  </Badge>
                                 </td>
                               </tr>
                             ))}

@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/db'
 import { requireAdminOrResponse, jsonOk, jsonError } from '@/server/http'
+import { getCurrentOperationalSeason } from '@/server/season'
 
 export const dynamic = 'force-dynamic'
 
@@ -8,15 +9,14 @@ export async function GET() {
     const { response } = await requireAdminOrResponse()
     if (response) return response
 
-    const activeSeason = await prisma.season.findFirst({
-      where: { status: 'ACTIVE' },
+    const operationalSeason = await getCurrentOperationalSeason({
       include: { rounds: true },
     })
 
-    if (!activeSeason) return jsonOk({ pendingTeams: [], pendingCount: 0 })
+    if (!operationalSeason) return jsonOk({ pendingTeams: [], pendingCount: 0 })
 
     const now = new Date()
-    const currentRound = activeSeason.rounds.find((round) => {
+    const currentRound = operationalSeason.rounds.find((round) => {
       const isTimeOpen = new Date(round.closesAt) > now && new Date(round.opensAt) <= now
       const isStatusOpen = round.status === 'OPEN'
       return isTimeOpen && isStatusOpen
@@ -30,7 +30,7 @@ export async function GET() {
     const submittedTeamIds = new Set(submissions.map((s) => s.teamId))
 
     const activeTeams = await prisma.team.findMany({
-      where: { status: 'ACTIVE', seasonId: activeSeason.id },
+      where: { status: 'ACTIVE', seasonId: operationalSeason.id },
       include: {
         university: true, supervisor: true,
         submissions: { take: 1, orderBy: { submittedAt: 'desc' }, select: { submittedAt: true } },
@@ -43,8 +43,10 @@ export async function GET() {
       .map((team) => ({
         id: team.id, teamName: team.name, teamDisplayId: team.displayId,
         universityName: team.university?.name ?? 'Not set',
-        supervisorName: `${team.supervisor.firstName} ${team.supervisor.lastName}`,
-        supervisorEmail: team.supervisor.email,
+        supervisorName: team.supervisor
+          ? `${team.supervisor.firstName} ${team.supervisor.lastName}`.trim()
+          : 'Unassigned',
+        supervisorEmail: team.supervisor?.email ?? null,
         warningsCount: team._count.warnings,
         lastSubmissionAt: team.submissions[0]?.submittedAt?.toISOString() ?? null,
       }))

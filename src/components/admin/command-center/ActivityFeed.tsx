@@ -1,11 +1,20 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import {
+  AlertTriangle,
+  Clock,
+  MessageSquare,
+  RefreshCw,
+  Send,
+  Shield,
+  Trophy,
+} from 'lucide-react'
 import { csrfFetch } from '@/lib/csrf'
 import { clientLogger } from '@/lib/client-logger'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Send, AlertTriangle, MessageSquare, Shield, Trophy, Clock, RefreshCw } from 'lucide-react'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
 
 interface ActivityEvent {
   id: string
@@ -15,11 +24,11 @@ interface ActivityEvent {
 }
 
 const typeConfig = {
-  submission: { icon: Send, color: 'text-emerald-600', bg: 'bg-emerald-100' },
-  warning: { icon: AlertTriangle, color: 'text-amber-600', bg: 'bg-amber-100' },
-  ticket: { icon: MessageSquare, color: 'text-blue-600', bg: 'bg-blue-100' },
-  audit: { icon: Shield, color: 'text-gray-600', bg: 'bg-gray-100' },
-  scoring: { icon: Trophy, color: 'text-purple-600', bg: 'bg-purple-100' },
+  submission: { icon: Send, iconClass: 'text-success', bgClass: 'bg-success-background' },
+  warning: { icon: AlertTriangle, iconClass: 'text-warning', bgClass: 'bg-warning-background' },
+  ticket: { icon: MessageSquare, iconClass: 'text-info', bgClass: 'bg-info-background' },
+  audit: { icon: Shield, iconClass: 'text-text-secondary', bgClass: 'bg-muted' },
+  scoring: { icon: Trophy, iconClass: 'text-accent', bgClass: 'bg-accent-soft' },
 }
 
 function timeAgo(timestamp: string): string {
@@ -51,7 +60,7 @@ export function ActivityFeed() {
   }, [])
 
   useEffect(() => {
-    fetchEvents()
+    void fetchEvents()
     const interval = setInterval(fetchEvents, 60000)
     return () => clearInterval(interval)
   }, [fetchEvents])
@@ -59,8 +68,8 @@ export function ActivityFeed() {
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between pb-3">
-        <CardTitle className="text-lg font-semibold flex items-center gap-2">
-          <Clock className="h-5 w-5 text-gray-500" />
+        <CardTitle className="flex items-center gap-2 text-lg font-semibold">
+          <Clock className="h-5 w-5 text-text-secondary" />
           Activity Feed
         </CardTitle>
         <Button variant="ghost" size="sm" onClick={fetchEvents}>
@@ -70,31 +79,37 @@ export function ActivityFeed() {
       <CardContent>
         {loading ? (
           <div className="space-y-3">
-            {[...Array(5)].map((_, i) => (
-              <div key={i} className="flex items-start gap-3 animate-pulse">
-                <div className="h-8 w-8 rounded-full bg-gray-200" />
-                <div className="flex-1">
-                  <div className="h-4 bg-gray-200 rounded w-3/4 mb-1" />
-                  <div className="h-3 bg-gray-100 rounded w-1/4" />
+            {Array.from({ length: 5 }).map((_, index) => (
+              <div key={index} className="flex items-start gap-3">
+                <Skeleton className="h-8 w-8 rounded-full" />
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-3 w-1/4" />
                 </div>
               </div>
             ))}
           </div>
         ) : events.length === 0 ? (
-          <p className="text-sm text-gray-500 text-center py-4">No recent activity</p>
+          <p className="py-4 text-center text-sm text-text-secondary">No recent activity</p>
         ) : (
-          <div className="space-y-1 max-h-[400px] overflow-y-auto">
+          <div className="max-h-[400px] space-y-1 overflow-y-auto">
             {events.map((event) => {
               const config = typeConfig[event.type]
               const Icon = config.icon
+
               return (
-                <div key={event.id} className="flex items-start gap-3 py-2 px-2 rounded-md hover:bg-gray-50 transition-colors">
-                  <div className={`h-8 w-8 rounded-full ${config.bg} flex items-center justify-center flex-shrink-0`}>
-                    <Icon className={`h-4 w-4 ${config.color}`} />
+                <div
+                  key={event.id}
+                  className="flex items-start gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-surface-secondary"
+                >
+                  <div
+                    className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full ${config.bgClass}`}
+                  >
+                    <Icon className={`h-4 w-4 ${config.iconClass}`} />
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-gray-700 truncate">{event.message}</p>
-                    <p className="text-xs text-gray-400">{timeAgo(event.timestamp)}</p>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm text-foreground">{event.message}</p>
+                    <p className="text-xs text-text-muted">{timeAgo(event.timestamp)}</p>
                   </div>
                 </div>
               )

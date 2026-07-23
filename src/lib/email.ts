@@ -1,5 +1,32 @@
 import nodemailer from 'nodemailer'
 import { logger } from './logger'
+import { getAppBaseUrl } from './app-url'
+
+async function sendMailWithRetry(
+  transporter: nodemailer.Transporter,
+  options: nodemailer.SendMailOptions,
+  maxRetries = 3
+): Promise<void> {
+  let lastError: Error = new Error('Unknown error')
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      await transporter.sendMail(options)
+      return
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err))
+      if (attempt < maxRetries) {
+        const delayMs = Math.pow(2, attempt - 1) * 500 // 500ms → 1s → 2s
+        logger.warn(`Email send attempt ${attempt} failed, retrying in ${delayMs}ms`, {
+          to: options.to,
+          subject: options.subject,
+          error: lastError.message,
+        })
+        await new Promise((resolve) => setTimeout(resolve, delayMs))
+      }
+    }
+  }
+  throw lastError
+}
 
 const getTransporter = () => {
   if (process.env.NODE_ENV === 'test') {
@@ -24,11 +51,6 @@ const getTransporter = () => {
       pass: smtpPass,
     },
   })
-}
-
-const getBaseUrl = () => {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:5000'
-  return baseUrl.startsWith('http') ? baseUrl : 'https://' + baseUrl
 }
 
 const getFromEmail = () => {
@@ -61,12 +83,78 @@ const emailFooter = `
 </html>
 `
 
+export async function sendAccountActivationEmail(
+  email: string,
+  firstName: string,
+  activationToken: string
+): Promise<boolean> {
+  const transporter = getTransporter()
+  const activationUrl = `${getAppBaseUrl()}/reset-password?token=${activationToken}`
+
+  if (!transporter) {
+    logger.info('Account activation email skipped (SMTP not configured)', { email, activationUrl })
+    return false
+  }
+
+  try {
+    await sendMailWithRetry(transporter, {
+      from: `"RevME Forecaster Cup" <${getFromEmail()}>`,
+      to: email,
+      subject: "You've been added to RevME Forecaster Cup — Set Your Password",
+      text: `
+Hello ${firstName},
+
+You have been added to a team in the RevME Forecaster Cup competition.
+
+To access your account, please set your password by clicking the link below:
+${activationUrl}
+
+This link will expire in 72 hours.
+
+If you have any questions, please contact your supervisor or competition administrator.
+
+Best regards,
+The RevME Team
+      `,
+      html: `${emailHeader}
+        <h2 style="margin-top: 0; color: #1e293b;">You've Been Added to the Competition!</h2>
+        <p>Hi <strong>${firstName}</strong>,</p>
+        <p>You have been added to a team in the <strong>RevME Forecaster Cup</strong> competition.</p>
+
+        <div style="background: #f0f9ff; border-radius: 8px; padding: 20px; margin: 20px 0;">
+          <p style="margin: 0; color: #0369a1; font-weight: 600;">Action Required: Set Your Password</p>
+          <p style="margin: 8px 0 0 0; color: #475569;">Click the button below to activate your account and set your password. This link expires in <strong>72 hours</strong>.</p>
+        </div>
+
+        <div style="text-align: center; margin: 32px 0;">
+          <a href="${activationUrl}" style="background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%); color: white; padding: 14px 32px; text-decoration: none; border-radius: 8px; display: inline-block; font-weight: 600;">
+            Set My Password
+          </a>
+        </div>
+
+        <p style="color: #64748b; font-size: 14px;">If the button doesn't work, copy and paste this link into your browser:</p>
+        <p style="color: #2563eb; font-size: 13px; word-break: break-all;">${activationUrl}</p>
+        <p style="color: #64748b; font-size: 14px;">If you weren't expecting this email, please ignore it or contact your competition administrator.</p>
+      ${emailFooter}`,
+    })
+
+    logger.info('Account activation email sent', { email, firstName })
+    return true
+  } catch (error) {
+    logger.error('Failed to send account activation email', {
+      email,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return false
+  }
+}
+
 export async function sendPasswordResetEmail(
   email: string,
   resetToken: string
 ): Promise<boolean> {
   const transporter = getTransporter()
-  const resetUrl = `${getBaseUrl()}/reset-password?token=${resetToken}`
+  const resetUrl = `${getAppBaseUrl()}/reset-password?token=${resetToken}`
 
   if (!transporter) {
     logger.info('Password reset requested but SMTP not configured', { email, resetUrl })
@@ -74,7 +162,7 @@ export async function sendPasswordResetEmail(
   }
 
   try {
-    await transporter.sendMail({
+    await sendMailWithRetry(transporter, {
       from: `"RevME Forecaster Cup" <${getFromEmail()}>`,
       to: email,
       subject: 'Reset Your Password - RevME Forecaster Cup',
@@ -86,7 +174,7 @@ You requested to reset your password for RevME Forecaster Cup.
 Click the link below to reset your password:
 ${resetUrl}
 
-This link will expire in 1 hour.
+This link will expire in 24 hours.
 
 If you did not request this, please ignore this email.
 
@@ -103,7 +191,7 @@ The RevME Team
           </a>
         </div>
         
-        <p style="color: #64748b; font-size: 14px;">This link will expire in 1 hour.</p>
+        <p style="color: #64748b; font-size: 14px;">This link will expire in 24 hours.</p>
         <p style="color: #64748b; font-size: 14px;">If you didn't request this, you can safely ignore this email.</p>
       ${emailFooter}`,
     })
@@ -119,6 +207,76 @@ The RevME Team
   }
 }
 
+export async function sendEmailVerificationEmail(
+  email: string,
+  firstName: string,
+  verificationCode: string
+): Promise<boolean> {
+  const transporter = getTransporter()
+  const verifyUrl = `${getAppBaseUrl()}/verify-email?email=${encodeURIComponent(email)}`
+
+  if (!transporter) {
+    logger.info('Email verification email skipped (SMTP not configured)', {
+      email,
+      verifyUrl,
+    })
+    return false
+  }
+
+  try {
+    await sendMailWithRetry(transporter, {
+      from: `"RevME Forecaster Cup" <${getFromEmail()}>`,
+      to: email,
+      subject: 'Verify Your Email - RevME Forecaster Cup',
+      text: `
+Hello ${firstName},
+
+We received your registration for RevME Forecaster Cup.
+
+Your verification code is:
+${verificationCode}
+
+Enter this 6-digit code on the verification page to activate your account:
+${verifyUrl}
+
+If you did not create this account, you can ignore this email.
+
+Best regards,
+The RevME Team
+      `,
+      html: `${emailHeader}
+        <h2 style="margin-top: 0; color: #1e293b;">Verify Your Email</h2>
+        <p>Hi <strong>${firstName}</strong>,</p>
+        <p>We sent this code to verify your email address and activate your account.</p>
+
+        <div style="background: #f8fafc; border: 1px solid #dbeafe; border-radius: 10px; padding: 20px; margin: 24px 0; text-align: center;">
+          <p style="margin: 0 0 8px 0; color: #475569; font-size: 14px;">Verification code</p>
+          <p style="margin: 0; color: #1e293b; font-size: 32px; font-weight: 700; letter-spacing: 0.3em;">${verificationCode}</p>
+        </div>
+
+        <p style="color: #475569;">Enter the 6-digit code on the verification page to continue.</p>
+
+        <div style="text-align: center; margin: 32px 0;">
+          <a href="${verifyUrl}" style="background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%); color: white; padding: 14px 32px; text-decoration: none; border-radius: 8px; display: inline-block; font-weight: 600;">
+            Verify My Email
+          </a>
+        </div>
+
+        <p style="color: #64748b; font-size: 14px;">If you did not create this account, you can safely ignore this email.</p>
+      ${emailFooter}`,
+    })
+
+    logger.info('Email verification email sent', { email })
+    return true
+  } catch (error) {
+    logger.error('Failed to send email verification email', {
+      email,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return false
+  }
+}
+
 export async function sendRoundOpenEmail(
   email: string,
   roundNumber: number,
@@ -126,7 +284,7 @@ export async function sendRoundOpenEmail(
   teamName: string
 ): Promise<boolean> {
   const transporter = getTransporter()
-  const submitUrl = `${getBaseUrl()}/submit`
+  const submitUrl = `${getAppBaseUrl()}/submit`
 
   if (!transporter) {
     logger.info('Round open reminder skipped (SMTP not configured)', {
@@ -147,7 +305,7 @@ export async function sendRoundOpenEmail(
   }) + ' ET'
 
   try {
-    await transporter.sendMail({
+    await sendMailWithRetry(transporter, {
       from: `"RevME Forecaster Cup" <${getFromEmail()}>`,
       to: email,
       subject: `Round ${roundNumber} is Now Open - RevME Forecaster Cup`,
@@ -216,7 +374,7 @@ export async function sendSubmissionReceiptEmail(params: {
     return false
   }
   const transporter = getTransporter()
-  const submitUrl = `${getBaseUrl()}/submit`
+  const submitUrl = `${getAppBaseUrl()}/submit`
 
   if (!transporter) {
     logger.info('Submission receipt skipped (SMTP not configured)', {
@@ -243,7 +401,7 @@ export async function sendSubmissionReceiptEmail(params: {
       : `Your submission for "${params.teamName}" has been locked.`
 
   try {
-    await transporter.sendMail({
+    await sendMailWithRetry(transporter, {
       from: `"RevME Forecaster Cup" <${getFromEmail()}>`,
       to: params.email,
       subject: `Submission Received - Round ${params.roundNumber}`,
@@ -308,7 +466,7 @@ export async function sendMissedSubmissionWarning(
   warningCount: number
 ): Promise<boolean> {
   const transporter = getTransporter()
-  const dashboardUrl = `${getBaseUrl()}/dashboard`
+  const dashboardUrl = `${getAppBaseUrl()}/dashboard`
 
   if (!transporter) {
     logger.info('Missed submission warning skipped (SMTP not configured)', {
@@ -328,7 +486,7 @@ export async function sendMissedSubmissionWarning(
   const warningColor = warningCount === 1 ? '#f59e0b' : warningCount === 2 ? '#ef4444' : '#991b1b'
 
   try {
-    await transporter.sendMail({
+    await sendMailWithRetry(transporter, {
       from: `"RevME Forecaster Cup" <${getFromEmail()}>`,
       to: email,
       subject,
@@ -417,7 +575,7 @@ export async function sendWelcomeEmail(
   role: 'STUDENT' | 'SUPERVISOR'
 ): Promise<boolean> {
   const transporter = getTransporter()
-  const loginUrl = `${getBaseUrl()}/login`
+  const loginUrl = `${getAppBaseUrl()}/login`
 
   if (!transporter) {
     logger.info('Welcome email skipped (SMTP not configured)', {
@@ -431,7 +589,7 @@ export async function sendWelcomeEmail(
   const isStudent = role === 'STUDENT'
 
   try {
-    await transporter.sendMail({
+    await sendMailWithRetry(transporter, {
       from: `"RevME Forecaster Cup" <${getFromEmail()}>`,
       to: email,
       subject: `Welcome to RevME Forecaster Cup!`,
@@ -517,7 +675,7 @@ export async function sendEmail(params: {
     return false
   }
   try {
-    await transporter.sendMail({
+    await sendMailWithRetry(transporter, {
       from: `"RevME Forecaster Cup" <${getFromEmail()}>`,
       to: params.to,
       subject: params.subject,
@@ -553,7 +711,7 @@ export async function sendDemoRequestEmail(params: {
   }
 
   try {
-    await transporter.sendMail({
+    await sendMailWithRetry(transporter, {
       from: `"RevME Forecaster Cup" <${getFromEmail()}>`,
       to: notifyEmail,
       subject: `New Demo Request - ${params.organization ?? 'Organization'}`,

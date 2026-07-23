@@ -7,10 +7,6 @@ services:
       - "15432:5432"
     env_file:
       - .env.docker
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-revme}
-      POSTGRES_USER: ${POSTGRES_USER:-revme}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-Goud@123}
     volumes:
       - revme_pg_data_dev:/var/lib/postgresql/data
     healthcheck:
@@ -26,19 +22,20 @@ services:
       target: dev
     container_name: revme-app-dev
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     ports:
-      - "5000:5000"
+      - "3000:5000"
       - "15555:5555"
     env_file:
       - .env.docker
     environment:
-      NODE_ENV: development
       NEXT_TELEMETRY_DISABLED: "1"
     volumes:
       - .:/app
       - /app/node_modules
-    command: ["sh", "-c", "npx prisma generate && npm run dev"]
+      - revme_next_dev:/app/.next
+    command: ["sh", "-c", "npx prisma generate && npx prisma migrate deploy && NODE_ENV=development npm run dev"]
     restart: unless-stopped
 
   studio:
@@ -59,3 +56,4 @@ services:
 
 volumes:
   revme_pg_data_dev:
+  revme_next_dev:

@@ -11,6 +11,7 @@ import {
 } from '@/features/support/api'
 import type { SupervisorInfo, TicketSummary } from '@/features/support/types'
 import { useState, useEffect } from 'react'
+import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -20,6 +21,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Loader2, MessageSquare, Send, Clock, CheckCircle, AlertCircle, User, ArrowUp, ThumbsUp, ThumbsDown, AlertTriangle } from 'lucide-react'
 import { AlertBanner } from '@/components/ui/alert-banner'
 import { toast } from 'sonner'
+import { ticketStatusMeta } from '@/lib/status-metadata'
 
 export default function SupportPage() {
   const [tickets, setTickets] = useState<TicketSummary[]>([])
@@ -111,26 +113,28 @@ export default function SupportPage() {
   }
 
   const getStatusBadge = (status: string) => {
+    const tone = ticketStatusMeta[status as keyof typeof ticketStatusMeta]?.tone ?? 'neutral'
+
     switch (status) {
       case 'OPEN':
-        return <span className="flex items-center gap-1 text-amber-600 text-sm"><Clock className="h-3 w-3" /> Open</span>
+        return <Badge variant={tone} className="gap-1"><Clock className="h-3 w-3" /> Open</Badge>
       case 'WAITING_ON_SUPERVISOR':
-        return <span className="flex items-center gap-1 text-orange-600 text-sm"><Clock className="h-3 w-3" /> Awaiting Supervisor</span>
+        return <Badge variant={tone} className="gap-1"><Clock className="h-3 w-3" /> Awaiting Supervisor</Badge>
       case 'WAITING_ON_STUDENT':
-        return <span className="flex items-center gap-1 text-blue-600 text-sm"><AlertCircle className="h-3 w-3" /> Supervisor Replied</span>
+        return <Badge variant={tone} className="gap-1"><AlertCircle className="h-3 w-3" /> Supervisor Replied</Badge>
       case 'ESCALATED':
-        return <span className="flex items-center gap-1 text-purple-600 text-sm"><ArrowUp className="h-3 w-3" /> Escalated</span>
+        return <Badge variant={tone} className="gap-1"><ArrowUp className="h-3 w-3" /> Escalated</Badge>
       case 'RESOLVED':
-        return <span className="flex items-center gap-1 text-green-600 text-sm"><CheckCircle className="h-3 w-3" /> Resolved</span>
+        return <Badge variant={tone} className="gap-1"><CheckCircle className="h-3 w-3" /> Resolved</Badge>
       default:
-        return <span className="text-gray-500 text-sm">{status}</span>
+        return <Badge variant="neutral">{status}</Badge>
     }
   }
 
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     )
   }
@@ -153,22 +157,22 @@ export default function SupportPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="p-4 bg-gray-50 rounded-lg">
-              <p className="text-sm font-medium text-gray-700 mb-1">
+            <div className="p-4 bg-surface-secondary rounded-lg">
+              <p className="text-sm font-medium text-text-secondary mb-1">
                 {selectedTicket.createdBy.firstName} {selectedTicket.createdBy.lastName}
               </p>
-              <p className="text-gray-600">{selectedTicket.message}</p>
+              <p className="text-text-secondary">{selectedTicket.message}</p>
             </div>
 
             {selectedTicket.replies.map((reply) => (
-              <div key={reply.id} className={`p-4 rounded-lg ${reply.author.role === 'ADMIN' || reply.author.role === 'SUB_ADMIN' ? 'bg-blue-50' : 'bg-gray-50'}`}>
-                <p className="text-sm font-medium text-gray-700 mb-1">
+              <div key={reply.id} className={`p-4 rounded-lg ${reply.author.role === 'ADMIN' || reply.author.role === 'SUB_ADMIN' ? 'bg-info-background' : 'bg-surface-secondary'}`}>
+                <p className="text-sm font-medium text-text-secondary mb-1">
                   {reply.author.firstName} {reply.author.lastName}
-                  <span className="text-gray-400 font-normal ml-2">
+                  <span className="text-text-muted font-normal ml-2">
                     {new Date(reply.createdAt).toLocaleString()}
                   </span>
                 </p>
-                <p className="text-gray-600">{reply.message}</p>
+                <p className="text-text-secondary">{reply.message}</p>
               </div>
             ))}
 
@@ -186,23 +190,23 @@ export default function SupportPage() {
             )}
 
             {selectedTicket.status === 'RESOLVED' && !selectedTicket.feedbackSubmittedAt && (
-              <Card className="bg-green-50 border-green-200">
+              <Card className="bg-success-background border-success/30">
                 <CardContent className="py-4">
-                  <p className="font-medium text-gray-900 mb-3">Was this helpful?</p>
+                  <p className="font-medium text-foreground mb-3">Was this helpful?</p>
                   <div className="flex gap-3">
                     <Button
                       variant="outline"
-                      className="flex items-center gap-2 border-green-300 hover:bg-green-100"
+                      className="flex items-center gap-2 border-success/30 hover:bg-success-background"
                       onClick={() => handleFeedback(true)}
                     >
-                      <ThumbsUp className="h-4 w-4 text-green-600" /> Yes
+                      <ThumbsUp className="h-4 w-4 text-success" /> Yes
                     </Button>
                     <Button
                       variant="outline"
-                      className="flex items-center gap-2 border-red-300 hover:bg-red-100"
+                      className="flex items-center gap-2 border-error/30 hover:bg-error-background"
                       onClick={() => handleFeedback(false)}
                     >
-                      <ThumbsDown className="h-4 w-4 text-red-600" /> No
+                      <ThumbsDown className="h-4 w-4 text-error" /> No
                     </Button>
                   </div>
                 </CardContent>
@@ -210,7 +214,7 @@ export default function SupportPage() {
             )}
 
             {selectedTicket.feedbackSubmittedAt && (
-              <div className="text-center py-2 text-sm text-gray-500">
+              <div className="text-center py-2 text-sm text-text-muted">
                 Thank you for your feedback!
               </div>
             )}
@@ -224,8 +228,8 @@ export default function SupportPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Contact Supervisor</h1>
-          <p className="text-gray-600">Get help from your supervisor with any questions or issues</p>
+          <h1 className="text-2xl font-bold text-foreground">Contact Supervisor</h1>
+          <p className="text-text-secondary">Get help from your supervisor with any questions or issues</p>
         </div>
         <Button onClick={() => setShowNewTicket(true)} disabled={!canOpenTicket}>
           <MessageSquare className="h-4 w-4 mr-2" /> New Ticket
@@ -233,15 +237,15 @@ export default function SupportPage() {
       </div>
 
       {supervisorInfo && (
-        <Card className="bg-blue-50 border-blue-200">
+        <Card className="bg-info-background border-info/30">
           <CardContent className="py-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-100 rounded-full">
-                <User className="h-5 w-5 text-blue-600" />
+              <div className="p-2 bg-info-background rounded-full">
+                <User className="h-5 w-5 text-info" />
               </div>
               <div>
-                <p className="font-medium text-gray-900">Your Supervisor</p>
-                <p className="text-sm text-gray-600">
+                <p className="font-medium text-foreground">Your Supervisor</p>
+                <p className="text-sm text-text-secondary">
                   {supervisorInfo.firstName} {supervisorInfo.lastName} ({supervisorInfo.email})
                 </p>
               </div>
@@ -314,26 +318,26 @@ export default function SupportPage() {
       {tickets.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center">
-            <MessageSquare className="h-12 w-12 mx-auto text-gray-400 mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No Tickets Yet</h3>
-            <p className="text-gray-500">Create a support ticket if you need help</p>
+            <MessageSquare className="h-12 w-12 mx-auto text-text-muted mb-4" />
+            <h3 className="text-lg font-medium text-foreground mb-2">No Tickets Yet</h3>
+            <p className="text-text-muted">Create a support ticket if you need help</p>
           </CardContent>
         </Card>
       ) : (
         <div className="space-y-3">
           {tickets.map((ticket) => (
-            <Card key={ticket.id} className="cursor-pointer hover:border-blue-300 transition-colors" onClick={() => setSelectedTicket(ticket)}>
+            <Card key={ticket.id} className="cursor-pointer hover:border-info/30 transition-colors" onClick={() => setSelectedTicket(ticket)}>
               <CardContent className="py-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="font-medium text-gray-900">{ticket.subject}</p>
-                    <p className="text-sm text-gray-500">
+                    <p className="font-medium text-foreground">{ticket.subject}</p>
+                    <p className="text-sm text-text-muted">
                       {ticket.category} - {new Date(ticket.createdAt).toLocaleDateString()}
                     </p>
                   </div>
                   <div className="flex items-center gap-3">
                     {ticket.replies.length > 0 && (
-                      <span className="text-sm text-gray-500">{ticket.replies.length} replies</span>
+                      <span className="text-sm text-text-muted">{ticket.replies.length} replies</span>
                     )}
                     {getStatusBadge(ticket.status)}
                   </div>
@@ -346,4 +350,3 @@ export default function SupportPage() {
     </div>
   )
 }
-

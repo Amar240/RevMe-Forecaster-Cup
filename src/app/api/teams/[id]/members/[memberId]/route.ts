@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
-import { prisma } from '@/lib/db'
 import { requireUserOrResponse, jsonOk, jsonError, ApiError } from '@/server/http'
+import { removeMemberFromTeam } from '@/server/team-roster'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,38 +13,29 @@ export async function DELETE(
     if (response) return response
 
     const { id, memberId } = await params
-
-    const team = await prisma.team.findUnique({
-      where: { id },
-      include: { members: true },
-    })
-
-    if (!team) {
-      throw new ApiError('Team not found', 404, 'NOT_FOUND')
-    }
-
-    if (user!.role !== 'ADMIN' && team.supervisorId !== user!.id) {
+    if (user!.role !== 'ADMIN' && user!.role !== 'SUPERVISOR') {
       throw new ApiError('Forbidden', 403, 'FORBIDDEN')
     }
 
-    const member = team.members.find((m) => m.id === memberId)
-    if (!member) {
-      throw new ApiError('Member not found', 404, 'NOT_FOUND')
-    }
-
-    await prisma.teamMember.delete({
-      where: { id: memberId },
-    })
-
-    if (member.isSubmitter && team.members.length > 1) {
-      const remainingMember = team.members.find((m) => m.id !== memberId)
-      if (remainingMember) {
-        await prisma.teamMember.update({
-          where: { id: remainingMember.id },
-          data: { isSubmitter: true },
-        })
+    let replacementMemberId: string | undefined
+    const rawBody = await request.text()
+    if (rawBody) {
+      let parsed: { replacementMemberId?: string }
+      try {
+        parsed = JSON.parse(rawBody) as { replacementMemberId?: string }
+      } catch {
+        throw new ApiError('Invalid JSON', 400, 'INVALID_JSON')
       }
+      replacementMemberId = parsed.replacementMemberId
     }
+
+    await removeMemberFromTeam({
+      actor: user!,
+      access: user!.role === 'ADMIN' ? 'admin' : 'supervisor',
+      teamId: id,
+      memberId,
+      replacementMemberId,
+    })
 
     return jsonOk({ message: 'Member removed' })
   } catch (error) {

@@ -1,48 +1,38 @@
 # Staging Go/No-Go Checklist
 
-Use this checklist before promoting any build to production.
+Run these checks after each staging deployment and before any production promotion.
 
-## Entry Criteria
-- [ ] Release branch is frozen (deploy fixes only).
-- [ ] `npm run lint` passed.
-- [ ] `npm run typecheck` passed.
-- [ ] `npm test` passed (no infra skips).
-- [ ] `npm run build` passed.
-- [ ] No hardcoded credentials in seed scripts or API collections.
+## Must-Pass Checks
+1. **Health and readiness**
+   - `GET /api/health` returns `200`
+   - Response reports `app=ok` and `db=ok`
 
-## Functional Validation
-- [ ] Auth/RBAC:
-  - [ ] Student blocked from admin routes.
-  - [ ] Supervisor blocked from admin routes.
-  - [ ] Admin has expected access.
-- [ ] Round lifecycle:
-  - [ ] Season must be active.
-  - [ ] Only one round open at a time.
-  - [ ] Submission gating follows round status.
-- [ ] Submission integrity:
-  - [ ] Submitter-only rule enforced.
-  - [ ] Locked submission cannot be edited.
-  - [ ] Round 7 week-offset behavior verified.
-- [ ] Scoring integrity:
-  - [ ] Scoring run succeeds.
-  - [ ] Leaderboard updates.
-  - [ ] Scoring verification matches expected values.
-- [ ] Warnings and DQ:
-  - [ ] Missed submissions produce warnings.
-  - [ ] Threshold behavior for disqualification verified.
-- [ ] Admin operations:
-  - [ ] Upload actuals works.
-  - [ ] Process missed submissions works.
-  - [ ] Round reminder workflow runs without errors.
+2. **Auth and session cookies**
+   - Login works over `https`
+   - Logout clears the session correctly
+   - Session persists with the production cookie settings
 
-## Reliability and Operations
-- [ ] `/api/health` returns healthy.
-- [ ] Application logs are visible.
-- [ ] Error logs are actionable.
-- [ ] CloudWatch alarms configured and tested.
-- [ ] DB backup/snapshot created before cutover.
-- [ ] Rollback procedure documented and tested.
+3. **RBAC boundaries**
+   - Student cannot access admin pages or admin APIs
+   - Supervisor cannot access admin pages or admin APIs
+   - Admin can access the expected admin workflows
 
-## Go/No-Go Rules
-- **GO** only if all checklist items pass and there are no Sev-1/Sev-2 defects.
-- **NO-GO** if any critical workflow fails, data mismatch appears, or authorization boundaries fail.
+4. **Student and supervisor core flow**
+   - Register or login succeeds
+   - Student can join a team or see the correct team state
+   - Supervisor can create or manage a team
+   - Submitter can submit a forecast and see dashboard state update
+
+5. **Admin scoring flow**
+   - Admin can upload actuals
+   - Scoring run succeeds
+   - Leaderboard and score views update after scoring
+
+6. **Release safety**
+   - `npx prisma migrate status` passed before deploy
+   - Application logs are visible
+   - Backup and rollback steps are documented before sign-off
+
+## Go/No-Go Rule
+- **GO** only if all six checks pass with no Sev-1 or Sev-2 defects.
+- **NO-GO** if any critical workflow fails, readiness is unstable, or authorization boundaries are broken.

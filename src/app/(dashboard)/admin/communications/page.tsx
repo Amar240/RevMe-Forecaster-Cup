@@ -96,8 +96,8 @@ export default function AdminCommunicationsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-gray-900">Communications</h1>
-        <p className="text-gray-500 mt-1">Send emails and notifications to participants</p>
+        <h1 className="text-2xl font-semibold text-foreground">Communications</h1>
+        <p className="text-text-muted mt-1">Send emails and notifications to participants</p>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
@@ -106,7 +106,7 @@ export default function AdminCommunicationsPage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Send className="h-5 w-5 text-blue-600" />
+                <Send className="h-5 w-5 text-info" />
                 Send Communication
               </CardTitle>
               <CardDescription>Choose a template or write a custom message</CardDescription>
@@ -122,13 +122,13 @@ export default function AdminCommunicationsPage() {
                       onClick={() => setSelectedType(type.value)}
                       className={`p-3 rounded-lg border text-left transition-colors ${
                         selectedType === type.value
-                          ? 'border-blue-500 bg-blue-50 text-blue-700'
-                          : 'border-gray-200 hover:border-gray-300'
+                          ? 'border-info/30 bg-info-background text-info'
+                          : 'border-border hover:border-border'
                       }`}
                     >
                       <Icon className="h-4 w-4 mb-1" />
                       <p className="text-sm font-medium">{type.label}</p>
-                      <p className="text-xs text-gray-500">{type.description}</p>
+                      <p className="text-xs text-text-muted">{type.description}</p>
                     </button>
                   )
                 })}
@@ -136,7 +136,7 @@ export default function AdminCommunicationsPage() {
 
               {/* Recipient Filter */}
               <div>
-                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Recipients</label>
+                <label className="text-sm font-medium text-text-secondary mb-1.5 block">Recipients</label>
                 <Select value={recipientFilter} onValueChange={setRecipientFilter}>
                   <SelectTrigger>
                     <SelectValue />
@@ -153,7 +153,7 @@ export default function AdminCommunicationsPage() {
               {selectedType === 'custom_announcement' && (
                 <>
                   <div>
-                    <label className="text-sm font-medium text-gray-700 mb-1.5 block">Subject</label>
+                    <label className="text-sm font-medium text-text-secondary mb-1.5 block">Subject</label>
                     <Input
                       value={subject}
                       onChange={e => setSubject(e.target.value)}
@@ -161,7 +161,7 @@ export default function AdminCommunicationsPage() {
                     />
                   </div>
                   <div>
-                    <label className="text-sm font-medium text-gray-700 mb-1.5 block">Message</label>
+                    <label className="text-sm font-medium text-text-secondary mb-1.5 block">Message</label>
                     <Textarea
                       value={body}
                       onChange={e => setBody(e.target.value)}
@@ -185,7 +185,7 @@ export default function AdminCommunicationsPage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
-                <History className="h-4 w-4 text-gray-500" />
+                <History className="h-4 w-4 text-text-muted" />
                 Recent Sends
               </CardTitle>
             </CardHeader>
@@ -194,13 +194,13 @@ export default function AdminCommunicationsPage() {
                 <div className="space-y-3">
                   {[...Array(5)].map((_, i) => (
                     <div key={i} className="animate-pulse">
-                      <div className="h-4 bg-gray-200 rounded w-3/4 mb-1" />
-                      <div className="h-3 bg-gray-100 rounded w-1/2" />
+                      <div className="h-4 bg-muted rounded w-3/4 mb-1" />
+                      <div className="h-3 bg-surface-secondary rounded w-1/2" />
                     </div>
                   ))}
                 </div>
               ) : history.length === 0 ? (
-                <p className="text-sm text-gray-500">No notifications sent yet</p>
+                <p className="text-sm text-text-muted">No notifications sent yet</p>
               ) : (
                 <div className="space-y-3 max-h-[500px] overflow-y-auto">
                   {history.map(item => (
@@ -208,8 +208,8 @@ export default function AdminCommunicationsPage() {
                       <div className="flex items-center gap-2">
                         <Badge variant="secondary" className="text-xs">{item.type.replace(/_/g, ' ')}</Badge>
                       </div>
-                      <p className="text-sm font-medium text-gray-700 mt-1">{item.title}</p>
-                      <p className="text-xs text-gray-400">
+                      <p className="text-sm font-medium text-text-secondary mt-1">{item.title}</p>
+                      <p className="text-xs text-text-muted">
                         {new Date(item.createdAt).toLocaleDateString()} {new Date(item.createdAt).toLocaleTimeString()}
                       </p>
                     </div>

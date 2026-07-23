@@ -1,8 +1,14 @@
 import { NextRequest } from 'next/server'
+import { TeamStatus } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { requireUserOrResponse, jsonOk, jsonError, ApiError } from '@/server/http'
+import { getCurrentOperationalSeason } from '@/server/season'
+import { countSupervisorTeamsInSeason, findSeasonMembershipConflict } from '@/server/team-membership'
+import { sameUniversity } from '@/server/universities'
 
 export const dynamic = 'force-dynamic'
+
+const joinableTeamStatuses: TeamStatus[] = ['PENDING_APPROVAL', 'APPROVED', 'ACTIVE']
 
 export async function GET() {
   try {
@@ -28,7 +34,13 @@ export async function GET() {
             firstName: true,
             lastName: true,
             email: true,
-            university: { select: { name: true } },
+            university: {
+              select: {
+                id: true,
+                name: true,
+                normalizedName: true,
+              },
+            },
           },
         },
         season: { select: { id: true, name: true } },
@@ -36,7 +48,22 @@ export async function GET() {
       orderBy: { createdAt: 'desc' },
     })
 
-    return jsonOk({ requests })
+    const requestedTeamIds = requests.flatMap((request) => (request.teamId ? [request.teamId] : []))
+    const requestedTeams = requestedTeamIds.length
+      ? await prisma.team.findMany({
+          where: { id: { in: requestedTeamIds } },
+          select: { id: true, name: true, displayId: true, status: true },
+        })
+      : []
+
+    const requestedTeamMap = new Map(requestedTeams.map((team) => [team.id, team]))
+
+    return jsonOk({
+      requests: requests.map((request) => ({
+        ...request,
+        requestedTeam: request.teamId ? requestedTeamMap.get(request.teamId) ?? null : null,
+      })),
+    })
   } catch (error) {
     return jsonError(error, 'Failed to fetch join requests')
   }
@@ -60,7 +87,19 @@ export async function POST(request: NextRequest) {
 
     const joinRequest = await prisma.joinRequest.findUnique({
       where: { id: requestId },
-      include: { student: true },
+      include: {
+        student: {
+          include: {
+            university: {
+              select: {
+                id: true,
+                name: true,
+                normalizedName: true,
+              },
+            },
+          },
+        },
+      },
     })
 
     if (!joinRequest) {
@@ -84,15 +123,55 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === 'accept') {
-      let targetTeamId = teamId
+      let targetTeamId = teamId || joinRequest.teamId
 
       if (!targetTeamId && teamName) {
-        const activeSeason = await prisma.season.findFirst({
-          where: { status: 'ACTIVE' },
+        const operationalSeason = await getCurrentOperationalSeason({
+          select: { id: true },
         })
 
-        const existingTeamsCount = await prisma.team.count({
-          where: { supervisorId: user!.id },
+        const studentWithUniversity = await prisma.user.findUnique({
+          where: { id: joinRequest.studentId },
+          include: {
+            university: {
+              select: {
+                id: true,
+                name: true,
+                normalizedName: true,
+              },
+            },
+          },
+        })
+
+        const actingSupervisor = await prisma.user.findUnique({
+          where: { id: user!.id },
+          include: {
+            university: {
+              select: {
+                id: true,
+                name: true,
+                normalizedName: true,
+              },
+            },
+          },
+        })
+
+        if (
+          studentWithUniversity?.university &&
+          actingSupervisor?.university &&
+          !sameUniversity(studentWithUniversity.university, actingSupervisor.university)
+        ) {
+          throw new ApiError('Student and supervisor must belong to the same university', 422, 'INVALID_INPUT')
+        }
+
+        const targetSeasonId = joinRequest.seasonId || operationalSeason?.id || null
+        if (!targetSeasonId) {
+          throw new ApiError('No operational season is available for creating a team.', 422, 'INVALID_INPUT')
+        }
+        const existingTeamsCount = await countSupervisorTeamsInSeason({
+          supervisorId: user!.id,
+          seasonId: targetSeasonId,
+          db: prisma,
         })
 
         if (existingTeamsCount >= 10) {
@@ -106,7 +185,7 @@ export async function POST(request: NextRequest) {
             displayId,
             supervisorId: user!.id,
             universityId: joinRequest.student.universityId || user!.universityId!,
-            seasonId: activeSeason?.id || null,
+            seasonId: targetSeasonId,
             status: 'PENDING_APPROVAL',
           },
         })
@@ -119,15 +198,54 @@ export async function POST(request: NextRequest) {
 
       const team = await prisma.team.findUnique({
         where: { id: targetTeamId },
-        include: { members: true },
+        include: {
+          members: true,
+          university: {
+            select: {
+              id: true,
+              name: true,
+              normalizedName: true,
+            },
+          },
+        },
       })
 
       if (!team) {
         throw new ApiError('Team not found', 404, 'NOT_FOUND')
       }
 
+      if (user!.role === 'SUPERVISOR' && team.supervisorId !== user!.id) {
+        throw new ApiError('You can only add students to your own teams', 403, 'FORBIDDEN')
+      }
+
+      if (!joinableTeamStatuses.includes(team.status)) {
+        throw new ApiError('Selected team is not open for join requests', 422, 'INVALID_INPUT')
+      }
+
+      if (joinRequest.seasonId && team.seasonId !== joinRequest.seasonId) {
+        throw new ApiError('Selected team must belong to the same season as the request', 422, 'INVALID_INPUT')
+      }
+
+      if (joinRequest.student.university && team.university && !sameUniversity(joinRequest.student.university, team.university)) {
+        throw new ApiError('Selected team must belong to the same university as the student', 422, 'INVALID_INPUT')
+      }
+
       if (team.members.length >= 5) {
         throw new ApiError('Maximum 5 members per team reached', 400, 'CONFLICT')
+      }
+
+      const existingMembership = await findSeasonMembershipConflict({
+        userId: joinRequest.studentId,
+        seasonId: team.seasonId,
+        db: prisma,
+      })
+
+      if (existingMembership) {
+        throw new ApiError(
+          `Student is already assigned to ${existingMembership.team.name} in this season`,
+          409,
+          'CONFLICT'
+        )
       }
 
       await prisma.$transaction([

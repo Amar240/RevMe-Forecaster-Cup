@@ -11,6 +11,7 @@ vi.mock('nodemailer', () => {
 })
 
 describe('Email functions', () => {
+  let sendEmailVerificationEmail: typeof import('@/lib/email').sendEmailVerificationEmail
   let sendPasswordResetEmail: typeof import('@/lib/email').sendPasswordResetEmail
   let sendWelcomeEmail: typeof import('@/lib/email').sendWelcomeEmail
   let sendMailMock: ReturnType<typeof vi.fn>
@@ -23,6 +24,7 @@ describe('Email functions', () => {
     vi.stubEnv('SMTP_PORT', '587')
 
     const emailModule = await import('@/lib/email')
+    sendEmailVerificationEmail = emailModule.sendEmailVerificationEmail
     sendPasswordResetEmail = emailModule.sendPasswordResetEmail
     sendWelcomeEmail = emailModule.sendWelcomeEmail
 
@@ -45,6 +47,19 @@ describe('Email functions', () => {
     expect(call.to).toBe('test@example.com')
     expect(call.subject).toContain('Reset Your Password')
     expect(call.html).toContain('reset-token-123')
+  })
+
+  it('sendEmailVerificationEmail calls transporter.sendMail with verification details', async () => {
+    const result = await sendEmailVerificationEmail('verify@example.com', 'Alice', '123456')
+
+    expect(result).toBe(true)
+    expect(sendMailMock).toHaveBeenCalledTimes(1)
+
+    const call = sendMailMock.mock.calls[0][0]
+    expect(call.to).toBe('verify@example.com')
+    expect(call.subject).toContain('Verify Your Email')
+    expect(call.html).toContain('123456')
+    expect(call.html).toContain('/verify-email?email=verify%40example.com')
   })
 
   it('sendWelcomeEmail calls transporter.sendMail', async () => {

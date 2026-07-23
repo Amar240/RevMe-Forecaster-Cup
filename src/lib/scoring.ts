@@ -1,4 +1,5 @@
 import { prisma } from './db'
+import type { Metric, Prisma } from '@prisma/client'
 
 export interface ScoringResult {
   scoringRunId: string
@@ -26,9 +27,9 @@ export async function runScoring(
     },
   })
 
-    const warnings: string[] = []
+  const warnings: string[] = []
 
-    try {
+  try {
     const season = await prisma.season.findUnique({
       where: { id: seasonId },
       include: {
@@ -77,7 +78,7 @@ export async function runScoring(
       roundActualsVersions.set(round.id, round.actualsVersion)
     }
 
-    let errorsUpserted = 0
+    const errorRows: Prisma.PredictionErrorCreateManyInput[] = []
     let submissionsProcessed = 0
 
     for (const submission of submissions) {
@@ -107,26 +108,7 @@ export async function runScoring(
             apeError = absError / actualValue
           }
 
-          await prisma.predictionError.upsert({
-            where: {
-              seasonId_teamId_roundId_marketId_metric_weekOffset: {
-                seasonId,
-                teamId: submission.teamId,
-                roundId: submission.roundId,
-                marketId: value.marketId,
-                metric: value.metric,
-                weekOffset: value.weekOffset,
-              },
-            },
-            update: {
-              predictedValue: value.value,
-              actualValue,
-              absError,
-              apeError,
-              computedAt: new Date(),
-              scoringRunId: scoringRun.id,
-            },
-            create: {
+          errorRows.push({
               seasonId,
               teamId: submission.teamId,
               roundId: submission.roundId,
@@ -138,14 +120,19 @@ export async function runScoring(
               absError,
               apeError,
               scoringRunId: scoringRun.id,
-            },
           })
-          errorsUpserted++
         }
       }
     }
 
-    const aggregatesUpserted = await computeAggregates(seasonId, scoringRun.id, scope, roundId)
+    const aggregatesUpserted = await prisma.$transaction(async (tx) => {
+      await tx.predictionError.deleteMany({
+        where: { seasonId, ...(scope === 'ROUND' && roundId ? { roundId } : {}) },
+      })
+      if (errorRows.length > 0) await tx.predictionError.createMany({ data: errorRows })
+      return computeAggregates(tx, seasonId, scoringRun.id, scope, roundId)
+    })
+    const errorsUpserted = errorRows.length
 
     const totalActualsVersion = Array.from(roundActualsVersions.values()).reduce((a, b) => a + b, 0)
 
@@ -165,23 +152,6 @@ export async function runScoring(
         },
       },
     })
-
-    const roundsWithActuals = new Set(actuals.map(a => a.roundId))
-    for (const round of rounds) {
-      if (roundsWithActuals.has(round.id)) {
-        await prisma.round.update({
-          where: { id: round.id },
-          data: {
-            isLockedActuals: true,
-            lockedAt: new Date(),
-            lockedById: adminId,
-            scoresStale: false,
-            lastScoredAt: new Date(),
-            lastScoredById: adminId,
-          },
-        })
-      }
-    }
 
     return {
       scoringRunId: scoringRun.id,
@@ -214,95 +184,32 @@ export async function runScoring(
   }
 }
 
-async function upsertScoreAggregate(
-  data: {
-    seasonId: string
-    teamId: string
-    metric: 'OCCUPANCY' | 'ADR'
-    scopeType: 'SEASON' | 'ROUND' | 'MARKET_ROUND'
-    roundId: string | null
-    marketId: string | null
-    mape: number
-    nErrors: number
-    scoringRunId: string
-  }
-): Promise<void> {
-  const existing = await prisma.scoreAggregate.findFirst({
-    where: {
-      seasonId: data.seasonId,
-      teamId: data.teamId,
-      metric: data.metric,
-      scopeType: data.scopeType,
-      roundId: data.roundId,
-      marketId: data.marketId,
-    },
-  })
-
-  if (existing) {
-    await prisma.scoreAggregate.update({
-      where: { id: existing.id },
-      data: {
-        mape: data.mape,
-        nErrors: data.nErrors,
-        computedAt: new Date(),
-        scoringRunId: data.scoringRunId,
-      },
-    })
-  } else {
-    await prisma.scoreAggregate.create({
-      data: {
-        seasonId: data.seasonId,
-        teamId: data.teamId,
-        metric: data.metric,
-        scopeType: data.scopeType,
-        roundId: data.roundId,
-        marketId: data.marketId,
-        mape: data.mape,
-        nErrors: data.nErrors,
-        scoringRunId: data.scoringRunId,
-      },
-    })
-  }
-}
-
 async function computeAggregates(
+  tx: Prisma.TransactionClient,
   seasonId: string,
   scoringRunId: string,
   scope: 'SEASON' | 'ROUND',
   roundId?: string
 ): Promise<number> {
-  let aggregatesUpserted = 0
+  // Season aggregates must always use the complete season error set, including
+  // when only one round was rescored.
+  const errors = await tx.predictionError.findMany({ where: { seasonId } })
+  const aggregateRows: Prisma.ScoreAggregateCreateManyInput[] = []
+  const teamIds = [...new Set(errors.map((error) => error.teamId))]
 
-  const errors = await prisma.predictionError.findMany({
-    where: {
-      seasonId,
-      ...(scope === 'ROUND' && roundId ? { roundId } : {}),
-    },
-  })
+  for (const teamId of teamIds) {
+    const teamErrors = errors.filter((error) => error.teamId === teamId)
 
-  const teams = await prisma.team.findMany({
-    where: {
-      submissions: {
-        some: {
-          round: { seasonId },
-        },
-      },
-    },
-  })
-
-  for (const team of teams) {
-    const teamErrors = errors.filter((e) => e.teamId === team.id)
-
-    for (const metric of ['OCCUPANCY', 'ADR'] as const) {
+    for (const metric of ['OCCUPANCY', 'ADR'] as Metric[]) {
       const metricErrors = teamErrors.filter((e) => e.metric === metric)
       const validApeErrors = metricErrors.filter((e) => e.apeError !== null)
 
       if (validApeErrors.length > 0) {
         const mape = validApeErrors.reduce((sum, e) => sum + (e.apeError ?? 0), 0) / validApeErrors.length
 
-        await upsertScoreAggregate({
+        aggregateRows.push({
           seasonId,
-          teamId: team.id,
+          teamId,
           metric,
           scopeType: 'SEASON',
           roundId: null,
@@ -311,7 +218,6 @@ async function computeAggregates(
           nErrors: validApeErrors.length,
           scoringRunId,
         })
-        aggregatesUpserted++
       }
 
       const roundGroups = new Map<string, typeof validApeErrors>()
@@ -321,14 +227,14 @@ async function computeAggregates(
         roundGroups.set(e.roundId, existing)
       })
 
-      const roundEntries = Array.from(roundGroups.entries())
-      for (const [rId, roundErrors] of roundEntries) {
+      for (const [rId, roundErrors] of roundGroups.entries()) {
+        if (scope === 'ROUND' && roundId && rId !== roundId) continue
         if (roundErrors.length > 0) {
           const roundMape = roundErrors.reduce((sum, e) => sum + (e.apeError ?? 0), 0) / roundErrors.length
 
-          await upsertScoreAggregate({
+          aggregateRows.push({
             seasonId,
-            teamId: team.id,
+            teamId,
             metric,
             scopeType: 'ROUND',
             roundId: rId,
@@ -337,13 +243,22 @@ async function computeAggregates(
             nErrors: roundErrors.length,
             scoringRunId,
           })
-          aggregatesUpserted++
         }
       }
     }
   }
 
-  return aggregatesUpserted
+  await tx.scoreAggregate.deleteMany({
+    where: {
+      seasonId,
+      OR: [
+        { scopeType: 'SEASON' },
+        ...(scope === 'ROUND' && roundId ? [{ scopeType: 'ROUND' as const, roundId }] : [{ scopeType: 'ROUND' as const }]),
+      ],
+    },
+  })
+  if (aggregateRows.length > 0) await tx.scoreAggregate.createMany({ data: aggregateRows })
+  return aggregateRows.length
 }
 
 export function getExpectedPredictions(roundNumber: number): number {

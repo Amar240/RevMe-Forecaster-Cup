@@ -1,6 +1,9 @@
 import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireUserOrResponse, jsonOk, jsonError, parseJson, ApiError } from '@/server/http'
+import { getCurrentOperationalSeason } from '@/server/season'
+import { countSupervisorTeamsInSeason } from '@/server/team-membership'
+import { ensureUniqueTeamName, normalizeTeamName } from '@/server/team-management'
 import { z } from 'zod'
 
 export const dynamic = 'force-dynamic'
@@ -14,8 +17,19 @@ export async function GET() {
     const { user, response } = await requireUserOrResponse()
     if (response) return response
 
+    const operationalSeason = await getCurrentOperationalSeason({
+      select: { id: true },
+    })
+
+    if (!operationalSeason) {
+      return jsonOk({ teams: [] })
+    }
+
     const teams = await prisma.team.findMany({
-      where: user!.role === 'ADMIN' ? {} : { supervisorId: user!.id },
+      where: {
+        ...(user!.role === 'ADMIN' ? {} : { supervisorId: user!.id }),
+        seasonId: operationalSeason.id,
+      },
       include: {
         university: true,
         members: { include: { user: true } },
@@ -40,21 +54,10 @@ export async function POST(request: NextRequest) {
     }
 
     const data = await parseJson(request, createTeamSchema)
+    const teamName = normalizeTeamName(data.name)
 
-    const existingTeamWithName = await prisma.team.findFirst({
-      where: { name: { equals: data.name, mode: 'insensitive' } },
-    })
-
-    if (existingTeamWithName) {
-      throw new ApiError('A team with this name already exists. Please choose a different name.', 422, 'CONFLICT')
-    }
-
-    const teamCount = await prisma.team.count({
-      where: { supervisorId: user!.id },
-    })
-
-    if (teamCount >= 10) {
-      throw new ApiError('Maximum 10 teams per supervisor', 422, 'CONFLICT')
+    if (!teamName) {
+      throw new ApiError('Team name is required', 422, 'INVALID_INPUT')
     }
 
     if (!user!.universityId) {
@@ -65,12 +68,28 @@ export async function POST(request: NextRequest) {
       where: { id: user!.universityId },
     })
 
-    const activeSeason = await prisma.season.findFirst({
-      where: { status: 'ACTIVE' },
+    const operationalSeason = await getCurrentOperationalSeason({
+      select: { id: true },
     })
 
-    if (!activeSeason) {
-      throw new ApiError('No active season for team registration', 422, 'INVALID_INPUT')
+    if (!operationalSeason) {
+      throw new ApiError('No operational season is available for team registration', 422, 'INVALID_INPUT')
+    }
+
+    await ensureUniqueTeamName({
+      seasonId: operationalSeason.id,
+      name: teamName,
+      db: prisma,
+    })
+
+    const teamCount = await countSupervisorTeamsInSeason({
+      supervisorId: user!.id,
+      seasonId: operationalSeason.id,
+      db: prisma,
+    })
+
+    if (teamCount >= 10) {
+      throw new ApiError('Maximum 10 teams per supervisor', 422, 'CONFLICT')
     }
 
     const existingTeamsCount = await prisma.team.count({
@@ -81,11 +100,11 @@ export async function POST(request: NextRequest) {
 
     const team = await prisma.team.create({
       data: {
-        name: data.name,
+        name: teamName,
         displayId,
         supervisorId: user!.id,
         universityId: user!.universityId,
-        seasonId: activeSeason.id,
+        seasonId: operationalSeason.id,
       },
       include: {
         university: true,

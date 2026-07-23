@@ -24,6 +24,8 @@ async function main() {
         firstName: 'Admin',
         lastName: 'User',
         role: 'ADMIN',
+        emailVerified: true,
+        emailVerifiedAt: new Date(),
       },
     })
     console.log(`Admin user created: ${adminEmail}`)

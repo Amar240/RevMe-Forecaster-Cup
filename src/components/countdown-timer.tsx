@@ -10,14 +10,12 @@ interface CountdownTimerProps {
 function TimeBlock({ value, label }: { value: number; label: string }) {
   return (
     <div className="flex flex-col items-center">
-      <div className="relative">
-        <div className="bg-white/20 backdrop-blur-sm rounded-lg px-3 py-2 min-w-[52px]">
-          <span className="text-2xl font-bold tabular-nums text-white">
-            {value.toString().padStart(2, '0')}
-          </span>
-        </div>
+      <div className="rounded-lg border border-primary-foreground/20 bg-primary-foreground/10 px-3 py-2 shadow-sm min-w-[52px]">
+        <span className="text-2xl font-bold tabular-nums text-primary-foreground">
+          {value.toString().padStart(2, '0')}
+        </span>
       </div>
-      <span className="text-xs text-white/70 mt-1 uppercase tracking-wider font-medium">
+      <span className="mt-1 text-xs font-medium uppercase tracking-wider text-primary-foreground/80">
         {label}
       </span>
     </div>
@@ -62,8 +60,8 @@ export function CountdownTimer({ closesAt, className = '' }: CountdownTimerProps
   if (!mounted) {
     return (
       <div className={`flex items-center gap-2 ${className}`}>
-        <div className="bg-white/20 backdrop-blur-sm rounded-lg px-3 py-2 min-w-[52px] animate-pulse">
-          <span className="text-2xl font-bold tabular-nums text-white">--</span>
+        <div className="min-w-[52px] rounded-lg border border-primary-foreground/20 bg-primary-foreground/10 px-3 py-2 animate-pulse">
+          <span className="text-2xl font-bold tabular-nums text-primary-foreground">--</span>
         </div>
       </div>
     )
@@ -72,7 +70,7 @@ export function CountdownTimer({ closesAt, className = '' }: CountdownTimerProps
   if (isExpired) {
     return (
       <div className={`flex items-center justify-center ${className}`}>
-        <span className="text-red-500 font-bold text-lg animate-pulse">Round Closed</span>
+        <span className="text-error font-bold text-lg animate-pulse">Round Closed</span>
       </div>
     )
   }
@@ -127,7 +125,7 @@ export function CountdownTimerCompact({ closesAt, className = '' }: CountdownTim
   }
 
   if (isExpired) {
-    return <span className={`text-red-600 font-semibold ${className}`}>Closed</span>
+    return <span className={`text-error font-semibold ${className}`}>Closed</span>
   }
 
   const parts = []

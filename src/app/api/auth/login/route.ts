@@ -23,10 +23,20 @@ export async function POST(request: NextRequest) {
       throw new ApiError('Invalid email or password', 401, 'UNAUTHORIZED')
     }
 
-    const validPassword = await verifyPassword(data.password, user.passwordHash)
+    if (!user.isActive) {
+      throw new ApiError('Your account is inactive. Please contact an administrator.', 403, 'FORBIDDEN')
+    }
+
+    const validPassword = user.passwordHash ? await verifyPassword(data.password, user.passwordHash) : false
 
     if (!validPassword) {
       throw new ApiError('Invalid email or password', 401, 'UNAUTHORIZED')
+    }
+
+    if (!user.emailVerified) {
+      throw new ApiError('Verify your email before signing in.', 403, 'EMAIL_NOT_VERIFIED', {
+        email: user.email,
+      })
     }
 
     await createSession(user.id)

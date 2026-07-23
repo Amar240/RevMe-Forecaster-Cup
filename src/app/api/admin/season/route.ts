@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/db'
-import { requireAdminOrResponse, jsonOk, jsonError, parseJson } from '@/server/http'
-import { z } from 'zod'
+import { requireAdminOrResponse, jsonOk, jsonError, ApiError } from '@/server/http'
+import { z, ZodError } from 'zod'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,7 +11,7 @@ const createSeasonSchema = z.object({
   endDate: z.string(),
   totalRounds: z.number().int().min(1).max(20).default(7),
   daysPerRound: z.number().int().min(1).max(30).optional(),
-  marketIds: z.array(z.string()).min(1).max(10).optional(),
+  marketIds: z.array(z.string()).min(1).max(10),
 })
 
 export async function GET() {
@@ -50,7 +50,50 @@ export async function POST(request: NextRequest) {
     const { user, response } = await requireAdminOrResponse('season:write')
     if (response) return response
 
-    const data = await parseJson(request, createSeasonSchema)
+    let rawBody: unknown
+    try {
+      rawBody = await request.json()
+    } catch {
+      throw new ApiError('Invalid JSON', 400, 'INVALID_JSON')
+    }
+
+    const parsed = createSeasonSchema.safeParse(rawBody)
+    if (!parsed.success) {
+      const missingMarkets = parsed.error.issues.some(
+        (issue) => issue.path[0] === 'marketIds' && issue.code === 'too_small'
+      )
+
+      if (missingMarkets) {
+        return jsonOk({ message: 'Select at least one market for this season' }, 422)
+      }
+
+      throw parsed.error
+    }
+
+    const data = parsed.data
+
+    const completedSeasons = await prisma.season.findMany({
+      where: { status: 'COMPLETED' },
+      select: {
+        id: true,
+        archives: {
+          orderBy: [{ version: 'desc' }, { createdAt: 'desc' }],
+          take: 1,
+          select: { status: true },
+        },
+      },
+    })
+
+    const hasCompletedUnarchivedSeason = completedSeasons.some(
+      (seasonItem) => seasonItem.archives[0]?.status !== 'COMPLETED'
+    )
+
+    if (hasCompletedUnarchivedSeason) {
+      return jsonOk(
+        { message: 'You must archive all completed seasons before creating a new one.' },
+        422
+      )
+    }
 
     const [startYear, startMonth, startDay] = data.startDate.split('-').map(Number)
     const [endYear, endMonth, endDay] = data.endDate.split('-').map(Number)
@@ -61,25 +104,11 @@ export async function POST(request: NextRequest) {
       return jsonOk({ message: 'End date must be after start date' }, 400)
     }
 
-    let resolvedMarketIds: string[]
-
-    if (data.marketIds && data.marketIds.length > 0) {
-      const existing = await prisma.market.findMany({ where: { id: { in: data.marketIds } } })
-      if (existing.length !== data.marketIds.length) {
-        return jsonOk({ message: 'One or more market IDs are invalid' }, 400)
-      }
-      resolvedMarketIds = data.marketIds
-    } else {
-      const defaultNames = ['Nashville CBD', 'Dubai', 'Hamburg']
-      const markets = await Promise.all(
-        defaultNames.map(async (name) => {
-          let market = await prisma.market.findUnique({ where: { name } })
-          if (!market) market = await prisma.market.create({ data: { name } })
-          return market
-        })
-      )
-      resolvedMarketIds = markets.map((m) => m.id)
+    const existing = await prisma.market.findMany({ where: { id: { in: data.marketIds } } })
+    if (existing.length !== data.marketIds.length) {
+      return jsonOk({ message: 'One or more market IDs are invalid' }, 400)
     }
+    const resolvedMarketIds = data.marketIds
 
     const season = await prisma.season.create({
       data: { name: data.name, startDate, endDate, status: 'DRAFT', registrationOpen: true },
@@ -117,6 +146,9 @@ export async function POST(request: NextRequest) {
 
     return jsonOk({ season: fullSeason }, 201)
   } catch (error) {
+    if (error instanceof ZodError) {
+      return jsonError(error, 'Failed to create season')
+    }
     return jsonError(error, 'Failed to create season')
   }
 }

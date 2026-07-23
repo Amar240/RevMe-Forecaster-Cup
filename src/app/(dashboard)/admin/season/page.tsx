@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { clientLogger } from '@/lib/client-logger'
 import { createSeason, getSeasonOverview, updateRoundStatus, updateSeasonStatus } from '@/features/season/api'
 import type { SeasonSummary } from '@/features/season/types'
@@ -10,23 +11,44 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
-import { Play, Pause, Square, RotateCcw, Clock, Edit2, Check, X, AlertTriangle } from 'lucide-react'
+import { Play, Pause, Square, RotateCcw, Clock, Edit2, Check, X, AlertTriangle, Eye, EyeOff } from 'lucide-react'
 import { AlertBanner } from '@/components/ui/alert-banner'
 import { PageLoader } from '@/components/ui/page-loader'
 import { csrfFetch } from '@/lib/csrf'
 import { toast } from 'sonner'
+import { ImportAssistControl } from '@/components/admin/import-assist-control'
 
 interface MarketOption {
   id: string
   name: string
 }
 
-const DEFAULT_MARKET_NAMES = ['Nashville CBD', 'Dubai', 'Hamburg']
+type SeasonArchiveStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
+
+interface SeasonArchiveSummary {
+  id: string
+  seasonId: string
+  status: SeasonArchiveStatus
+  version: number
+  s3Bucket: string | null
+  s3Prefix: string | null
+  fileManifest: {
+    files?: string[]
+    generatedAt?: string
+  } | null
+  totalSizeBytes: number | null
+  errorMessage: string | null
+  completedAt: string | null
+  createdAt: string
+}
 
 export default function AdminSeasonPage() {
   const [season, setSeason] = useState<SeasonSummary | null>(null)
   const [completedSeasons, setCompletedSeasons] = useState<SeasonSummary[]>([])
+  const [archiveBySeason, setArchiveBySeason] = useState<Record<string, SeasonArchiveSummary | null>>({})
   const [loading, setLoading] = useState(true)
+  const [marketsLoading, setMarketsLoading] = useState(true)
+  const [marketsError, setMarketsError] = useState('')
   const [creating, setCreating] = useState(false)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [error, setError] = useState('')
@@ -45,6 +67,9 @@ export default function AdminSeasonPage() {
 
   const [confirmComplete, setConfirmComplete] = useState(false)
   const [confirmCloseRound, setConfirmCloseRound] = useState<string | null>(null)
+  const [wipeDialogSeason, setWipeDialogSeason] = useState<SeasonSummary | null>(null)
+  const [wipeConfirmName, setWipeConfirmName] = useState('')
+  const [wipeError, setWipeError] = useState('')
 
   const computeEndDate = useCallback((startDate: string, totalRounds: number, daysPerRound: number) => {
     if (!startDate) return ''
@@ -55,39 +80,77 @@ export default function AdminSeasonPage() {
   }, [])
 
   const fetchMarkets = useCallback(async () => {
+    setMarketsLoading(true)
+    setMarketsError('')
     try {
       const res = await csrfFetch('/api/admin/markets')
       if (res.ok) {
         const data = await res.json()
         const markets: MarketOption[] = data.markets ?? []
         setAvailableMarkets(markets)
-        const defaultIds = markets
-          .filter((m) => DEFAULT_MARKET_NAMES.includes(m.name))
-          .map((m) => m.id)
-        setFormData((prev) => ({ ...prev, marketIds: defaultIds }))
+      } else {
+        const data = await res.json().catch(() => ({})) as { message?: string }
+        throw new Error(data.message ?? 'Markets could not be loaded. Please refresh and try again.')
       }
-    } catch {
-      clientLogger.error('Failed to fetch markets')
+    } catch (err) {
+      clientLogger.error('Failed to fetch markets', err)
+      setAvailableMarkets([])
+      setMarketsError(
+        err instanceof Error ? err.message : 'Markets could not be loaded. Please refresh and try again.'
+      )
+    } finally {
+      setMarketsLoading(false)
     }
   }, [])
 
-  useEffect(() => {
-    fetchSeason()
-    fetchMarkets()
-  }, [fetchMarkets])
+  const fetchArchiveStatuses = useCallback(async (seasonList: SeasonSummary[]) => {
+    if (seasonList.length === 0) {
+      setArchiveBySeason({})
+      return
+    }
 
-  const fetchSeason = async () => {
+    const entries = await Promise.all(
+      seasonList.map(async (seasonItem) => {
+        try {
+          const res = await csrfFetch(`/api/admin/season/${seasonItem.id}/archive`)
+          const data = await res.json() as { archive?: SeasonArchiveSummary | null; message?: string }
+          if (!res.ok) {
+            throw new Error(data.message ?? 'Failed to load archive status')
+          }
+
+          return [seasonItem.id, data.archive ?? null] as const
+        } catch (err) {
+          clientLogger.error('Failed to fetch archive status', {
+            seasonId: seasonItem.id,
+            error: err instanceof Error ? err.message : String(err),
+          })
+          return [seasonItem.id, null] as const
+        }
+      })
+    )
+
+    setArchiveBySeason(Object.fromEntries(entries))
+  }, [])
+
+  const fetchSeason = useCallback(async () => {
     try {
       const data = await getSeasonOverview()
+      const completed = data.completedSeasons || []
       setSeason(data.season)
-      setCompletedSeasons(data.completedSeasons || [])
+      setCompletedSeasons(completed)
+      await fetchArchiveStatuses(completed)
     } catch (err) {
       clientLogger.error('Failed to fetch season:', err)
       toast.error('Failed to load season data')
     } finally {
       setLoading(false)
     }
-  }
+  }, [fetchArchiveStatuses])
+
+  useEffect(() => {
+    void fetchSeason()
+    void fetchMarkets()
+  }, [fetchMarkets, fetchSeason])
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -95,20 +158,43 @@ export default function AdminSeasonPage() {
     setCreating(true)
 
     try {
+      if (marketsLoading) {
+        throw new Error('Markets are still loading. Please wait and try again.')
+      }
+
+      if (marketsError) {
+        throw new Error('Markets could not be loaded. Please refresh and try again.')
+      }
+
+      if (availableMarkets.length === 0) {
+        throw new Error('No markets are available yet. Add markets before creating a season.')
+      }
+
+      if (formData.marketIds.length === 0) {
+        throw new Error('Select at least one market for this season')
+      }
+
       await createSeason({
         name: formData.name,
         startDate: formData.startDate,
         endDate: formData.endDate,
         totalRounds: formData.totalRounds,
         daysPerRound: formData.daysPerRound,
-        marketIds: formData.marketIds.length > 0 ? formData.marketIds : undefined,
+        marketIds: formData.marketIds,
       })
-      fetchSeason()
+      await fetchSeason()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
     } finally {
       setCreating(false)
     }
+  }
+
+  const applySeasonTemplate = (source: SeasonSummary) => {
+    const daysPerRound = source.rounds.length > 0 ? Math.max(1, Math.round((new Date(source.rounds[0].closesAt).getTime() - new Date(source.rounds[0].opensAt).getTime()) / 86_400_000)) : 7
+    setFormData((current) => ({ ...current, name: `${source.name} – New Season`, totalRounds: source.rounds.length || 7, daysPerRound, marketIds: source.markets.filter((item) => item.isActive).map((item) => item.market.id), endDate: current.startDate ? computeEndDate(current.startDate, source.rounds.length || 7, daysPerRound) : '' }))
+    setSuccess(`Template loaded from ${source.name}. Choose the new start date and review all settings.`)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   const handleSeasonAction = async (action: 'start' | 'pause' | 'resume' | 'complete') => {
@@ -119,7 +205,7 @@ export default function AdminSeasonPage() {
     try {
       const data = await updateSeasonStatus(action, season?.id)
       setSuccess(data.message)
-      fetchSeason()
+      await fetchSeason()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
     } finally {
@@ -141,9 +227,104 @@ export default function AdminSeasonPage() {
       })
       setSuccess(data.message)
       setEditingRound(null)
-      fetchSeason()
+      await fetchSeason()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  const handleLeaderboardVisibility = async (roundId: string, visible: boolean) => {
+    setActionLoading(roundId)
+    try {
+      const res = await csrfFetch(`/api/admin/rounds/${roundId}/leaderboard-visibility`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ visible }),
+      })
+      const data = await res.json() as { message?: string; error?: string }
+      if (!res.ok) throw new Error(data.error ?? 'Failed to update leaderboard visibility')
+      toast.success(data.message ?? (visible ? 'Leaderboard published' : 'Leaderboard hidden'))
+      await fetchSeason()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to update leaderboard visibility')
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  const handleArchiveSeason = async (seasonId: string) => {
+    const loadingKey = `archive:${seasonId}`
+    setActionLoading(loadingKey)
+
+    try {
+      const res = await csrfFetch(`/api/admin/season/${seasonId}/archive`, {
+        method: 'POST',
+      })
+      const data = await res.json() as { message?: string }
+      if (!res.ok) {
+        throw new Error(data.message ?? 'Failed to archive season')
+      }
+
+      toast.success('Season archive created successfully')
+      await fetchSeason()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to archive season')
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  const handleDownloadArchive = async (seasonId: string, fileName: 'participants.csv' | 'results.csv') => {
+    const loadingKey = `download:${seasonId}:${fileName}`
+    setActionLoading(loadingKey)
+
+    try {
+      const res = await csrfFetch(`/api/admin/season/${seasonId}/archive/download?file=${encodeURIComponent(fileName)}`)
+      const data = await res.json() as { url?: string; message?: string }
+      if (!res.ok || !data.url) {
+        throw new Error(data.message ?? `Failed to download ${fileName}`)
+      }
+
+      window.open(data.url, '_blank', 'noopener,noreferrer')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : `Failed to download ${fileName}`)
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  const openWipeDialog = (seasonItem: SeasonSummary) => {
+    setWipeDialogSeason(seasonItem)
+    setWipeConfirmName('')
+    setWipeError('')
+  }
+
+  const handleWipeSeason = async () => {
+    if (!wipeDialogSeason) return
+
+    const loadingKey = `wipe:${wipeDialogSeason.id}`
+    setActionLoading(loadingKey)
+    setWipeError('')
+
+    try {
+      const res = await csrfFetch(`/api/admin/season/${wipeDialogSeason.id}/wipe`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirmSeasonName: wipeConfirmName }),
+      })
+      const data = await res.json() as { message?: string }
+      if (!res.ok) {
+        throw new Error(data.message ?? 'Failed to clear season data')
+      }
+
+      toast.success(`Cleared live data for ${wipeDialogSeason.name}`)
+      setWipeDialogSeason(null)
+      setWipeConfirmName('')
+      await fetchSeason()
+    } catch (err) {
+      setWipeError(err instanceof Error ? err.message : 'Failed to clear season data')
     } finally {
       setActionLoading(null)
     }
@@ -163,14 +344,14 @@ export default function AdminSeasonPage() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'DRAFT': return 'bg-gray-100 text-gray-700'
-      case 'ACTIVE': return 'bg-green-100 text-green-700'
-      case 'PAUSED': return 'bg-amber-100 text-amber-700'
-      case 'COMPLETED': return 'bg-blue-100 text-blue-700'
-      case 'UPCOMING': return 'bg-gray-100 text-gray-700'
-      case 'OPEN': return 'bg-green-100 text-green-700'
-      case 'CLOSED': return 'bg-red-100 text-red-700'
-      default: return 'bg-gray-100 text-gray-700'
+      case 'DRAFT': return 'bg-surface-secondary text-text-secondary'
+      case 'ACTIVE': return 'bg-success-background text-success'
+      case 'PAUSED': return 'bg-warning-background text-warning'
+      case 'COMPLETED': return 'bg-info-background text-info'
+      case 'UPCOMING': return 'bg-surface-secondary text-text-secondary'
+      case 'OPEN': return 'bg-success-background text-success'
+      case 'CLOSED': return 'bg-error-background text-error'
+      default: return 'bg-surface-secondary text-text-secondary'
     }
   }
 
@@ -178,11 +359,15 @@ export default function AdminSeasonPage() {
     return <PageLoader message="Loading season data…" />
   }
 
+  const hasCompletedUnarchivedSeason = completedSeasons.some(
+    (completedSeason) => archiveBySeason[completedSeason.id]?.status !== 'COMPLETED'
+  )
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Season Management</h1>
-        <p className="text-gray-600">Configure competition seasons and rounds</p>
+        <h1 className="text-2xl font-bold text-foreground">Season Management</h1>
+        <p className="text-text-secondary">Configure competition seasons and rounds</p>
       </div>
 
       {error && (
@@ -199,6 +384,7 @@ export default function AdminSeasonPage() {
 
       {season ? (
         <div className="space-y-6">
+          <ImportAssistControl seasonId={season.id} />
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -218,7 +404,7 @@ export default function AdminSeasonPage() {
                     <Button 
                       onClick={() => handleSeasonAction('start')}
                       disabled={actionLoading === 'start'}
-                      className="bg-green-600 hover:bg-green-700"
+                      className="bg-success hover:bg-success"
                     >
                       <Play className="h-4 w-4 mr-2" />
                       {actionLoading === 'start' ? 'Starting...' : 'Start Season'}
@@ -230,7 +416,7 @@ export default function AdminSeasonPage() {
                         variant="outline"
                         onClick={() => handleSeasonAction('pause')}
                         disabled={actionLoading === 'pause'}
-                        className="border-amber-500 text-amber-600 hover:bg-amber-50"
+                        className="border-warning/30 text-warning hover:bg-warning-background"
                       >
                         <Pause className="h-4 w-4 mr-2" />
                         {actionLoading === 'pause' ? 'Pausing...' : 'Pause'}
@@ -250,7 +436,7 @@ export default function AdminSeasonPage() {
                       <Button 
                         onClick={() => handleSeasonAction('resume')}
                         disabled={actionLoading === 'resume'}
-                        className="bg-green-600 hover:bg-green-700"
+                        className="bg-success hover:bg-success"
                       >
                         <RotateCcw className="h-4 w-4 mr-2" />
                         {actionLoading === 'resume' ? 'Resuming...' : 'Resume'}
@@ -271,13 +457,13 @@ export default function AdminSeasonPage() {
             <CardContent className="space-y-4">
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
-                  <p className="text-sm text-gray-500">Start Date</p>
+                  <p className="text-sm text-text-muted">Start Date</p>
                   <p className="font-medium">
                     {new Date(season.startDate).toLocaleDateString()}
                   </p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-500">End Date</p>
+                  <p className="text-sm text-text-muted">End Date</p>
                   <p className="font-medium">
                     {new Date(season.endDate).toLocaleDateString()}
                   </p>
@@ -304,8 +490,8 @@ export default function AdminSeasonPage() {
                     key={sm.id}
                     className={`px-3 py-1 rounded-full text-sm ${
                       sm.isActive
-                        ? 'bg-blue-100 text-blue-700'
-                        : 'bg-gray-100 text-gray-500'
+                        ? 'bg-info-background text-info'
+                        : 'bg-surface-secondary text-text-muted'
                     }`}
                   >
                     {sm.market.name}
@@ -340,7 +526,7 @@ export default function AdminSeasonPage() {
                               Round {round.number}
                             </p>
                             {round.isFinal && (
-                              <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
+                              <span className="text-xs bg-warning-background text-warning px-2 py-0.5 rounded-full">
                                 Final
                               </span>
                             )}
@@ -371,7 +557,7 @@ export default function AdminSeasonPage() {
                               </div>
                             </div>
                           ) : (
-                            <p className="text-sm text-gray-500 mt-1">
+                            <p className="text-sm text-text-muted mt-1">
                               <Clock className="h-3 w-3 inline mr-1" />
                               {new Date(round.opensAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })} 
                               {' - '}
@@ -416,7 +602,7 @@ export default function AdminSeasonPage() {
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  className="h-8 text-green-600 border-green-300 hover:bg-green-50"
+                                  className="h-8 text-success border-success/30 hover:bg-success-background"
                                   disabled={isLoading}
                                   onClick={() => handleRoundStatusChange(round.id, 'OPEN')}
                                 >
@@ -430,7 +616,7 @@ export default function AdminSeasonPage() {
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                    className="h-8 text-amber-600 border-amber-300 hover:bg-amber-50"
+                                    className="h-8 text-warning border-warning/30 hover:bg-warning-background"
                                     disabled={isLoading}
                                     onClick={() => handleRoundStatusChange(round.id, 'PAUSED')}
                                   >
@@ -440,7 +626,7 @@ export default function AdminSeasonPage() {
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                    className="h-8 text-red-600 border-red-300 hover:bg-red-50"
+                                    className="h-8 text-error border-error/30 hover:bg-error-background"
                                     disabled={isLoading}
                                     onClick={() => setConfirmCloseRound(round.id)}
                                   >
@@ -455,7 +641,7 @@ export default function AdminSeasonPage() {
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                    className="h-8 text-green-600 border-green-300 hover:bg-green-50"
+                                    className="h-8 text-success border-success/30 hover:bg-success-background"
                                     disabled={isLoading}
                                     onClick={() => handleRoundStatusChange(round.id, 'OPEN')}
                                   >
@@ -465,7 +651,7 @@ export default function AdminSeasonPage() {
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                    className="h-8 text-red-600 border-red-300 hover:bg-red-50"
+                                    className="h-8 text-error border-error/30 hover:bg-error-background"
                                     disabled={isLoading}
                                     onClick={() => setConfirmCloseRound(round.id)}
                                   >
@@ -479,7 +665,7 @@ export default function AdminSeasonPage() {
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  className="h-8 text-green-600 border-green-300 hover:bg-green-50"
+                                  className="h-8 text-success border-success/30 hover:bg-success-background"
                                   disabled={isLoading}
                                   onClick={() => handleRoundStatusChange(round.id, 'OPEN')}
                                 >
@@ -487,6 +673,21 @@ export default function AdminSeasonPage() {
                                   Reopen
                                 </Button>
                               )}
+
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className={`h-8 ${round.leaderboardVisible ? 'text-info border-info/30 hover:bg-info-background' : 'text-text-muted border-border hover:bg-surface-secondary'}`}
+                                disabled={isLoading}
+                                title={round.leaderboardVisible ? 'Hide leaderboard from students' : 'Publish leaderboard to students'}
+                                onClick={() => handleLeaderboardVisibility(round.id, !round.leaderboardVisible)}
+                              >
+                                {round.leaderboardVisible ? (
+                                  <><Eye className="h-3 w-3 mr-1" />Leaderboard On</>
+                                ) : (
+                                  <><EyeOff className="h-3 w-3 mr-1" />Leaderboard Off</>
+                                )}
+                              </Button>
                             </>
                           )}
                         </div>
@@ -498,6 +699,10 @@ export default function AdminSeasonPage() {
             </CardContent>
           </Card>
         </div>
+      ) : hasCompletedUnarchivedSeason ? (
+        <AlertBanner variant="warning">
+          Archive all completed seasons before starting a new one. Go to Season History to archive.
+        </AlertBanner>
       ) : (
         <Card>
           <CardHeader>
@@ -591,44 +796,80 @@ export default function AdminSeasonPage() {
                     aria-readonly="true"
                     required
                   />
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-text-muted">
                     Auto-calculated: {formData.totalRounds} rounds × {formData.daysPerRound} days = {formData.totalRounds * formData.daysPerRound} days total.
                   </p>
                 </div>
               </div>
 
-              {availableMarkets.length > 0 && (
-                <div className="space-y-3">
-                  <Label>Markets</Label>
-                  <p className="text-xs text-gray-500">Select which markets to include in this season. Defaults to Nashville CBD, Dubai, and Hamburg.</p>
-                  <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-3">
-                    {availableMarkets.map((market) => (
-                      <label
-                        key={market.id}
-                        className="flex items-center space-x-2 p-2 border rounded-lg cursor-pointer hover:bg-gray-50"
-                      >
-                        <Checkbox
-                          checked={formData.marketIds.includes(market.id)}
-                          onCheckedChange={(checked) => {
-                            setFormData((prev) => ({
-                              ...prev,
-                              marketIds: checked
-                                ? [...prev.marketIds, market.id]
-                                : prev.marketIds.filter((id) => id !== market.id),
-                            }))
-                          }}
-                        />
-                        <span className="text-sm">{market.name}</span>
-                      </label>
-                    ))}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <Label>Markets</Label>
+                    <p className="text-xs text-text-muted">Select which markets to include in this season.</p>
                   </div>
-                  {formData.marketIds.length === 0 && (
-                    <p className="text-xs text-amber-600">No markets selected — the default 3 markets will be used.</p>
+                  {(marketsError || (!marketsLoading && availableMarkets.length === 0)) && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void fetchMarkets()}
+                      disabled={marketsLoading}
+                    >
+                      {marketsLoading ? 'Refreshing...' : 'Refresh Markets'}
+                    </Button>
                   )}
                 </div>
-              )}
 
-              <Button type="submit" disabled={creating}>
+                {marketsLoading ? (
+                  <p className="text-sm text-text-muted">Loading markets...</p>
+                ) : marketsError ? (
+                  <AlertBanner variant="error">
+                    {marketsError || 'Markets could not be loaded. Please refresh and try again.'}
+                  </AlertBanner>
+                ) : availableMarkets.length === 0 ? (
+                  <AlertBanner variant="warning">
+                    <div className="space-y-3">
+                      <p>No markets are available yet. Add markets before creating a season.</p>
+                      <Button asChild type="button" variant="outline" size="sm">
+                        <Link href="/admin/markets">Manage Markets</Link>
+                      </Button>
+                    </div>
+                  </AlertBanner>
+                ) : (
+                  <>
+                    <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-3">
+                      {availableMarkets.map((market) => (
+                        <label
+                          key={market.id}
+                          className="flex items-center space-x-2 p-2 border rounded-lg cursor-pointer hover:bg-surface-secondary"
+                        >
+                          <Checkbox
+                            checked={formData.marketIds.includes(market.id)}
+                            onCheckedChange={(checked) => {
+                              setFormData((prev) => ({
+                                ...prev,
+                                marketIds: checked
+                                  ? [...prev.marketIds, market.id]
+                                  : prev.marketIds.filter((id) => id !== market.id),
+                              }))
+                            }}
+                          />
+                          <span className="text-sm">{market.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                    {formData.marketIds.length === 0 && (
+                      <p className="text-xs text-warning">Select at least one market before creating the season.</p>
+                    )}
+                  </>
+                )}
+              </div>
+
+              <Button
+                type="submit"
+                disabled={creating || marketsLoading || Boolean(marketsError) || availableMarkets.length === 0}
+              >
                 {creating ? 'Creating...' : 'Create Season'}
               </Button>
             </CardContent>
@@ -644,34 +885,110 @@ export default function AdminSeasonPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {completedSeasons.map((s) => (
-                <div
-                  key={s.id}
-                  className="p-4 border rounded-lg bg-gray-50"
-                >
+              {completedSeasons.map((s) => {
+                const archive = archiveBySeason[s.id]
+                const isArchived = archive?.status === 'COMPLETED'
+                const isLiveDataCleared = isArchived && (s._count?.teams ?? 0) === 0
+
+                return (
+                  <div key={s.id} className="p-4 border rounded-lg bg-surface-secondary space-y-4">
                   <div className="flex items-center justify-between">
                     <div>
                       <div className="flex items-center space-x-2">
-                        <p className="font-medium text-gray-900">{s.name}</p>
-                        <span className="text-xs px-2 py-1 rounded-full bg-blue-100 text-blue-700">
+                        <p className="font-medium text-foreground">{s.name}</p>
+                        <span className="text-xs px-2 py-1 rounded-full bg-info-background text-info">
                           COMPLETED
                         </span>
+                        {isArchived && (
+                          <span className="text-xs px-2 py-1 rounded-full bg-success-background text-success">
+                            Archived
+                          </span>
+                        )}
+                        {archive?.status === 'RUNNING' && (
+                          <span className="text-xs px-2 py-1 rounded-full bg-warning-background text-warning">
+                            Archiving
+                          </span>
+                        )}
+                        {archive?.status === 'FAILED' && (
+                          <span className="text-xs px-2 py-1 rounded-full bg-error-background text-error">
+                            Archive Failed
+                          </span>
+                        )}
                       </div>
-                      <p className="text-sm text-gray-500 mt-1">
+                      <p className="text-sm text-text-muted mt-1">
                         {new Date(s.startDate).toLocaleDateString()} - {new Date(s.endDate).toLocaleDateString()}
                       </p>
+                      {archive?.status === 'FAILED' && (
+                        <p className="text-sm text-error mt-2">
+                          {archive?.errorMessage || 'The most recent archive attempt failed. You can retry the archive.'}
+                        </p>
+                      )}
+                      {isLiveDataCleared && (
+                        <p className="text-sm text-success mt-2">
+                          Live data cleared. This season is now archive-only.
+                        </p>
+                      )}
                     </div>
                     <div className="text-right">
-                      <p className="text-sm text-gray-500">
+                      <p className="text-sm text-text-muted">
                         {s._count?.teams || 0} teams
                       </p>
-                      <p className="text-sm text-gray-500">
+                      <p className="text-sm text-text-muted">
                         {s.rounds.length} rounds
                       </p>
                     </div>
                   </div>
-                </div>
-              ))}
+
+                  <div className="flex flex-wrap gap-2">
+                    <Button asChild variant="outline"><Link href={`/recap/${s.id}`} target="_blank">View Public Recap</Link></Button>
+                    <Button variant="outline" disabled={Boolean(season)} onClick={() => applySeasonTemplate(s)}>Use as New Season Template</Button>
+                    {!isArchived && (
+                      <Button
+                        variant="outline"
+                        disabled={actionLoading === `archive:${s.id}` || archive?.status === 'RUNNING'}
+                        onClick={() => handleArchiveSeason(s.id)}
+                      >
+                        {actionLoading === `archive:${s.id}` || archive?.status === 'RUNNING'
+                          ? 'Archiving...'
+                          : 'Archive Season'}
+                      </Button>
+                    )}
+
+                    {isArchived && (
+                      <>
+                        <Button
+                          variant="outline"
+                          disabled={actionLoading === `download:${s.id}:participants.csv`}
+                          onClick={() => handleDownloadArchive(s.id, 'participants.csv')}
+                        >
+                          {actionLoading === `download:${s.id}:participants.csv`
+                            ? 'Preparing...'
+                            : 'Download Participants'}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          disabled={actionLoading === `download:${s.id}:results.csv`}
+                          onClick={() => handleDownloadArchive(s.id, 'results.csv')}
+                        >
+                          {actionLoading === `download:${s.id}:results.csv`
+                            ? 'Preparing...'
+                            : 'Download Results'}
+                        </Button>
+                        {!isLiveDataCleared && (
+                          <Button
+                            variant="destructive"
+                            disabled={actionLoading === `wipe:${s.id}`}
+                            onClick={() => openWipeDialog(s)}
+                          >
+                            Clear Season Data
+                          </Button>
+                        )}
+                      </>
+                    )}
+                  </div>
+                  </div>
+                )
+              })}
             </div>
           </CardContent>
         </Card>
@@ -706,7 +1023,43 @@ export default function AdminSeasonPage() {
           }
         }}
       />
+
+      <ConfirmDialog
+        open={wipeDialogSeason !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setWipeDialogSeason(null)
+            setWipeConfirmName('')
+            setWipeError('')
+          }
+        }}
+        title="This cannot be undone"
+        description={
+          wipeDialogSeason
+            ? `All teams, students, supervisors, submissions, and scores for ${wipeDialogSeason.name} will be permanently deleted. Type the season name to confirm.`
+            : ''
+        }
+        confirmLabel="Clear Season Data"
+        variant="destructive"
+        loading={wipeDialogSeason !== null && actionLoading === `wipe:${wipeDialogSeason.id}`}
+        confirmDisabled={!wipeDialogSeason || wipeConfirmName !== wipeDialogSeason.name}
+        onConfirm={handleWipeSeason}
+      >
+        <div className="space-y-3">
+          <div className="space-y-2">
+            <Label htmlFor="confirm-season-name">Season name</Label>
+            <Input
+              id="confirm-season-name"
+              value={wipeConfirmName}
+              onChange={(event) => setWipeConfirmName(event.target.value)}
+              placeholder={wipeDialogSeason?.name ?? ''}
+            />
+          </div>
+          {wipeError && (
+            <p className="text-sm text-error">{wipeError}</p>
+          )}
+        </div>
+      </ConfirmDialog>
     </div>
   )
 }
-

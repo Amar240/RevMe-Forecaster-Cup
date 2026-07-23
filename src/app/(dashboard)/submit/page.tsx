@@ -1,19 +1,40 @@
 'use client'
 
+import { useEffect, useState, type ComponentType } from 'react'
+import Link from 'next/link'
+import { toast } from 'sonner'
 import { clientLogger } from '@/lib/client-logger'
 import { getCurrentSubmission, submitForecast } from '@/features/submissions/api'
 import type { ExistingSubmission, LockReason, MarketInfo, RoundInfo } from '@/features/submissions/types'
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Clock, Lock, Check, AlertTriangle, ChevronRight, MapPin, DollarSign, Send, Pause, Ban } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
 import { AlertBanner } from '@/components/ui/alert-banner'
-import { toast } from 'sonner'
+import { parseSubmissionMetricInput } from '@/lib/submission-values'
+import { contextualWarning, draftKey, draftSavedAt, parseDraft, serializeDraft } from '@/lib/submission-workspace'
+import { Sparkline } from '@/components/ui/sparkline'
+import { Tooltip } from '@/components/ui/tooltip'
+import { DualTimezoneDeadline } from '@/components/dual-timezone-deadline'
+import { GlossaryTerm } from '@/components/ui/glossary-term'
+import {
+  AlertTriangle,
+  Ban,
+  Check,
+  ChevronRight,
+  Clock,
+  DollarSign,
+  Lock,
+  MapPin,
+  Pause,
+  Send,
+} from 'lucide-react'
 
-const LOCK_MESSAGES: Record<string, { title: string; description: string; icon: React.ComponentType<{ className?: string }> }> = {
+const LOCK_MESSAGES: Record<
+  string,
+  { title: string; description: string; icon: ComponentType<{ className?: string }> }
+> = {
   SEASON_NOT_ACTIVE: {
     title: 'Competition Not Active',
     description: 'The competition is currently paused or not started. Submissions will resume when the admin activates it.',
@@ -51,8 +72,53 @@ const LOCK_MESSAGES: Record<string, { title: string; description: string; icon: 
   },
 }
 
+function getSubmissionValidationError(predictions: Record<string, { occupancy: string; adr: string }>) {
+  for (const prediction of Object.values(predictions)) {
+    if (parseSubmissionMetricInput('OCCUPANCY', prediction.occupancy) === null) {
+      return 'Enter occupancy values as numbers between 0 and 100.'
+    }
+
+    if (parseSubmissionMetricInput('ADR', prediction.adr) === null) {
+      return 'Enter ADR values as positive numbers.'
+    }
+  }
+
+  return null
+}
+
+type NormalizedSubmission =
+  { marketId: string; weekOffset: number; occupancy: number; adr: number }
+
+function buildNormalizedSubmissions(
+  predictions: Record<string, { occupancy: string; adr: string }>
+): { ok: false; error: string } | { ok: true; submissions: NormalizedSubmission[] } {
+  const validationError = getSubmissionValidationError(predictions)
+  if (validationError) {
+    return { ok: false, error: validationError }
+  }
+
+  return {
+    ok: true,
+    submissions: Object.entries(predictions).map(([key, value]) => {
+      const lastDash = key.lastIndexOf('-')
+      const marketId = key.slice(0, lastDash)
+      const weekOffset = key.slice(lastDash + 1)
+
+      return {
+        marketId,
+        weekOffset: Number(weekOffset),
+        occupancy: parseSubmissionMetricInput('OCCUPANCY', value.occupancy)!,
+        adr: parseSubmissionMetricInput('ADR', value.adr)!,
+      }
+    }),
+  }
+}
+
+function stringList(value: unknown) {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
+}
+
 export default function SubmitPage() {
-  const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -62,14 +128,18 @@ export default function SubmitPage() {
   const [existingSubmissions, setExistingSubmissions] = useState<ExistingSubmission[]>([])
   const [canSubmit, setCanSubmit] = useState(false)
   const [lockReason, setLockReason] = useState<LockReason>(null)
-  const [seasonStatus, setSeasonStatus] = useState<string | null>(null)
   const [predictions, setPredictions] = useState<Record<string, { occupancy: string; adr: string }>>({})
-  const [activeMarket, setActiveMarket] = useState<string>('')
+  const [activeMarket, setActiveMarket] = useState('')
   const [showReview, setShowReview] = useState(false)
   const [timeRemaining, setTimeRemaining] = useState('')
+  const [context, setContext] = useState<{ userId: string; teamId: string; seasonId: string } | null>(null)
+  const [evidenceByMarket, setEvidenceByMarket] = useState<NonNullable<import('@/features/submissions/types').CurrentSubmissionResponse['evidenceByMarket']>>({})
+  const [draftRestored, setDraftRestored] = useState(false)
+  const [draftSavedTime, setDraftSavedTime] = useState<string | null>(null)
+  const [warningsAcknowledged, setWarningsAcknowledged] = useState(false)
 
   useEffect(() => {
-    fetchData()
+    void fetchData()
   }, [])
 
   useEffect(() => {
@@ -117,7 +187,9 @@ export default function SubmitPage() {
       setExistingSubmissions(data.existingSubmissions || [])
       setCanSubmit(data.canSubmit)
       setLockReason(data.lockReason)
-      setSeasonStatus(data.seasonStatus)
+      setContext(data.context || null)
+      setEvidenceByMarket(data.evidenceByMarket || {})
+
       if (data.markets?.length > 0) {
         setActiveMarket(data.markets[0].id)
       }
@@ -128,7 +200,7 @@ export default function SubmitPage() {
         weeks.forEach((week) => {
           const key = `${market.id}-${week}`
           const existing = data.existingSubmissions?.find(
-            (s: ExistingSubmission) => s.marketId === market.id && s.weekOffset === week
+            (submission: ExistingSubmission) => submission.marketId === market.id && submission.weekOffset === week
           )
           initialPredictions[key] = {
             occupancy: existing?.occupancy?.toString() || '',
@@ -136,7 +208,16 @@ export default function SubmitPage() {
           }
         })
       })
-      setPredictions(initialPredictions)
+      if (data.context && data.currentRound && !data.existingSubmissions?.length) {
+        const storedDraft = localStorage.getItem(draftKey({ ...data.context, roundId: data.currentRound.id }))
+        const restored = parseDraft(storedDraft)
+        setPredictions(restored ? { ...initialPredictions, ...restored } : initialPredictions)
+        setDraftRestored(Boolean(restored))
+        setDraftSavedTime(draftSavedAt(storedDraft))
+      } else {
+        setPredictions(initialPredictions)
+        if (data.context && data.currentRound) localStorage.removeItem(draftKey({ ...data.context, roundId: data.currentRound.id }))
+      }
     } catch (err) {
       clientLogger.error('Failed to fetch data:', err)
       toast.error('Failed to load submission data')
@@ -145,25 +226,34 @@ export default function SubmitPage() {
     }
   }
 
+  useEffect(() => {
+    if (!context || !currentRound || existingSubmissions.length > 0 || loading) return
+    const timer = window.setTimeout(() => {
+      const serialized = serializeDraft(predictions)
+      localStorage.setItem(draftKey({ ...context, roundId: currentRound.id }), serialized)
+      setDraftSavedTime(draftSavedAt(serialized))
+    }, 400)
+    return () => window.clearTimeout(timer)
+  }, [context, currentRound, existingSubmissions.length, loading, predictions])
+
   const handleSubmit = async () => {
     setError('')
+
+    const result = buildNormalizedSubmissions(predictions)
+    if (!result.ok) {
+      setError(result.error)
+      setShowReview(false)
+      return
+    }
+
     setSubmitting(true)
 
     try {
-      const submissions = Object.entries(predictions).map(([key, value]) => {
-        const [marketId, weekOffset] = key.split('-')
-        return {
-          marketId,
-          weekOffset: parseInt(weekOffset),
-          occupancy: parseFloat(value.occupancy),
-          adr: parseFloat(value.adr),
-        }
-      })
+      await submitForecast({ roundId: currentRound?.id || null, submissions: result.submissions })
 
-      await submitForecast({ roundId: currentRound?.id || null, submissions })
+      if (context && currentRound) localStorage.removeItem(draftKey({ ...context, roundId: currentRound.id }))
 
       setSuccess(true)
-      setTimeout(() => router.push('/dashboard'), 2000)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
       setShowReview(false)
@@ -172,46 +262,51 @@ export default function SubmitPage() {
     }
   }
 
-  const isFormComplete = () => {
-    return Object.values(predictions).every(
-      (p) => p.occupancy !== '' && p.adr !== '' && 
-             parseFloat(p.occupancy) >= 0 && parseFloat(p.occupancy) <= 100 &&
-             parseFloat(p.adr) >= 0
-    )
-  }
+  const isFormComplete = () =>
+    getSubmissionValidationError(predictions) === null
 
-  const getFilledCount = () => {
-    return Object.values(predictions).filter(
-      (p) => p.occupancy !== '' && p.adr !== ''
-    ).length * 2
-  }
+  const getFilledCount = () =>
+    Object.values(predictions).filter((prediction) => prediction.occupancy !== '' && prediction.adr !== '').length * 2
 
   const getTotalRequired = () => {
     const weeks = currentRound?.isFinal ? 1 : 2
     return markets.length * weeks * 2
   }
 
+  const contextualWarnings = Object.entries(predictions).flatMap(([key, prediction]) => {
+    const lastDash = key.lastIndexOf('-')
+    const marketId = key.slice(0, lastDash)
+    return [
+      contextualWarning(Number(prediction.occupancy), evidenceByMarket[marketId]?.lastActual.occupancy ?? null, 'OCCUPANCY'),
+      contextualWarning(Number(prediction.adr), evidenceByMarket[marketId]?.lastActual.adr ?? null, 'ADR'),
+    ].filter((warning): warning is string => Boolean(warning))
+  })
+
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="flex flex-col items-center gap-3"><div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" /><p className="text-sm text-muted-foreground">Loading submissions…</p></div>
+      <div className="flex min-h-[400px] items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          <p className="text-sm text-muted-foreground">Loading submissions...</p>
+        </div>
       </div>
     )
   }
 
   if (success) {
     return (
-      <div className="max-w-lg mx-auto mt-12">
+      <div className="mx-auto mt-12 max-w-lg">
         <Card className="overflow-hidden">
-          <div className="bg-gradient-to-r from-green-500 to-emerald-500 p-8 text-center text-white">
-            <div className="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4">
+          <div className="bg-gradient-to-r from-success to-info p-8 text-center text-primary-foreground">
+            <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-white/20">
               <Check className="h-10 w-10" />
             </div>
-            <h2 className="text-2xl font-bold mb-2">Submission Successful!</h2>
-            <p className="text-green-100">Your forecast has been locked and cannot be edited.</p>
+            <h2 className="mb-2 text-2xl font-bold">Submission Successful!</h2>
+            <p className="text-primary-foreground/80">Your forecast has been locked and cannot be edited.</p>
           </div>
           <CardContent className="p-6 text-center">
-            <p className="text-gray-500 dark:text-gray-400">Redirecting to dashboard...</p>
+            <p className="text-muted-foreground">A receipt is being sent in the background. While results are prepared, note the assumption you most want to test when actuals arrive.</p>
+            <div className="mt-5 flex flex-col justify-center gap-3 sm:flex-row"><Button asChild><Link href="/dashboard">Return to dashboard</Link></Button><Button asChild variant="outline"><Link href="/market-info">Review market context</Link></Button></div>
           </CardContent>
         </Card>
       </div>
@@ -220,14 +315,14 @@ export default function SubmitPage() {
 
   if (!currentRound && lockReason === 'INVALID_MARKETS') {
     return (
-      <div className="max-w-lg mx-auto mt-12">
+      <div className="mx-auto mt-12 max-w-lg">
         <Card>
           <CardContent className="py-16 text-center">
-            <div className="w-16 h-16 bg-amber-100 dark:bg-amber-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
-              <AlertTriangle className="h-8 w-8 text-amber-600" />
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-warning-background">
+              <AlertTriangle className="h-8 w-8 text-warning" />
             </div>
-            <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">Markets Not Configured</h2>
-            <p className="text-gray-500 dark:text-gray-400">This season needs exactly three active markets before submissions open.</p>
+            <h2 className="mb-2 text-xl font-bold text-foreground">Markets Not Configured</h2>
+            <p className="text-muted-foreground">This season needs exactly three active markets before submissions open.</p>
           </CardContent>
         </Card>
       </div>
@@ -236,81 +331,71 @@ export default function SubmitPage() {
 
   if (!currentRound || lockReason === 'NO_ACTIVE_ROUND') {
     return (
-      <div className="max-w-lg mx-auto mt-12">
+      <div className="mx-auto mt-12 max-w-lg">
         <Card>
           <CardContent className="py-16 text-center">
-            <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Clock className="h-8 w-8 text-gray-400" />
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-surface-secondary">
+              <Clock className="h-8 w-8 text-text-muted" />
             </div>
-            <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">No Active Round</h2>
-            <p className="text-gray-500 dark:text-gray-400">There is no round open for submissions right now.</p>
+            <h2 className="mb-2 text-xl font-bold text-foreground">No Active Round</h2>
+            <p className="text-muted-foreground">There is no round open for submissions right now.</p>
           </CardContent>
         </Card>
       </div>
     )
   }
 
-  const isLocked = lockReason && lockReason !== null
+  const isLocked = lockReason !== null
   const hasExisting = existingSubmissions.length > 0
   const lockInfo = lockReason ? LOCK_MESSAGES[lockReason] : null
 
   if (isLocked && !hasExisting && lockInfo) {
     const LockIcon = lockInfo.icon
+
     return (
-      <div className="max-w-2xl mx-auto space-y-6">
+      <div className="mx-auto max-w-2xl space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-            Round {currentRound.number} Submission
-          </h1>
-          <p className="text-gray-500 dark:text-gray-400">
-            Deadline: {new Date(currentRound.closesAt).toLocaleString('en-US', { 
-              timeZone: 'America/New_York',
-              month: 'short',
-              day: 'numeric',
-              year: 'numeric',
-              hour: 'numeric',
-              minute: '2-digit',
-            })} ET
-          </p>
+          <h1 className="text-3xl font-semibold tracking-tight text-foreground">Round {currentRound.number} Submission</h1>
+          <p className="text-text-secondary">Deadline: <DualTimezoneDeadline date={currentRound.closesAt} /></p>
         </div>
 
-        <Card className="border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/30">
+        <Card className="border-warning/20 bg-warning-background">
           <CardContent className="py-8 text-center">
-            <div className="w-16 h-16 bg-amber-100 dark:bg-amber-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
-              <LockIcon className="h-8 w-8 text-amber-600" />
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-card">
+              <LockIcon className="h-8 w-8 text-warning" />
             </div>
-            <h2 className="text-xl font-bold text-amber-900 mb-2">{lockInfo.title}</h2>
-            <p className="text-amber-700">{lockInfo.description}</p>
+            <h2 className="mb-2 text-xl font-bold text-foreground">{lockInfo.title}</h2>
+            <p className="text-text-secondary">{lockInfo.description}</p>
           </CardContent>
         </Card>
+
+        {contextualWarnings.length > 0 && <label className="flex items-start gap-3 rounded-xl border border-warning/30 bg-warning-background p-4"><input type="checkbox" checked={warningsAcknowledged} onChange={(event) => setWarningsAcknowledged(event.target.checked)} className="mt-1 h-4 w-4" /><span><strong>These values are intentional.</strong><span className="mt-1 block text-sm text-text-secondary">I reviewed {contextualWarnings.length} contextual warning{contextualWarnings.length === 1 ? '' : 's'}. These warnings are guidance and do not replace validation.</span></span></label>}
 
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">Preview: Your Predictions</CardTitle>
-            <CardDescription>
-              Once the round opens, you will be able to enter your forecasts below.
-            </CardDescription>
+            <CardDescription>Once the round opens, you will be able to enter your forecasts below.</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
               {markets.map((market) => (
-                <div key={market.id} className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                  <div className="flex items-center space-x-2 mb-3">
-                    <MapPin className="h-4 w-4 text-gray-500 dark:text-gray-400" />
-                    <span className="font-medium text-gray-700 dark:text-gray-300">{market.name}</span>
+                <div key={market.id} className="rounded-lg border border-border bg-surface-secondary p-4">
+                  <div className="mb-3 flex items-center space-x-2">
+                    <MapPin className="h-4 w-4 text-primary" />
+                    <span className="font-medium text-foreground">{market.name}</span>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     {(currentRound.isFinal ? [1] : [1, 2]).map((week) => (
-                      <div key={week} className="p-3 bg-white dark:bg-gray-900 rounded border border-gray-200 dark:border-gray-700">
-                        <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">Week +{week}</p>
+                      <div key={week} className="rounded-lg border border-border bg-card p-3">
+                        <p className="mb-2 text-sm text-muted-foreground">Week +{week}</p>
                         <div className="space-y-2">
                           <div className="flex items-center justify-between text-sm">
-                            <span className="text-gray-400 dark:text-gray-500">Occupancy</span>
-                            <span className="text-gray-300 dark:text-gray-400">---</span>
+                            <span className="text-text-muted">Occupancy</span>
+                            <span className="text-text-muted">---</span>
                           </div>
                           <div className="flex items-center justify-between text-sm">
-                            <span className="text-gray-400 dark:text-gray-500">ADR</span>
-                            <span className="text-gray-300 dark:text-gray-400">$---</span>
+                            <span className="text-text-muted">ADR</span>
+                            <span className="text-text-muted">$---</span>
                           </div>
                         </div>
                       </div>
@@ -327,14 +412,14 @@ export default function SubmitPage() {
 
   if (!canSubmit && !hasExisting) {
     return (
-      <div className="max-w-lg mx-auto mt-12">
+      <div className="mx-auto mt-12 max-w-lg">
         <Card>
           <CardContent className="py-16 text-center">
-            <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Lock className="h-8 w-8 text-gray-400" />
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-surface-secondary">
+              <Lock className="h-8 w-8 text-text-muted" />
             </div>
-            <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">Cannot Submit</h2>
-            <p className="text-gray-500 dark:text-gray-400">
+            <h2 className="mb-2 text-xl font-bold text-foreground">Cannot Submit</h2>
+            <p className="text-muted-foreground">
               You are either not the team submitter, not on a team, or your team is not approved yet.
             </p>
           </CardContent>
@@ -345,44 +430,42 @@ export default function SubmitPage() {
 
   if (showReview && !hasExisting) {
     return (
-      <div className="max-w-4xl mx-auto space-y-6">
+      <div className="mx-auto max-w-4xl space-y-6">
         <div>
           <Button variant="ghost" onClick={() => setShowReview(false)} className="mb-4">
-            <ChevronRight className="h-4 w-4 mr-1 rotate-180" />
+            <ChevronRight className="mr-1 h-4 w-4 rotate-180" />
             Back to Edit
           </Button>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Review Your Submission</h1>
-          <p className="text-gray-500 dark:text-gray-400">Please review your predictions before submitting.</p>
+          <h1 className="text-3xl font-semibold tracking-tight text-foreground">Review Your Submission</h1>
+          <p className="text-text-secondary">Please review your predictions before submitting.</p>
         </div>
 
-        {error && (
-          <AlertBanner variant="error">{error}</AlertBanner>
-        )}
+        {error && <AlertBanner variant="error">{error}</AlertBanner>}
 
         <div className="grid gap-6">
           {markets.map((market) => (
             <Card key={market.id}>
               <CardHeader className="pb-3">
                 <CardTitle className="flex items-center space-x-2">
-                  <MapPin className="h-5 w-5 text-blue-600" />
+                  <MapPin className="h-5 w-5 text-primary" />
                   <span>{market.name}</span>
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="grid md:grid-cols-2 gap-4">
+                <div className="grid gap-4 md:grid-cols-2">
                   {(currentRound.isFinal ? [1] : [1, 2]).map((week) => {
                     const key = `${market.id}-${week}`
                     return (
-                      <div key={week} className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
-                        <h4 className="font-medium text-gray-700 dark:text-gray-300 mb-3">Week +{week}</h4>
+                      <div key={week} className="rounded-lg border border-border bg-surface-secondary p-4">
+                        <h4 className="mb-3 font-medium text-foreground">Week +{week}</h4>
                         <div className="grid grid-cols-2 gap-4">
                           <div>
-                            <p className="text-sm text-gray-500 dark:text-gray-400">Occupancy</p>
-                            <p className="text-lg font-semibold text-blue-600">{predictions[key]?.occupancy}</p>
+                            <p className="text-sm text-muted-foreground">Occupancy</p>
+                            <p className="text-lg font-semibold text-primary">{predictions[key]?.occupancy}</p>
                           </div>
                           <div>
-                            <p className="text-sm text-gray-500 dark:text-gray-400">ADR</p>
-                            <p className="text-lg font-semibold text-emerald-600">${predictions[key]?.adr}</p>
+                            <p className="text-sm text-muted-foreground">ADR</p>
+                            <p className="text-lg font-semibold text-success">${predictions[key]?.adr}</p>
                           </div>
                         </div>
                       </div>
@@ -394,13 +477,13 @@ export default function SubmitPage() {
           ))}
         </div>
 
-        <Card className="border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/30">
+        <Card className="border-warning/20 bg-warning-background">
           <CardContent className="py-4">
             <div className="flex items-start space-x-3">
-              <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5" />
+              <AlertTriangle className="mt-0.5 h-5 w-5 text-warning" />
               <div>
-                <p className="font-semibold text-amber-800">Warning: This action cannot be undone</p>
-                <p className="text-sm text-amber-700">Once submitted, your forecast is LOCKED and cannot be edited.</p>
+                <p className="font-semibold text-foreground">Warning: This action cannot be undone</p>
+                <p className="text-sm text-text-secondary">Once submitted, your forecast is locked and cannot be edited.</p>
               </div>
             </div>
           </CardContent>
@@ -410,16 +493,12 @@ export default function SubmitPage() {
           <Button variant="outline" onClick={() => setShowReview(false)} className="flex-1">
             Go Back & Edit
           </Button>
-          <Button 
-            onClick={handleSubmit} 
-            disabled={submitting} 
-            className="flex-1 bg-blue-600 hover:bg-blue-700"
-          >
+          <Button onClick={handleSubmit} disabled={submitting || (contextualWarnings.length > 0 && !warningsAcknowledged)} className="flex-1">
             {submitting ? (
               'Submitting...'
             ) : (
               <>
-                <Send className="h-4 w-4 mr-2" />
+                <Send className="mr-2 h-4 w-4" />
                 Confirm & Submit
               </>
             )}
@@ -430,61 +509,54 @@ export default function SubmitPage() {
   }
 
   return (
-      <div className="max-w-4xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="mx-auto max-w-4xl space-y-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-            Round {currentRound.number} Submission
-          </h1>
-          <p className="text-gray-500 dark:text-gray-400">
-            Deadline: {new Date(currentRound.closesAt).toLocaleString('en-US', {
-              timeZone: 'America/New_York',
-              month: 'short',
-              day: 'numeric',
-              year: 'numeric',
-              hour: 'numeric',
-              minute: '2-digit',
-            })} ET
-          </p>
+          <h1 className="text-3xl font-semibold tracking-tight text-foreground">Round {currentRound.number} Submission</h1>
+          <p className="text-text-secondary">Deadline: <DualTimezoneDeadline date={currentRound.closesAt} /></p>
         </div>
         <div className="flex items-center space-x-2">
-          <Clock className="h-4 w-4 text-amber-600" />
-          <span className="text-sm font-medium bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 px-3 py-1 rounded-full">
+          <Clock className="h-4 w-4 text-warning" />
+          <Badge variant="warning" className="px-3 py-1 text-sm font-medium">
             {timeRemaining}
-          </span>
+          </Badge>
         </div>
       </div>
 
       {hasExisting && (
-        <Card className="border-green-200 bg-gradient-to-r from-green-50 to-emerald-50 dark:border-green-800 dark:from-green-900/30 dark:to-emerald-900/30">
-          <CardContent className="py-4 flex items-center space-x-3">
-            <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-full">
-              <Lock className="h-5 w-5 text-green-600" />
+        <Card className="border-success/20 bg-gradient-to-r from-success-background to-info-background">
+          <CardContent className="flex items-center space-x-3 py-4">
+            <div className="rounded-full bg-card p-2">
+              <Lock className="h-5 w-5 text-success" />
             </div>
             <div>
-              <p className="font-semibold text-green-700">Submission Locked</p>
-              <p className="text-sm text-green-600">Your forecast has been submitted and cannot be edited.</p>
+              <p className="font-semibold text-foreground">Submission Locked</p>
+              <p className="text-sm text-text-secondary">Your forecast has been submitted and cannot be edited.</p>
             </div>
           </CardContent>
         </Card>
       )}
 
-      {error && (
-        <AlertBanner variant="error">{error}</AlertBanner>
-      )}
+      {error && <AlertBanner variant="error">{error}</AlertBanner>}
+
+      {draftRestored && !hasExisting && <AlertBanner variant="info">Your browser-saved draft was restored.</AlertBanner>}
+
+      {draftSavedTime && !hasExisting && <p role="status" className="text-right text-xs text-text-muted">Draft saved in this browser at {new Date(draftSavedTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</p>}
 
       {!hasExisting && (
         <Card>
           <CardContent className="py-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
-                <span className="text-sm text-gray-500 dark:text-gray-400">Progress:</span>
-                <span className="font-semibold text-gray-900 dark:text-gray-100">{getFilledCount()} / {getTotalRequired()}</span>
-                <span className="text-sm text-gray-500 dark:text-gray-400">values entered</span>
+                <span className="text-sm text-muted-foreground">Progress:</span>
+                <span className="font-semibold text-foreground">
+                  {getFilledCount()} / {getTotalRequired()}
+                </span>
+                <span className="text-sm text-muted-foreground">values entered</span>
               </div>
-              <div className="w-48 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                <div 
-                  className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+              <div className="h-2 w-48 rounded-full bg-surface-secondary">
+                <div
+                  className="h-2 rounded-full bg-primary transition-all duration-300"
                   style={{ width: `${(getFilledCount() / getTotalRequired()) * 100}%` }}
                 />
               </div>
@@ -493,15 +565,15 @@ export default function SubmitPage() {
         </Card>
       )}
 
-      <div className="flex space-x-2 border-b dark:border-gray-700">
+      <div className="flex space-x-2 overflow-x-auto border-b border-border">
         {markets.map((market) => (
           <button
             key={market.id}
             onClick={() => setActiveMarket(market.id)}
-            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+            className={`border-b-2 px-4 py-3 text-sm font-medium transition-colors ${
               activeMarket === market.id
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
             }`}
           >
             <div className="flex items-center space-x-2">
@@ -512,35 +584,33 @@ export default function SubmitPage() {
         ))}
       </div>
 
-      {markets.filter((m) => m.id === activeMarket).map((market) => (
-        <Card key={market.id}>
-          <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
-              <MapPin className="h-5 w-5 text-blue-600" />
-              <span>{market.name}</span>
-            </CardTitle>
-            <CardDescription>
-              Enter your predictions for occupancy and ADR ($)
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid md:grid-cols-2 gap-6">
-              {(currentRound.isFinal ? [1] : [1, 2]).map((week) => {
-                const key = `${market.id}-${week}`
-                return (
-                  <div key={week} className="bg-gray-50 dark:bg-gray-800 rounded-xl p-6">
-                    <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center space-x-2">
-                      <span className="w-8 h-8 bg-blue-100 dark:bg-blue-900/30 text-blue-600 rounded-full flex items-center justify-center text-sm font-bold">
-                        +{week}
-                      </span>
-                      <span>Week +{week}</span>
-                    </h4>
-                    <div className="space-y-4">
-                      <div className="space-y-2">
-                        <Label htmlFor={`${key}-occupancy`} className="flex items-center space-x-2">
-                          <span>Occupancy</span>
-                        </Label>
-                        <div className="relative">
+      {markets
+        .filter((market) => market.id === activeMarket)
+        .map((market) => (
+          <div key={market.id} className="grid gap-6 lg:grid-cols-[1.15fr_.85fr]">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center space-x-2">
+                <MapPin className="h-5 w-5 text-primary" />
+                <span>{market.name}</span>
+              </CardTitle>
+              <CardDescription>Enter your predictions for <GlossaryTerm term="Occupancy" /> and <GlossaryTerm term="ADR" /> ($)</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-6 md:grid-cols-2">
+                {(currentRound.isFinal ? [1] : [1, 2]).map((week) => {
+                  const key = `${market.id}-${week}`
+                  return (
+                    <div key={week} className="rounded-xl border border-border bg-surface-secondary p-6">
+                      <h4 className="mb-4 flex items-center space-x-2 font-semibold text-foreground">
+                        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-soft text-sm font-bold text-primary">
+                          +{week}
+                        </span>
+                        <span>Week +{week}</span>
+                      </h4>
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <Label htmlFor={`${key}-occupancy`}>Occupancy</Label>
                           <Input
                             id={`${key}-occupancy`}
                             type="number"
@@ -549,65 +619,70 @@ export default function SubmitPage() {
                             max="100"
                             placeholder="e.g., 72.5"
                             value={predictions[key]?.occupancy || ''}
-                            onChange={(e) =>
+                            onChange={(event) =>
                               setPredictions({
                                 ...predictions,
-                                [key]: { ...predictions[key], occupancy: e.target.value },
+                                [key]: { ...predictions[key], occupancy: event.target.value },
                               })
                             }
                             disabled={hasExisting}
-                            className="pr-3"
                           />
+                          {!hasExisting && predictions[key]?.occupancy && contextualWarning(Number(predictions[key].occupancy), evidenceByMarket[market.id]?.lastActual.occupancy ?? null, 'OCCUPANCY') && <p className="rounded-md bg-warning-background px-2 py-1 text-xs text-warning">⚠ {contextualWarning(Number(predictions[key].occupancy), evidenceByMarket[market.id]?.lastActual.occupancy ?? null, 'OCCUPANCY')}</p>}
                         </div>
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor={`${key}-adr`} className="flex items-center space-x-2">
-                          <DollarSign className="h-4 w-4 text-emerald-600" />
-                          <span>ADR ($)</span>
-                        </Label>
-                        <div className="relative">
-                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500">$</span>
-                          <Input
-                            id={`${key}-adr`}
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            placeholder="e.g., 145.00"
-                            value={predictions[key]?.adr || ''}
-                            onChange={(e) =>
-                              setPredictions({
-                                ...predictions,
-                                [key]: { ...predictions[key], adr: e.target.value },
-                              })
-                            }
-                            disabled={hasExisting}
-                            className="pl-7"
-                          />
+                        <div className="space-y-2">
+                          <Label htmlFor={`${key}-adr`} className="flex items-center space-x-2">
+                            <DollarSign className="h-4 w-4 text-success" />
+                            <span>ADR ($)</span>
+                          </Label>
+                          <div className="relative">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted">$</span>
+                            <Input
+                              id={`${key}-adr`}
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              placeholder="e.g., 145.00"
+                              value={predictions[key]?.adr || ''}
+                              onChange={(event) =>
+                                setPredictions({
+                                  ...predictions,
+                                  [key]: { ...predictions[key], adr: event.target.value },
+                                })
+                              }
+                              disabled={hasExisting}
+                              className="pl-7"
+                            />
+                          </div>
+                          {!hasExisting && predictions[key]?.adr && contextualWarning(Number(predictions[key].adr), evidenceByMarket[market.id]?.lastActual.adr ?? null, 'ADR') && <p className="rounded-md bg-warning-background px-2 py-1 text-xs text-warning">⚠ {contextualWarning(Number(predictions[key].adr), evidenceByMarket[market.id]?.lastActual.adr ?? null, 'ADR')}</p>}
                         </div>
                       </div>
                     </div>
-                  </div>
-                )
-              })}
-            </div>
-          </CardContent>
-        </Card>
-      ))}
+                  )
+                })}
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="h-fit lg:sticky lg:top-6"><CardHeader><CardTitle>Evidence panel</CardTitle><CardDescription>Published information for {market.name}</CardDescription></CardHeader><CardContent><details open className="group"><summary className="mb-4 cursor-pointer text-sm font-semibold text-primary lg:hidden">Show or hide evidence</summary><div className="space-y-4">{evidenceByMarket[market.id] ? <>
+            <div className="rounded-lg bg-surface-secondary p-3"><p className="text-xs font-semibold uppercase text-text-muted">Recent actuals</p><div className="mt-2 grid grid-cols-2 gap-2 tabular-nums"><div><p className="text-xs text-text-muted">Occupancy average</p><p className="font-semibold">{evidenceByMarket[market.id].trailingAverage.occupancy?.toFixed(1) ?? '—'}%</p></div><div><p className="text-xs text-text-muted">ADR average</p><p className="font-semibold">${evidenceByMarket[market.id].trailingAverage.adr?.toFixed(0) ?? '—'}</p></div></div></div>
+            <div className="grid grid-cols-2 gap-3"><div className="text-primary"><p className="mb-1 text-xs text-text-muted">Occupancy trend</p><Sparkline label="Recent occupancy actuals" values={evidenceByMarket[market.id].actuals.filter((item) => item.metric === 'OCCUPANCY').slice().reverse().map((item) => item.value)} /></div><div className="text-success"><p className="mb-1 text-xs text-text-muted">ADR trend</p><Sparkline label="Recent ADR actuals" values={evidenceByMarket[market.id].actuals.filter((item) => item.metric === 'ADR').slice().reverse().map((item) => item.value)} /></div></div>
+            {evidenceByMarket[market.id].latestError && <div className="rounded-lg border border-border p-3"><p className="text-xs text-text-muted">Your last published result here</p><p className="text-sm font-medium">{evidenceByMarket[market.id].latestError?.direction.toLowerCase()}-forecast {evidenceByMarket[market.id].latestError?.metric === 'ADR' ? 'ADR' : 'occupancy'} in Round {evidenceByMarket[market.id].latestError?.roundNumber}</p></div>}
+            {evidenceByMarket[market.id].roundUpdate && <div className="rounded-lg border-l-4 border-accent bg-accent-soft p-3"><p className="font-semibold">{evidenceByMarket[market.id].roundUpdate?.headline}</p><p className="text-sm text-text-secondary">{evidenceByMarket[market.id].roundUpdate?.whatChanged}</p></div>}
+            {evidenceByMarket[market.id].marketInfo?.summary && <div><p className="text-xs font-semibold uppercase text-text-muted">Market brief</p><p className="text-sm text-text-secondary">{evidenceByMarket[market.id].marketInfo?.summary}</p><a href={`/market-info?marketId=${market.id}`} className="mt-1 inline-block text-sm text-primary">Full market brief →</a></div>}
+            {stringList(evidenceByMarket[market.id].marketInfo?.quickInsights).length > 0 && <div><p className="text-xs font-semibold uppercase text-text-muted">Quick insights</p><ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-text-secondary">{stringList(evidenceByMarket[market.id].marketInfo?.quickInsights).map((insight) => <li key={insight}>{insight}</li>)}</ul></div>}
+            {(evidenceByMarket[market.id].marketInfo?.resourceLinks.length ?? 0) > 0 && <div><p className="text-xs font-semibold uppercase text-text-muted">Resources</p><div className="mt-2 flex flex-wrap gap-2">{evidenceByMarket[market.id].marketInfo?.resourceLinks.map((resource) => <a key={resource.id} href={resource.url} target="_blank" rel="noreferrer" className="rounded-full border border-border px-3 py-1 text-xs font-medium text-primary">{resource.label}</a>)}</div></div>}
+          </> : <p className="text-sm text-text-secondary">Evidence will appear after published results are available.</p>}</div></details></CardContent></Card>
+          </div>
+        ))}
 
       {!hasExisting && (
-        <div className="flex justify-end">
-          <Button 
-            size="lg" 
-            onClick={() => setShowReview(true)}
-            disabled={!isFormComplete()}
-            className="bg-blue-600 hover:bg-blue-700"
-          >
+        <div className="sticky bottom-0 z-10 flex items-center justify-between gap-4 border-t border-border bg-background/95 py-4 backdrop-blur">
+          <p className="text-sm text-text-secondary">{getFilledCount()} of {getTotalRequired()} values entered</p>
+          <Tooltip label={isFormComplete() ? 'All required values are ready for review.' : `${Math.max(0, getTotalRequired() - getFilledCount())} required values are missing or invalid.`}><Button size="lg" onClick={() => setShowReview(true)} disabled={!isFormComplete()} className="min-w-[200px]">
             Review Submission
-            <ChevronRight className="h-4 w-4 ml-2" />
-          </Button>
+            <ChevronRight className="ml-2 h-4 w-4" />
+          </Button></Tooltip>
         </div>
       )}
     </div>
   )
 }
-

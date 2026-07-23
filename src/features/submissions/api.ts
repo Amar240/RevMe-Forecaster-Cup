@@ -5,7 +5,17 @@ async function parseJson<T>(res: Response): Promise<T> {
   const data = await res.json()
   if (!res.ok) {
     const message = (data && (data.message || data.error)) || 'Request failed'
-    const error = new Error(message)
+    const detail =
+      data?.errors && Array.isArray(data.errors) && data.errors.length > 0
+        ? ': ' +
+          data.errors
+            .map(
+              (e: { message: string; path?: unknown[] }) =>
+                `${e.path?.join('.') ?? 'field'} — ${e.message}`
+            )
+            .join('; ')
+        : ''
+    const error = new Error(message + detail)
     ;(error as Error & { status?: number }).status = res.status
     throw error
   }

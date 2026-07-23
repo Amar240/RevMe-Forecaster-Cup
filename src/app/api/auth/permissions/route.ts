@@ -1,7 +1,8 @@
 import { NextRequest } from 'next/server'
+import { z } from 'zod'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
-import { jsonOk, jsonError } from '@/server/http'
+import { jsonOk, jsonError, parseJson } from '@/server/http'
 
 export const dynamic = 'force-dynamic'
 
@@ -55,6 +56,10 @@ export async function GET() {
   }
 }
 
+const checkPermissionSchema = z.object({
+  permission: z.string().min(1).max(100),
+})
+
 export async function POST(request: NextRequest) {
   try {
     const user = await getSession()
@@ -62,7 +67,7 @@ export async function POST(request: NextRequest) {
       return jsonOk({ allowed: false })
     }
 
-    const { permission } = await request.json()
+    const { permission } = await parseJson(request, checkPermissionSchema)
 
     if (user.role === 'ADMIN') {
       return jsonOk({ allowed: true })

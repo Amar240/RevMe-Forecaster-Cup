@@ -1,31 +1,38 @@
 'use client'
 
-import { csrfFetch } from '@/lib/csrf'
-
-import { clientLogger } from '@/lib/client-logger'
-
-
-import { useEffect, useState, useCallback } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Crown, Loader2, Search, UserMinus, UserPlus, Users } from 'lucide-react'
+import { toast } from 'sonner'
+import { csrfFetch } from '@/lib/csrf'
+import { clientLogger } from '@/lib/client-logger'
+import { AlertBanner } from '@/components/ui/alert-banner'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { UserMinus, Crown } from 'lucide-react'
 import { PageLoader } from '@/components/ui/page-loader'
-import { toast } from 'sonner'
-
-const STATUS_BADGES: Record<string, { label: string; className: string }> = {
-  ACTIVE: { label: 'Active', className: 'bg-green-100 text-green-700' },
-  PENDING_APPROVAL: { label: 'Pending Approval', className: 'bg-amber-100 text-amber-700' },
-  APPROVED: { label: 'Approved', className: 'bg-emerald-100 text-emerald-700' },
-  REJECTED: { label: 'Rejected', className: 'bg-red-100 text-red-700' },
-  DISQUALIFIED: { label: 'Disqualified', className: 'bg-red-100 text-red-700' },
-}
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+  formatPersonOptionLabel,
+  getMinimumRosterRequirementMessage,
+  getRosterRestrictionMessage,
+  isRosterBlockedStatus,
+} from '@/features/teams/roster-ui'
+import { teamStatusMeta } from '@/lib/status-metadata'
 
 interface TeamMember {
   id: string
   isSubmitter: boolean
+  joinedAt: string
   user: {
     id: string
     firstName: string
@@ -42,21 +49,52 @@ interface Team {
   members: TeamMember[]
 }
 
+interface EligibleStudentResult {
+  id: string
+  email: string
+  firstName: string
+  lastName: string
+}
+
+function getPersonLabel(person: {
+  firstName?: string | null
+  lastName?: string | null
+  email: string
+}) {
+  const fullName = [person.firstName, person.lastName].filter(Boolean).join(' ').trim()
+  return fullName || person.email
+}
+
 export default function TeamDetailPage() {
   const params = useParams()
   const router = useRouter()
+  const teamId = String(params.id)
   const [team, setTeam] = useState<Team | null>(null)
-  const [email, setEmail] = useState('')
+  const [viewerCanManage, setViewerCanManage] = useState(false)
+  const [teamName, setTeamName] = useState('')
+  const [memberSearch, setMemberSearch] = useState('')
+  const [eligibleStudents, setEligibleStudents] = useState<EligibleStudentResult[]>([])
+  const [selectedStudentId, setSelectedStudentId] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [addingMember, setAddingMember] = useState(false)
+  const [savingName, setSavingName] = useState(false)
+  const [searchingStudents, setSearchingStudents] = useState(false)
+  const [eligibleStudentsLoaded, setEligibleStudentsLoaded] = useState(false)
+  const [submitterLoading, setSubmitterLoading] = useState<string | null>(null)
+  const [removeLoading, setRemoveLoading] = useState<string | null>(null)
+  const [removeDialogOpen, setRemoveDialogOpen] = useState(false)
+  const [memberToRemove, setMemberToRemove] = useState<TeamMember | null>(null)
+  const [replacementMemberId, setReplacementMemberId] = useState('')
 
   const fetchTeam = useCallback(async () => {
     try {
-      const res = await csrfFetch(`/api/teams/${params.id}`)
+      const res = await csrfFetch(`/api/teams/${teamId}`)
       if (res.ok) {
         const data = await res.json()
         setTeam(data.team)
+        setTeamName(data.team.name)
+        setViewerCanManage(Boolean(data.viewerCanManage))
       }
     } catch (err) {
       clientLogger.error('Failed to fetch team:', err)
@@ -64,22 +102,147 @@ export default function TeamDetailPage() {
     } finally {
       setLoading(false)
     }
-  }, [params.id])
+  }, [teamId])
+
+  const fetchEligibleStudents = useCallback(
+    async (query: string) => {
+      if (!viewerCanManage) return
+
+      setSearchingStudents(true)
+      try {
+        const searchParams = new URLSearchParams({ query })
+        const res = await csrfFetch(`/api/teams/${teamId}/eligible-students?${searchParams.toString()}`)
+        const data = await res.json()
+
+        if (!res.ok) {
+          throw new Error(data.message || 'Failed to load eligible students')
+        }
+
+        setEligibleStudents(data.students || [])
+      } catch (err) {
+        clientLogger.error('Failed to fetch eligible students:', err)
+        setEligibleStudents([])
+      } finally {
+        setSearchingStudents(false)
+        setEligibleStudentsLoaded(true)
+      }
+    },
+    [teamId, viewerCanManage]
+  )
 
   useEffect(() => {
-    fetchTeam()
+    void fetchTeam()
   }, [fetchTeam])
 
-  const handleAddMember = async (e: React.FormEvent) => {
-    e.preventDefault()
+  useEffect(() => {
+    if (!team || !viewerCanManage || isRosterBlockedStatus(team.status) || team.members.length >= 5) {
+      setEligibleStudents([])
+      setSelectedStudentId('')
+      setEligibleStudentsLoaded(false)
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      void fetchEligibleStudents(memberSearch)
+    }, 250)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [fetchEligibleStudents, memberSearch, team, viewerCanManage])
+
+  useEffect(() => {
+    if (selectedStudentId && !eligibleStudents.some((student) => student.id === selectedStudentId)) {
+      setSelectedStudentId('')
+    }
+  }, [eligibleStudents, selectedStudentId])
+
+  const replacementOptions = useMemo(() => {
+    if (!team || !memberToRemove) return []
+    return team.members.filter((member) => member.id !== memberToRemove.id)
+  }, [memberToRemove, team])
+
+  const isRosterLocked = team ? isRosterBlockedStatus(team.status) : false
+  const rosterRestrictionMessage = team ? getRosterRestrictionMessage(team.status) : ''
+  const minimumRosterRequirementMessage = team ? getMinimumRosterRequirementMessage(team.status, team.members.length) : ''
+  const isAtMemberCap = team ? team.members.length >= 5 : false
+  const canAddMembers = viewerCanManage && !isRosterLocked && !isAtMemberCap
+  const rosterActionHelperText = useMemo(() => {
+    if (!team) return ''
+    if (isRosterLocked) {
+      return rosterRestrictionMessage
+    }
+    return minimumRosterRequirementMessage
+  }, [isRosterLocked, minimumRosterRequirementMessage, rosterRestrictionMessage, team])
+  const addMemberHelperText = useMemo(() => {
+    if (!team) return ''
+    if (isRosterLocked) {
+      return rosterRestrictionMessage
+    }
+    if (isAtMemberCap) {
+      return 'This team is already at the 5-member limit.'
+    }
+    if (eligibleStudentsLoaded && !searchingStudents && eligibleStudents.length === 0) {
+      return 'No eligible students available for this season.'
+    }
+    return ''
+  }, [
+    eligibleStudents.length,
+    eligibleStudentsLoaded,
+    isAtMemberCap,
+    isRosterLocked,
+    rosterRestrictionMessage,
+    searchingStudents,
+    team,
+  ])
+  const getRemoveDisabledReason = useCallback(
+    (member: TeamMember) => {
+      if (isRosterLocked) {
+        return rosterRestrictionMessage
+      }
+      if (team?.members.length === 1 && team.members[0]?.id === member.id) {
+        return minimumRosterRequirementMessage
+      }
+      return ''
+    },
+    [isRosterLocked, minimumRosterRequirementMessage, rosterRestrictionMessage, team]
+  )
+
+  const handleRenameTeam = async (event: React.FormEvent) => {
+    event.preventDefault()
+    setError('')
+    setSavingName(true)
+
+    try {
+      const res = await csrfFetch(`/api/teams/${params.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: teamName }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setError(data.message || 'Failed to rename team')
+        return
+      }
+
+      setTeam(data.team)
+      setTeamName(data.team.name)
+      toast.success('Team name updated')
+    } catch {
+      setError('An error occurred while renaming the team')
+    } finally {
+      setSavingName(false)
+    }
+  }
+
+  const handleAddMember = async (event: React.FormEvent) => {
+    event.preventDefault()
     setError('')
     setAddingMember(true)
 
     try {
-      const res = await csrfFetch(`/api/teams/${params.id}/members`, {
+      const res = await csrfFetch(`/api/teams/${teamId}/members`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ userId: selectedStudentId }),
       })
 
       const data = await res.json()
@@ -89,8 +252,9 @@ export default function TeamDetailPage() {
         return
       }
 
-      setEmail('')
-      fetchTeam()
+      setMemberSearch('')
+      setSelectedStudentId('')
+      await fetchTeam()
     } catch {
       setError('An error occurred')
     } finally {
@@ -98,56 +262,118 @@ export default function TeamDetailPage() {
     }
   }
 
-  const handleRemoveMember = async (memberId: string) => {
+  const openRemoveDialog = (member: TeamMember) => {
+    setMemberToRemove(member)
+    setReplacementMemberId('')
+    setRemoveDialogOpen(true)
+  }
+
+  const handleRemoveMember = async () => {
+    if (!memberToRemove) return
+
+    setRemoveLoading(memberToRemove.id)
     try {
-      await csrfFetch(`/api/teams/${params.id}/members/${memberId}`, {
+      const res = await csrfFetch(`/api/teams/${teamId}/members/${memberToRemove.id}`, {
         method: 'DELETE',
+        headers:
+          memberToRemove.isSubmitter && replacementOptions.length > 0
+            ? { 'Content-Type': 'application/json' }
+            : undefined,
+        body:
+          memberToRemove.isSubmitter && replacementOptions.length > 0
+            ? JSON.stringify({ replacementMemberId })
+            : undefined,
       })
-      fetchTeam()
+      const data = await res.json()
+      if (!res.ok) {
+        setError(data.message || 'Failed to remove member')
+        return
+      }
+
+      setRemoveDialogOpen(false)
+      setMemberToRemove(null)
+      setReplacementMemberId('')
+      await fetchTeam()
     } catch {
       setError('Failed to remove member')
+    } finally {
+      setRemoveLoading(null)
     }
   }
 
   const handleSetSubmitter = async (memberId: string) => {
+    setSubmitterLoading(memberId)
     try {
-      await csrfFetch(`/api/teams/${params.id}/submitter`, {
+      const res = await csrfFetch(`/api/teams/${teamId}/submitter`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ memberId }),
       })
-      fetchTeam()
+      const data = await res.json()
+      if (!res.ok) {
+        setError(data.message || 'Failed to set submitter')
+        return
+      }
+
+      await fetchTeam()
     } catch {
       setError('Failed to set submitter')
+    } finally {
+      setSubmitterLoading(null)
     }
   }
 
   if (loading) {
-    return <PageLoader message="Loading team details…" />
+    return <PageLoader message="Loading team details..." />
   }
 
   if (!team) {
-    return <div className="text-center py-12">Team not found</div>
+    return <div className="py-12 text-center text-text-secondary">Team not found</div>
   }
 
+  const teamStatus = teamStatusMeta[team.status as keyof typeof teamStatusMeta]
+
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="mx-auto max-w-2xl space-y-6">
+      <div className="flex items-center justify-between gap-4">
         <div>
-          <div className="flex items-center space-x-2">
-            <h1 className="text-2xl font-bold text-gray-900">{team.name}</h1>
-            {STATUS_BADGES[team.status] && (
-              <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_BADGES[team.status].className}`}>
-                {STATUS_BADGES[team.status].label}
-              </span>
-            )}
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-semibold text-foreground">{team.name}</h1>
+            {teamStatus && <Badge variant={teamStatus.tone}>{teamStatus.label}</Badge>}
           </div>
-          <p className="text-gray-600">{team.displayId}</p>
+          <p className="text-text-secondary">{team.displayId}</p>
         </div>
         <Button variant="outline" onClick={() => router.push('/teams')}>
           Back to Teams
         </Button>
       </div>
+
+      {viewerCanManage ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Team Settings</CardTitle>
+            <CardDescription>Rename the team and manage current roster ownership.</CardDescription>
+          </CardHeader>
+          <form onSubmit={handleRenameTeam}>
+            <CardContent className="space-y-4">
+              {error && <AlertBanner variant="error">{error}</AlertBanner>}
+              <div className="space-y-2">
+                <Label htmlFor="team-name">Team Name</Label>
+                <Input
+                  id="team-name"
+                  value={teamName}
+                  onChange={(event) => setTeamName(event.target.value)}
+                  maxLength={100}
+                  required
+                />
+              </div>
+              <Button type="submit" disabled={savingName || teamName.trim() === team.name}>
+                {savingName ? 'Saving...' : 'Save Team Name'}
+              </Button>
+            </CardContent>
+          </form>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader>
@@ -157,45 +383,77 @@ export default function TeamDetailPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {rosterActionHelperText ? <p className="mb-4 text-sm text-text-secondary">{rosterActionHelperText}</p> : null}
           {team.members.length === 0 ? (
-            <p className="text-gray-500 text-center py-4">No members yet</p>
+            <div className="rounded-xl border border-dashed border-border bg-surface-secondary px-4 py-6 text-center text-text-secondary">
+              No members yet
+            </div>
           ) : (
             <div className="space-y-3">
               {team.members.map((member) => (
                 <div
                   key={member.id}
-                  className="flex items-center justify-between p-3 border rounded-lg"
+                  className="flex items-center justify-between rounded-xl border border-border bg-card p-4"
                 >
-                  <div>
-                    <p className="font-medium">
-                      {member.user.firstName} {member.user.lastName}
-                    </p>
-                    <p className="text-sm text-gray-500">{member.user.email}</p>
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary-soft text-primary">
+                      <Users className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-foreground">
+                        {member.user.firstName} {member.user.lastName}
+                      </p>
+                      <p className="text-sm text-text-secondary">{member.user.email}</p>
+                    </div>
                   </div>
-                  <div className="flex items-center space-x-2">
+                  <div className="flex items-center gap-2">
                     {member.isSubmitter ? (
-                      <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full flex items-center">
-                        <Crown className="h-3 w-3 mr-1" />
+                      <Badge variant="info" className="gap-1">
+                        <Crown className="h-3 w-3" />
                         Submitter
-                      </span>
-                    ) : (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleSetSubmitter(member.id)}
-                        title="Make submitter"
-                      >
-                        <Crown className="h-4 w-4" />
-                      </Button>
-                    )}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleRemoveMember(member.id)}
-                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                    >
-                      <UserMinus className="h-4 w-4" />
-                    </Button>
+                      </Badge>
+                    ) : viewerCanManage ? (
+                      <div className="flex flex-col items-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleSetSubmitter(member.id)}
+                          disabled={isRosterLocked || submitterLoading === member.id}
+                        >
+                          {submitterLoading === member.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            'Make submitter'
+                          )}
+                        </Button>
+                        {isRosterLocked ? (
+                          <p className="max-w-[13rem] text-right text-xs text-text-muted">{rosterRestrictionMessage}</p>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    {viewerCanManage ? (
+                      <div className="flex flex-col items-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => openRemoveDialog(member)}
+                          className="text-error hover:bg-error-background hover:text-error"
+                          disabled={Boolean(getRemoveDisabledReason(member)) || removeLoading === member.id}
+                        >
+                          {removeLoading === member.id ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          ) : (
+                            <UserMinus className="mr-2 h-4 w-4" />
+                          )}
+                          Remove
+                        </Button>
+                        {!isRosterLocked && getRemoveDisabledReason(member) ? (
+                          <p className="max-w-[13rem] text-right text-xs text-text-muted">
+                            {getRemoveDisabledReason(member)}
+                          </p>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               ))}
@@ -204,43 +462,132 @@ export default function TeamDetailPage() {
         </CardContent>
       </Card>
 
-      {team.members.length < 5 && (
+      {viewerCanManage && (
         <Card>
           <CardHeader>
-            <CardTitle>Add Member</CardTitle>
+            <CardTitle>Add Existing Student</CardTitle>
             <CardDescription>
-              Add a student by their registered email address.
+              Add a registered student from the same university who is not already assigned in this season.
             </CardDescription>
           </CardHeader>
           <form onSubmit={handleAddMember}>
             <CardContent className="space-y-4">
-              {error && (
-                <div className="bg-red-50 text-red-600 px-4 py-2 rounded-md text-sm">
-                  {error}
-                </div>
-              )}
+              {error && <AlertBanner variant="error">{error}</AlertBanner>}
+              {!canAddMembers && addMemberHelperText ? (
+                <AlertBanner variant="warning" title="Roster changes are limited">
+                  {addMemberHelperText}
+                </AlertBanner>
+              ) : null}
               <div className="space-y-2">
-                <Label htmlFor="email">Student Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="student@university.edu"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                />
+                <Label htmlFor="student-search">Find student</Label>
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
+                  <Input
+                    id="student-search"
+                    value={memberSearch}
+                    onChange={(event) => setMemberSearch(event.target.value)}
+                    placeholder="Search by name or email"
+                    className="pl-9"
+                    disabled={!canAddMembers}
+                  />
+                </div>
               </div>
-              <Button type="submit" disabled={addingMember}>
-                {addingMember ? 'Adding...' : 'Add Member'}
+
+              <div className="space-y-2">
+                <Label>Eligible students</Label>
+                <Select value={selectedStudentId} onValueChange={setSelectedStudentId} disabled={!canAddMembers}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a student" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {eligibleStudents.map((student) => (
+                      <SelectItem key={student.id} value={student.id}>
+                        {formatPersonOptionLabel(student)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {searchingStudents ? <p className="text-xs text-text-muted">Searching students...</p> : null}
+                {canAddMembers && addMemberHelperText && !searchingStudents ? (
+                  <p className="text-xs text-text-muted">{addMemberHelperText}</p>
+                ) : null}
+              </div>
+
+              <Button type="submit" disabled={!canAddMembers || !selectedStudentId || addingMember}>
+                {addingMember ? (
+                  'Adding...'
+                ) : (
+                  <>
+                    <UserPlus className="mr-2 h-4 w-4" />
+                    Add member
+                  </>
+                )}
               </Button>
             </CardContent>
           </form>
         </Card>
       )}
+
+      <Dialog open={removeDialogOpen} onOpenChange={setRemoveDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Remove Team Member</DialogTitle>
+            <DialogDescription>
+              {memberToRemove
+                ? `Remove ${memberToRemove.user.firstName} ${memberToRemove.user.lastName} from ${team.name}?`
+                : 'Remove this member from the team?'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {memberToRemove?.isSubmitter && replacementOptions.length > 0 ? (
+              <>
+                <AlertBanner variant="warning" title="Submitter replacement required">
+                  Choose the next submitter before removing the current submitter.
+                </AlertBanner>
+                <div className="space-y-2">
+                  <Label htmlFor="replacement-member">Replacement submitter</Label>
+                  <Select value={replacementMemberId} onValueChange={setReplacementMemberId}>
+                    <SelectTrigger id="replacement-member">
+                      <SelectValue placeholder="Select a replacement" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {replacementOptions.map((member) => (
+                        <SelectItem key={member.id} value={member.id}>
+                          {formatPersonOptionLabel(member.user)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
+            ) : null}
+
+            <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setRemoveDialogOpen(false)
+                  setMemberToRemove(null)
+                  setReplacementMemberId('')
+                }}
+                disabled={removeLoading === memberToRemove?.id}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                onClick={() => void handleRemoveMember()}
+                disabled={
+                  removeLoading === memberToRemove?.id ||
+                  Boolean(memberToRemove?.isSubmitter && replacementOptions.length > 0 && !replacementMemberId)
+                }
+              >
+                {removeLoading === memberToRemove?.id ? 'Removing...' : 'Remove member'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
-
-
-
-

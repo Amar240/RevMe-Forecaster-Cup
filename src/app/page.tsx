@@ -1,15 +1,31 @@
+import type { Metadata } from 'next'
 import { LandingPage } from '@/components/landing/sections'
-import { Space_Grotesk, Manrope } from 'next/font/google'
+import { getHomepageHeroStatusLabel } from '@/server/season'
 
-export const dynamic = 'force-dynamic'
+export const metadata: Metadata = {
+  title: 'The Only Student Competition Scored on Real Hotel Data',
+  description:
+    'Compete across 7 scored rounds, forecast occupancy and ADR in live hotel markets, and build a forecasting track record before you graduate.',
+  openGraph: {
+    title: 'RevME Forecaster Cup',
+    description:
+      'Compete across 7 scored rounds, forecast occupancy and ADR in live hotel markets, and build a forecasting track record before you graduate.',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'RevME Forecaster Cup',
+    description:
+      'Compete across 7 scored rounds, forecast occupancy and ADR in live hotel markets, and build a forecasting track record before you graduate.',
+  },
+}
 
-const display = Space_Grotesk({ subsets: ['latin'], variable: '--font-display' })
-const body = Manrope({ subsets: ['latin'], variable: '--font-body' })
+export default async function Home() {
+  const heroStatusLabel = await getHomepageHeroStatusLabel()
 
-export default function Home() {
   return (
-    <div className={`${display.variable} ${body.variable} min-h-screen bg-canvas text-white font-body`}>
-      <LandingPage />
+    <div className="min-h-screen font-body">
+      <LandingPage heroStatusLabel={heroStatusLabel} />
     </div>
   )
 }

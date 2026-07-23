@@ -4,6 +4,8 @@ import { z } from 'zod'
 import { logger } from '@/server/logger'
 import { requireUserOrResponse, jsonError } from '@/server/http'
 import { sendSubmissionReceiptEmail } from '@/server/email'
+import { getSeasonScopedTeamMemberWhere } from '@/server/team-membership'
+import { isValidAdrValue, isValidOccupancyValue } from '@/lib/submission-values'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,11 +16,48 @@ const submissionSchema = z.object({
     z.object({
       marketId: z.string().min(1),
       weekOffset: z.number().int().min(1).max(2),
-      occupancy: z.number().min(0).max(100),
-      adr: z.number().min(0),
+      occupancy: z.number().refine(isValidOccupancyValue, 'Occupancy must be between 0 and 100'),
+      adr: z.number().refine(isValidAdrValue, 'ADR must be greater than 0'),
     })
   ),
 })
+
+function getRoundSubmissionGate(round: {
+  status: string
+  closesAt: Date
+}) {
+  const now = new Date()
+
+  if (round.status === 'UPCOMING') {
+    return {
+      message: 'This round has not opened for submissions yet.',
+      status: 422,
+    }
+  }
+
+  if (round.status === 'PAUSED') {
+    return {
+      message: 'This round is temporarily paused. Submissions will resume when the round is reopened.',
+      status: 422,
+    }
+  }
+
+  if (round.status === 'CLOSED' || new Date(round.closesAt) < now) {
+    return {
+      message: 'This round is closed. Submissions are no longer accepted.',
+      status: 422,
+    }
+  }
+
+  if (round.status !== 'OPEN') {
+    return {
+      message: 'This round is not open for submissions.',
+      status: 422,
+    }
+  }
+
+  return null
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -42,16 +81,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: 'Season is not active' }, { status: 400 })
     }
 
-    if (round.status !== 'OPEN') {
-      return NextResponse.json({ message: 'Round is not open' }, { status: 400 })
-    }
-
-    if (new Date(round.closesAt) < new Date()) {
-      return NextResponse.json({ message: 'Round is closed' }, { status: 400 })
+    const roundGate = getRoundSubmissionGate(round)
+    if (roundGate) {
+      return NextResponse.json({ message: roundGate.message }, { status: roundGate.status })
     }
 
     const teamMember = await prisma.teamMember.findFirst({
-      where: { userId: authUser.id, isSubmitter: true },
+      where: getSeasonScopedTeamMemberWhere({
+        userId: authUser.id,
+        seasonId: round.seasonId,
+        isSubmitter: true,
+      }),
       include: { team: { include: { supervisor: true } } },
     })
 
@@ -114,38 +154,27 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: 'Missing submissions for one or more markets/weeks' }, { status: 400 })
     }
 
-    const submission = await prisma.submission.create({
-      data: {
-        teamId: teamMember.teamId,
-        roundId: round.id,
-        submittedById: authUser.id,
-        locked: true,
-      },
+    const submission = await prisma.$transaction(async (tx) => {
+      const created = await tx.submission.create({
+        data: {
+          teamId: teamMember.teamId,
+          roundId: round.id,
+          submittedById: authUser.id,
+          locked: true,
+        },
+      })
+      const values = data.submissions.flatMap((entry) => [
+        { submissionId: created.id, marketId: entry.marketId, metric: 'OCCUPANCY' as const, weekOffset: entry.weekOffset, value: entry.occupancy },
+        { submissionId: created.id, marketId: entry.marketId, metric: 'ADR' as const, weekOffset: entry.weekOffset, value: entry.adr },
+      ])
+      await tx.submissionValue.createMany({ data: values })
+      return created
     })
-
-    const values = data.submissions.flatMap((entry) => [
-      {
-        submissionId: submission.id,
-        marketId: entry.marketId,
-        metric: 'OCCUPANCY' as const,
-        weekOffset: entry.weekOffset,
-        value: entry.occupancy,
-      },
-      {
-        submissionId: submission.id,
-        marketId: entry.marketId,
-        metric: 'ADR' as const,
-        weekOffset: entry.weekOffset,
-        value: entry.adr,
-      },
-    ])
-
-    await prisma.submissionValue.createMany({ data: values })
 
     const submittedByName = `${authUser.firstName} ${authUser.lastName}`.trim()
     const supervisorEmail = teamMember.team.supervisor?.email
 
-    const [studentSent, supervisorSent] = await Promise.all([
+    void Promise.all([
       sendSubmissionReceiptEmail({
         email: authUser.email,
         teamName: teamMember.team.name,
@@ -164,14 +193,9 @@ export async function POST(request: NextRequest) {
             recipientRole: 'SUPERVISOR',
           })
         : Promise.resolve(false),
-    ])
-
-    if (studentSent || supervisorSent) {
-      await prisma.submission.update({
-        where: { id: submission.id },
-        data: { emailSentAt: new Date() },
-      })
-    }
+    ]).then(async ([studentSent, supervisorSent]) => {
+      if (studentSent || supervisorSent) await prisma.submission.update({ where: { id: submission.id }, data: { emailSentAt: new Date() } })
+    }).catch((error) => logger.error('Submission receipt email error:', error))
 
     return NextResponse.json({ message: 'Submission saved' }, { status: 201 })
   } catch (error) {
@@ -182,5 +206,3 @@ export async function POST(request: NextRequest) {
     return jsonError(error, 'Failed to submit')
   }
 }
-
-

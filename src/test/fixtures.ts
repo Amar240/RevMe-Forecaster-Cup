@@ -1,10 +1,24 @@
 import { prisma } from './db'
 import bcrypt from 'bcryptjs'
-import { addDays, subDays } from 'date-fns'
+import { addDays, subHours } from 'date-fns'
 import type { Role, TeamStatus } from '@prisma/client'
+import { formatUniversityDisplayName, normalizeUniversityName } from '@/server/universities'
 
-export async function createUniversity(name = 'Test University') {
-  return prisma.university.create({ data: { name } })
+let teamDisplayIdCounter = 0
+
+export async function createUniversity(
+  name = 'Test University',
+  options?: { isListed?: boolean; country?: string | null }
+) {
+  const displayName = formatUniversityDisplayName(name)
+  return prisma.university.create({
+    data: {
+      name: displayName,
+      normalizedName: normalizeUniversityName(displayName),
+      isListed: options?.isListed ?? true,
+      country: options?.country ?? null,
+    },
+  })
 }
 
 export async function createUser(params: {
@@ -15,8 +29,11 @@ export async function createUser(params: {
   universityId?: string | null
   password?: string
   hasFullAccess?: boolean
+  isActive?: boolean
+  emailVerified?: boolean
 }) {
   const passwordHash = await bcrypt.hash(params.password || 'Password123!', 10)
+  const emailVerified = params.emailVerified ?? true
   return prisma.user.create({
     data: {
       email: params.email,
@@ -26,7 +43,9 @@ export async function createUser(params: {
       passwordHash,
       universityId: params.universityId || null,
       hasFullAccess: params.hasFullAccess || false,
-      emailVerified: true,
+      emailVerified,
+      emailVerifiedAt: emailVerified ? new Date() : null,
+      isActive: params.isActive ?? true,
     },
   })
 }
@@ -55,7 +74,9 @@ export async function createSeasonWithRounds(params?: {
   name?: string
   startDate?: Date
 }) {
-  const startDate = params?.startDate || subDays(new Date(), 1)
+  // Keep the first round safely open by default so request-level tests do not
+  // race a near-now close time during execution.
+  const startDate = params?.startDate || subHours(new Date(), 12)
   const endDate = addDays(startDate, 49)
   const season = await prisma.season.create({
     data: {
@@ -89,9 +110,21 @@ export async function createSeasonWithRounds(params?: {
 }
 
 export async function createMarkets(seasonId: string) {
-  const nashville = await prisma.market.create({ data: { name: 'Nashville CBD' } })
-  const dubai = await prisma.market.create({ data: { name: 'Dubai' } })
-  const hamburg = await prisma.market.create({ data: { name: 'Hamburg' } })
+  const nashville = await prisma.market.upsert({
+    where: { name: 'Nashville CBD' },
+    update: {},
+    create: { name: 'Nashville CBD' },
+  })
+  const dubai = await prisma.market.upsert({
+    where: { name: 'Dubai' },
+    update: {},
+    create: { name: 'Dubai' },
+  })
+  const hamburg = await prisma.market.upsert({
+    where: { name: 'Hamburg' },
+    update: {},
+    create: { name: 'Hamburg' },
+  })
 
   await prisma.seasonMarket.createMany({
     data: [
@@ -107,6 +140,7 @@ export async function createMarkets(seasonId: string) {
 export async function createTeam(params: {
   name?: string
   displayId?: string
+  externalTeamId?: string | null
   supervisorId: string
   universityId: string
   seasonId?: string | null
@@ -115,7 +149,8 @@ export async function createTeam(params: {
   return prisma.team.create({
     data: {
       name: params.name || 'Test Team',
-      displayId: params.displayId || `T-${Date.now()}`,
+      displayId: params.displayId || `T-FIXTURE-${process.pid}-${++teamDisplayIdCounter}`,
+      externalTeamId: params.externalTeamId || null,
       supervisorId: params.supervisorId,
       universityId: params.universityId,
       seasonId: params.seasonId || null,

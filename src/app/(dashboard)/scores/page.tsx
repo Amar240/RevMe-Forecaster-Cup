@@ -4,19 +4,27 @@ import { csrfFetch } from '@/lib/csrf'
 
 import { clientLogger } from '@/lib/client-logger'
 import dynamic from 'next/dynamic'
+import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { FileText, CheckCircle, AlertCircle, TrendingDown, BarChart3, Filter, ChevronDown, ChevronUp, Download, TrendingUp, Trophy } from 'lucide-react'
 import { toast } from 'sonner'
 import { CardSkeleton, ChartSkeleton, TableSkeleton } from '@/components/ui/skeleton'
+import { GlossaryTerm } from '@/components/ui/glossary-term'
+import { StatCard } from '@/components/ui/stat-card'
+import { formatMape } from '@/lib/learning-analytics'
+import { CohortBandChart } from '@/components/charts/CohortBandChart'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { MotionReveal } from '@/components/ui/motion-reveal'
+import { OneTimeCelebration } from '@/components/ui/one-time-celebration'
 
 const ScoreTrendChart = dynamic(
   () => import('@/components/charts/ScoreTrendChart').then((mod) => mod.ScoreTrendChart),
   {
     ssr: false,
     loading: () => (
-      <div className="h-[280px] w-full rounded-lg bg-gray-50 dark:bg-gray-800 animate-pulse" />
+      <div className="h-[280px] w-full rounded-lg bg-surface-secondary animate-pulse" />
     ),
   }
 )
@@ -35,7 +43,7 @@ interface Submission {
   adr: number
   weekOffset: number
   submittedAt: string
-  round: { number: number }
+  round: { id?: string; number: number }
   market: { name: string }
   score: Score | null
 }
@@ -51,6 +59,14 @@ interface TrendData {
   adr: number
 }
 
+type ScoreInsights = {
+  biases: Array<{ key: string; marketName?: string; metric: string; direction: string; observations: number; averageSignedError: number | null }>
+  horizon: { week1: number | null; week2: number | null }
+  cohortBands: Array<{ roundId: string; round: number; q1: number | null; median: number | null; q3: number | null; team: number | null }>
+  markets: Array<{ marketId: string; marketName: string; mape: number | null; occupancyMape: number | null; adrMape: number | null; rounds: Array<{ round: number; mape: number | null }> }>
+  takeaway: string
+}
+
 export default function ScoresPage() {
   const [loading, setLoading] = useState(true)
   const [team, setTeam] = useState<Team | null>(null)
@@ -58,26 +74,48 @@ export default function ScoresPage() {
   const [trends, setTrends] = useState<TrendData[]>([])
   const [expandedRounds, setExpandedRounds] = useState<number[]>([])
   const [filterMarket, setFilterMarket] = useState<string>('all')
+  const [activeTab, setActiveTab] = useState<'overview' | 'round' | 'market' | 'export'>('overview')
+  const [insights, setInsights] = useState<ScoreInsights | null>(null)
+  const [role, setRole] = useState('STUDENT')
+  const [availableTeams, setAvailableTeams] = useState<Array<{ id: string; name: string; displayId: string }>>([])
+  const [selectedTeamId, setSelectedTeamId] = useState('')
 
   useEffect(() => {
+    const tab = new URLSearchParams(window.location.search).get('tab')
+    if (tab === 'overview' || tab === 'round' || tab === 'market' || tab === 'export') setActiveTab(tab)
     fetchScores()
   }, [])
 
-  const fetchScores = async () => {
+  const fetchScores = async (requestedTeamId?: string) => {
     try {
-      const [userRes, subRes, trendRes] = await Promise.all([
-        csrfFetch('/api/users/me'),
-        csrfFetch('/api/submissions/history'),
-        csrfFetch('/api/scores/trends'),
-      ])
+      setLoading(true)
+      const userRes = await csrfFetch('/api/users/me')
+      let teamId = requestedTeamId || ''
 
       if (userRes.ok) {
         const userData = await userRes.json()
+        const userRole = userData.user?.role || 'STUDENT'
+        setRole(userRole)
         const teamMembership = userData.user?.teamMemberships?.[0]
-        if (teamMembership) {
+        if (userRole === 'SUPERVISOR') {
+          const teamsRes = await csrfFetch('/api/teams')
+          const teamsData = teamsRes.ok ? await teamsRes.json() : { teams: [] }
+          const scopedTeams = teamsData.teams || []
+          setAvailableTeams(scopedTeams)
+          teamId = teamId && scopedTeams.some((item: { id: string }) => item.id === teamId) ? teamId : scopedTeams[0]?.id || ''
+          setSelectedTeamId(teamId)
+          setTeam(scopedTeams.find((item: { id: string }) => item.id === teamId) || null)
+        } else if (teamMembership) {
           setTeam(teamMembership.team)
         }
       }
+
+      const query = teamId ? `?teamId=${encodeURIComponent(teamId)}` : ''
+      const [subRes, trendRes, insightRes] = await Promise.all([
+        csrfFetch(`/api/submissions/history${query}`),
+        csrfFetch(`/api/scores/trends${query}`),
+        csrfFetch(`/api/scores/insights${query}`),
+      ])
 
       if (subRes.ok) {
         const subData = await subRes.json()
@@ -92,6 +130,11 @@ export default function ScoresPage() {
         const trendData = await trendRes.json()
         setTrends(trendData.trends || [])
       }
+      if (insightRes.ok) {
+        const insightData = await insightRes.json()
+        setInsights(insightData.insights || null)
+        if (insightData.team) setTeam(insightData.team)
+      }
     } catch (error) {
       clientLogger.error('Failed to fetch scores:', error)
       toast.error('Failed to load scores')
@@ -102,7 +145,7 @@ export default function ScoresPage() {
 
   const handleDownload = async () => {
     try {
-      const res = await csrfFetch('/api/submissions/export')
+      const res = await csrfFetch(`/api/submissions/export${selectedTeamId ? `?teamId=${encodeURIComponent(selectedTeamId)}` : ''}`)
       if (res.ok) {
         const blob = await res.blob()
         const url = window.URL.createObjectURL(blob)
@@ -131,8 +174,8 @@ export default function ScoresPage() {
       <div className="space-y-8">
         <div className="flex items-center justify-between">
           <div className="space-y-2">
-            <div className="h-8 w-32 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
-            <div className="h-4 w-48 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+            <div className="h-8 w-32 bg-muted rounded animate-pulse" />
+            <div className="h-4 w-48 bg-muted rounded animate-pulse" />
           </div>
         </div>
         <div className="grid md:grid-cols-3 gap-6">
@@ -142,7 +185,7 @@ export default function ScoresPage() {
         </div>
         <Card>
           <CardHeader>
-            <div className="h-6 w-40 bg-gray-200 rounded animate-pulse" />
+            <div className="h-6 w-40 rounded bg-muted animate-pulse" />
           </CardHeader>
           <CardContent>
             <ChartSkeleton height={250} />
@@ -158,11 +201,11 @@ export default function ScoresPage() {
       <div className="max-w-lg mx-auto mt-12">
         <Card>
           <CardContent className="py-16 text-center">
-            <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">
-              <AlertCircle className="h-8 w-8 text-gray-400" />
+            <div className="w-16 h-16 bg-surface-secondary rounded-full flex items-center justify-center mx-auto mb-4">
+              <AlertCircle className="h-8 w-8 text-text-muted" />
             </div>
-            <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">Not on a Team</h3>
-            <p className="text-gray-500 dark:text-gray-400">You need to be added to a team to view scores.</p>
+            <h3 className="text-xl font-bold text-foreground mb-2">Not on a Team</h3>
+            <p className="text-text-secondary">You need to be added to a team to view scores.</p>
           </CardContent>
         </Card>
       </div>
@@ -194,78 +237,82 @@ export default function ScoresPage() {
   const scoredCount = scoredSubmissions.length
 
   const markets = [...new Set(submissions.map((s) => s.market.name))]
+  const combinedTrends = trends.map((item) => (item.occupancy + item.adr) / 2)
+  const personalBest = combinedTrends.length >= 2 && combinedTrends.at(-1)! < Math.min(...combinedTrends.slice(0, -1))
 
   return (
-    <div className="space-y-8">
-      <div className="flex items-center justify-between">
+    <MotionReveal className="space-y-8">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">My Scores</h1>
-          <p className="text-gray-500 dark:text-gray-400">Team: {team.name}</p>
+          <h1 className="font-display text-3xl font-semibold text-foreground">Scores</h1>
+          <p className="text-text-secondary">Team: {team.name}</p>
         </div>
-        <Button variant="outline" onClick={handleDownload}>
-          <Download className="h-4 w-4 mr-2" />
-          Export CSV
-        </Button>
+        {role === 'SUPERVISOR' && availableTeams.length > 0 && <label className="flex w-full flex-col gap-1 text-sm font-medium text-text-secondary sm:w-auto">Team<select value={selectedTeamId} onChange={(event) => { setSelectedTeamId(event.target.value); void fetchScores(event.target.value) }} className="h-11 rounded-lg border border-border bg-surface px-3 py-2 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{availableTeams.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}
       </div>
 
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as typeof activeTab)}><TabsList aria-label="Score views">{([['overview','Overview'],['round','By round'],['market','By market'],['export','Export']] as const).map(([key, label]) => <TabsTrigger key={key} value={key}>{label}</TabsTrigger>)}</TabsList></Tabs>
+      <OneTimeCelebration eventKey={personalBest && team ? `${team.displayId}:personal-best:${trends.at(-1)?.round}` : null}>New personal best: your latest combined published MAPE is your lowest yet.</OneTimeCelebration>
+      <MotionReveal key={activeTab} className="space-y-8">
+
+      {activeTab === 'overview' && <>
       <div className="grid md:grid-cols-4 gap-6">
-        <Card className="bg-gradient-to-br from-gray-50 to-white">
+        <Card className="bg-gradient-to-br from-surface-secondary to-card">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">Total Submissions</CardTitle>
-            <div className="p-2 bg-gray-100 rounded-lg">
-              <FileText className="h-5 w-5 text-gray-600" />
+            <CardTitle className="text-sm font-medium text-text-secondary">Total Submissions</CardTitle>
+            <div className="rounded-lg bg-surface-secondary p-2">
+              <FileText className="h-5 w-5 text-text-secondary" />
             </div>
           </CardHeader>
           <CardContent>
-            <p className="text-4xl font-bold text-gray-900">{submissions.length}</p>
-            <p className="text-sm text-gray-500">{scoredCount} scored</p>
+            <p className="text-4xl font-bold text-foreground">{submissions.length}</p>
+            <p className="text-sm text-text-secondary">{scoredCount} scored</p>
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-amber-50 to-white dark:from-amber-950/30 dark:to-gray-900 border-amber-200 dark:border-amber-800">
+        <Card className="border-accent/30 bg-gradient-to-br from-accent-soft to-card">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600 dark:text-gray-400">Final Score</CardTitle>
-            <div className="p-2 bg-amber-100 dark:bg-amber-900/40 rounded-lg">
-              <Trophy className="h-5 w-5 text-amber-600" />
+            <CardTitle className="text-sm font-medium text-text-secondary">Final Score</CardTitle>
+            <div className="rounded-lg bg-accent-soft p-2">
+              <Trophy className="h-5 w-5 text-accent" />
             </div>
           </CardHeader>
           <CardContent>
-            <p className="text-4xl font-bold text-amber-600">
+            <p className="text-4xl font-bold text-accent">
               {scoredCount > 0
                 ? ((((totalOccupancyAPE / scoredCount) + (totalAdrAPE / scoredCount)) / 2) * 100).toFixed(2) + '%'
                 : '-'}
             </p>
-            <p className="text-sm text-gray-500 dark:text-gray-400">(Occupancy MAPE + ADR MAPE) / 2</p>
+            <p className="text-sm text-text-secondary">(Occupancy MAPE + ADR MAPE) / 2</p>
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-blue-50 to-white dark:from-blue-950/30 dark:to-gray-900 border-blue-100 dark:border-blue-800">
+        <Card className="border-primary/20 bg-gradient-to-br from-primary-soft to-card">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600 dark:text-gray-400">Occupancy MAPE</CardTitle>
-            <div className="p-2 bg-blue-100 dark:bg-blue-900/40 rounded-lg">
-              <TrendingDown className="h-5 w-5 text-blue-600" />
+            <CardTitle className="text-sm font-medium text-text-secondary">Occupancy MAPE</CardTitle>
+            <div className="p-2 bg-primary-soft rounded-lg">
+              <TrendingDown className="h-5 w-5 text-primary" />
             </div>
           </CardHeader>
           <CardContent>
-            <p className="text-4xl font-bold text-blue-600">
+            <p className="text-4xl font-bold text-primary">
               {scoredCount > 0 ? `${((totalOccupancyAPE / scoredCount) * 100).toFixed(2)}%` : '-'}
             </p>
-            <p className="text-sm text-gray-500 dark:text-gray-400">lower is better</p>
+            <p className="text-sm text-text-secondary">lower is better</p>
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-950/30 dark:to-gray-900 border-emerald-100 dark:border-emerald-800">
+        <Card className="border-success/20 bg-gradient-to-br from-success-background to-card">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600 dark:text-gray-400">ADR MAPE</CardTitle>
-            <div className="p-2 bg-emerald-100 dark:bg-emerald-900/40 rounded-lg">
-              <BarChart3 className="h-5 w-5 text-emerald-600" />
+            <CardTitle className="text-sm font-medium text-text-secondary">ADR MAPE</CardTitle>
+            <div className="rounded-lg bg-success-background p-2">
+              <BarChart3 className="h-5 w-5 text-success" />
             </div>
           </CardHeader>
           <CardContent>
-            <p className="text-4xl font-bold text-emerald-600">
+            <p className="text-4xl font-bold text-success">
               {scoredCount > 0 ? ((totalAdrAPE / scoredCount) * 100).toFixed(2) + '%' : '-'}
             </p>
-            <p className="text-sm text-gray-500 dark:text-gray-400">lower is better</p>
+            <p className="text-sm text-text-secondary">lower is better</p>
           </CardContent>
         </Card>
       </div>
@@ -274,7 +321,7 @@ export default function ScoresPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center space-x-2">
-              <TrendingUp className="h-5 w-5 text-blue-600" />
+              <TrendingUp className="h-5 w-5 text-primary" />
               <span>Score Trends</span>
             </CardTitle>
             <CardDescription>Your MAPE scores across rounds (lower is better)</CardDescription>
@@ -284,18 +331,20 @@ export default function ScoresPage() {
           </CardContent>
         </Card>
       )}
+      {insights && <><div className="grid gap-4 md:grid-cols-2"><StatCard title="Week +1 accuracy" value={formatMape(insights.horizon.week1)} description="Published prediction errors" /><StatCard title="Week +2 accuracy" value={formatMape(insights.horizon.week2)} description="Longer horizons usually carry more uncertainty" /></div><Card className="border-primary/20"><CardHeader><CardTitle>What the numbers suggest</CardTitle></CardHeader><CardContent><p>{insights.takeaway}</p>{insights.biases.slice(0, 3).map((bias) => <div key={bias.key} className="mt-4"><div className="flex items-center justify-between text-sm"><span>{bias.marketName} {bias.metric === 'ADR' ? 'ADR' : 'occupancy'}</span><strong>{bias.direction === 'OVER' ? 'Over' : 'Under'} by {formatMape(Math.abs(bias.averageSignedError ?? 0))}</strong></div><div className="relative mt-2 h-2 rounded-full bg-surface-secondary" aria-label={`${bias.direction.toLowerCase()} forecast bias ${formatMape(Math.abs(bias.averageSignedError ?? 0))}`}><span className="absolute left-1/2 top-[-3px] h-4 w-px bg-border" /><span className={`absolute top-0 h-2 rounded-full ${bias.direction === 'OVER' ? 'left-1/2 bg-warning' : 'right-1/2 bg-info'}`} style={{ width: `${Math.min(50, Math.abs(bias.averageSignedError ?? 0) * 200)}%` }} /></div></div>)}</CardContent></Card><Card><CardHeader><CardTitle>Your trend against the cohort</CardTitle><CardDescription>Combined MAPE; lower is better. Team names are not exposed.</CardDescription></CardHeader><CardContent><CohortBandChart data={insights.cohortBands} /></CardContent></Card><div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{insights.markets.map((market) => <Card key={market.marketId}><CardHeader><CardTitle>{market.marketName}</CardTitle><CardDescription>Market accuracy</CardDescription></CardHeader><CardContent><p className="font-display text-3xl font-semibold tabular-nums">{formatMape(market.mape)}</p><div className="mt-3 flex justify-between text-sm text-text-secondary"><span>Occupancy {formatMape(market.occupancyMape)}</span><span>ADR {formatMape(market.adrMape)}</span></div></CardContent></Card>)}</div></>}
+      </>}
 
-      {markets.length > 1 && (
+      {(activeTab === 'market') && markets.length > 1 && (
         <div className="flex items-center space-x-2">
-          <Filter className="h-4 w-4 text-gray-400" />
-          <span className="text-sm text-gray-500 dark:text-gray-400">Filter by market:</span>
+          <Filter className="h-4 w-4 text-text-muted" />
+          <span className="text-sm text-text-secondary">Filter by market:</span>
           <div className="flex space-x-2">
             <button
               onClick={() => setFilterMarket('all')}
-              className={`px-3 py-1 text-sm rounded-full transition-colors ${
+              className={`min-h-11 rounded-full px-3 py-1 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                 filterMarket === 'all'
-                  ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300'
-                  : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-800/50'
+                  ? 'bg-primary-soft text-primary'
+                  : 'bg-surface-secondary text-text-secondary hover:bg-muted'
               }`}
             >
               All
@@ -304,10 +353,10 @@ export default function ScoresPage() {
               <button
                 key={market}
                 onClick={() => setFilterMarket(market)}
-                className={`px-3 py-1 text-sm rounded-full transition-colors ${
+                className={`min-h-11 rounded-full px-3 py-1 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                   filterMarket === market
-                    ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300'
-                    : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-800/50'
+                    ? 'bg-primary-soft text-primary'
+                    : 'bg-surface-secondary text-text-secondary hover:bg-muted'
                 }`}
               >
                 {market}
@@ -317,14 +366,15 @@ export default function ScoresPage() {
         </div>
       )}
 
+      {(activeTab === 'round' || activeTab === 'market') && <>
       {Object.keys(filteredSubmissionsByRound).length === 0 ? (
         <Card>
           <CardContent className="py-16 text-center">
-            <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">
-              <FileText className="h-8 w-8 text-gray-400" />
+            <div className="w-16 h-16 bg-surface-secondary rounded-full flex items-center justify-center mx-auto mb-4">
+              <FileText className="h-8 w-8 text-text-muted" />
             </div>
-            <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">No Submissions Yet</h3>
-            <p className="text-gray-500 dark:text-gray-400">Your team hasn&apos;t submitted any forecasts yet.</p>
+            <h3 className="text-xl font-bold text-foreground mb-2">No Submissions Yet</h3>
+            <p className="text-text-secondary">Your team hasn&apos;t submitted any forecasts yet.</p>
           </CardContent>
         </Card>
       ) : (
@@ -349,17 +399,17 @@ export default function ScoresPage() {
                     onClick={() => toggleRound(parseInt(roundNum))}
                     className="w-full text-left"
                   >
-                    <CardHeader className="bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-800/50 transition-colors">
+                    <CardHeader className="bg-surface-secondary hover:bg-surface-secondary transition-colors">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-4">
                           <CardTitle>Round {roundNum}</CardTitle>
                           {hasScores ? (
-                            <span className="flex items-center text-sm text-green-600 bg-green-100 dark:bg-green-900/40 px-2 py-1 rounded-full">
+                            <span className="flex items-center text-sm text-success bg-success-background px-2 py-1 rounded-full">
                               <CheckCircle className="h-3 w-3 mr-1" />
                               Scored
                             </span>
                           ) : (
-                            <span className="text-sm text-gray-500 dark:text-gray-400 bg-gray-200 dark:bg-gray-700 px-2 py-1 rounded-full">
+                            <span className="text-sm text-text-secondary bg-muted px-2 py-1 rounded-full">
                               Pending
                             </span>
                           )}
@@ -367,21 +417,21 @@ export default function ScoresPage() {
                         <div className="flex items-center space-x-6">
                           {hasScores && (
                             <div className="flex space-x-4 text-sm">
-                              <span className="text-blue-600">
+                              <span className="text-primary">
                                 Occ: {roundOccMAPE !== null ? `${(roundOccMAPE * 100).toFixed(2)}%` : '--'}
                               </span>
-                              <span className="text-emerald-600">
+                              <span className="text-success">
                                 ADR: {roundAdrMAPE !== null ? `${(roundAdrMAPE * 100).toFixed(2)}%` : '--'}
                               </span>
                               {roundFinalMAPE !== null && (
-                                <span className="text-amber-600">Final: {(roundFinalMAPE * 100).toFixed(2)}%</span>
+                                <span className="text-accent">Final: {(roundFinalMAPE * 100).toFixed(2)}%</span>
                               )}
                             </div>
                           )}
                           {isExpanded ? (
-                            <ChevronUp className="h-5 w-5 text-gray-400" />
+                            <ChevronUp className="h-5 w-5 text-text-muted" />
                           ) : (
-                            <ChevronDown className="h-5 w-5 text-gray-400" />
+                            <ChevronDown className="h-5 w-5 text-text-muted" />
                           )}
                         </div>
                       </div>
@@ -389,10 +439,13 @@ export default function ScoresPage() {
                   </button>
                   {isExpanded && (
                     <CardContent className="p-0">
-                      <div className="overflow-x-auto">
+                      {hasScores && subs[0]?.round.id && <div className="flex justify-end border-b border-border px-6 py-3"><Link href={`/debrief/${subs[0].round.id}`} className="text-sm font-semibold text-primary">Review Round {roundNum} debrief →</Link></div>}
+                      <div className="space-y-3 p-4 md:hidden">{subs.map((sub) => <div key={sub.id} className="rounded-xl border border-border bg-surface-secondary p-4"><div className="flex justify-between"><strong>{sub.market.name}</strong><span className="text-sm text-text-muted">Week +{sub.weekOffset}</span></div><dl className="mt-3 grid grid-cols-2 gap-3 text-sm"><div><dt className="text-text-muted">Occupancy</dt><dd className="font-mono tabular-nums">{sub.occupancy.toFixed(2)}</dd></div><div><dt className="text-text-muted">ADR</dt><dd className="font-mono tabular-nums">${sub.adr.toFixed(2)}</dd></div>{sub.score && <><div><dt className="text-text-muted">Occupancy error</dt><dd className="font-mono tabular-nums text-primary">{sub.score.occupancyAE.toFixed(2)}</dd></div><div><dt className="text-text-muted">ADR error</dt><dd className="font-mono tabular-nums text-success">${sub.score.adrAE.toFixed(2)}</dd></div></>}</dl></div>)}</div>
+                      <div className="hidden overflow-x-auto md:block">
                         <table className="w-full text-sm">
+                          <caption className="sr-only">Round {roundNum} forecast values and published errors</caption>
                           <thead>
-                            <tr className="text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
+                            <tr className="text-left text-text-secondary border-b border-border bg-surface-secondary">
                               <th className="px-6 py-3">Market</th>
                               <th className="px-6 py-3">Week</th>
                               <th className="px-6 py-3 text-right">Occupancy</th>
@@ -407,10 +460,10 @@ export default function ScoresPage() {
                           </thead>
                           <tbody>
                             {subs.map((sub) => (
-                              <tr key={sub.id} className="border-b border-gray-200 dark:border-gray-700 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-800">
+                              <tr key={sub.id} className="border-b border-border last:border-0 hover:bg-surface-secondary">
                                 <td className="px-6 py-4 font-medium">{sub.market.name}</td>
                                 <td className="px-6 py-4">
-                                  <span className="bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded text-gray-600 dark:text-gray-400">
+                                  <span className="bg-surface-secondary px-2 py-1 rounded text-text-secondary">
                                     +{sub.weekOffset}
                                   </span>
                                 </td>
@@ -418,10 +471,10 @@ export default function ScoresPage() {
                                 <td className="px-6 py-4 text-right">${sub.adr.toFixed(2)}</td>
                                 {sub.score && (
                                   <>
-                                    <td className="px-6 py-4 text-right text-blue-600 font-medium">
+                                    <td className="px-6 py-4 text-right text-primary font-medium">
                                       {sub.score.occupancyAE.toFixed(2)}
                                     </td>
-                                    <td className="px-6 py-4 text-right text-emerald-600 font-medium">
+                                    <td className="px-6 py-4 text-right text-success font-medium">
                                       ${sub.score.adrAE.toFixed(2)}
                                     </td>
                                   </>
@@ -438,7 +491,9 @@ export default function ScoresPage() {
             })}
         </div>
       )}
-    </div>
+      </>}
+      {activeTab === 'export' && <Card><CardHeader><CardTitle>Export your forecast history</CardTitle><CardDescription>Download predictions and published score details as CSV.</CardDescription></CardHeader><CardContent><Button onClick={handleDownload}><Download className="mr-2 h-4 w-4" />Download CSV</Button></CardContent></Card>}
+      </MotionReveal>
+    </MotionReveal>
   )
 }
-

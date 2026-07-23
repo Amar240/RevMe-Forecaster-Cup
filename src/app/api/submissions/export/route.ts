@@ -1,30 +1,38 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireUserOrResponse, jsonError } from '@/server/http'
+import { getCurrentOperationalSeason } from '@/server/season'
+import { resolveScoreTeam } from '@/server/scoped-score-team'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const { user, response } = await requireUserOrResponse()
     if (response) return response
 
-    const teamMember = await prisma.teamMember.findFirst({
-      where: { userId: user!.id },
-      include: { team: true },
-    })
+    const operationalSeason = await getCurrentOperationalSeason()
+    if (!operationalSeason) {
+      return new NextResponse('No current season found', { status: 404 })
+    }
 
-    if (!teamMember) {
+    const team = await resolveScoreTeam({ userId: user!.id, role: user!.role, seasonId: operationalSeason.id, requestedTeamId: new URL(request.url).searchParams.get('teamId') })
+    if (!team) {
       return new NextResponse('No team found', { status: 404 })
     }
 
     const submissions = await prisma.submission.findMany({
-      where: { teamId: teamMember.teamId },
+      where: {
+        teamId: team.id,
+        round: { seasonId: operationalSeason.id },
+      },
       include: { round: true, values: { include: { market: true } } },
       orderBy: [{ round: { number: 'asc' } }],
     })
 
-    const errors = await prisma.predictionError.findMany({ where: { teamId: teamMember.teamId } })
+    const errors = await prisma.predictionError.findMany({
+      where: { teamId: team.id, seasonId: operationalSeason.id },
+    })
     const errorMap = new Map<string, number>()
     for (const err of errors) {
       errorMap.set(`${err.roundId}-${err.marketId}-${err.metric}-${err.weekOffset}`, err.absError)
@@ -46,7 +54,7 @@ export async function GET() {
 
     const csvContent = csvRows.map((row) => row.join(',')).join('\n')
     return new NextResponse(csvContent, {
-      headers: { 'Content-Type': 'text/csv', 'Content-Disposition': `attachment; filename="submissions-${teamMember.team.displayId}.csv"` },
+      headers: { 'Content-Type': 'text/csv', 'Content-Disposition': `attachment; filename="submissions-${team.displayId}.csv"` },
     })
   } catch (error) {
     return jsonError(error, 'Failed to export')

@@ -4,6 +4,7 @@ import type { RoundSummary, MarketSummary, ActualSummary } from '@/features/actu
 import type { ActualsStatusEntry } from './actuals-types'
 import { MarketChip, formatDate } from './actuals-types'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   CheckCircle,
@@ -40,7 +41,7 @@ export function ActualsProgressMatrix({
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <CheckCircle className="h-5 w-5 text-green-600" />
+            <CheckCircle className="h-5 w-5 text-success" />
             Upload Status
           </CardTitle>
           <CardDescription>Track which actuals have been entered for each round</CardDescription>
@@ -51,9 +52,9 @@ export function ActualsProgressMatrix({
               <span>Overall Progress</span>
               <span className="font-medium">{progressStats.complete}/{progressStats.total}</span>
             </div>
-            <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+            <div className="h-2 overflow-hidden rounded-full bg-muted">
               <div
-                className="h-full bg-green-500 transition-all duration-300"
+                className="h-full bg-success transition-all duration-300"
                 style={{ width: `${progressStats.percentage}%` }}
               />
             </div>
@@ -66,52 +67,52 @@ export function ActualsProgressMatrix({
               const roundActuals = statusActuals.filter(a => a.roundId === round.id && !a.isVoided)
 
               return (
-                <div key={round.id} className="border rounded-lg overflow-hidden">
+                <div key={round.id} className="overflow-hidden rounded-lg border border-border">
                   <button
                     onClick={() => onToggleRound(round.id)}
-                    className="w-full p-3 flex items-center justify-between hover:bg-gray-50 transition-colors"
+                    className="flex w-full items-center justify-between p-3 transition-colors hover:bg-muted/70"
                   >
                     <div className="flex items-center gap-3">
                       {isExpanded ? (
-                        <ChevronDown className="h-4 w-4 text-gray-400" />
+                        <ChevronDown className="h-4 w-4 text-text-muted" />
                       ) : (
-                        <ChevronRight className="h-4 w-4 text-gray-400" />
+                        <ChevronRight className="h-4 w-4 text-text-muted" />
                       )}
                       <span className="font-medium">
                         Round {round.number}{round.isFinal ? ' (Final)' : ''}
                       </span>
                       <div className="flex gap-1">
                         {round.isLockedActuals && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-600">
+                          <Badge variant="neutral" className="gap-1 px-2 py-0.5">
                             <Lock className="h-3 w-3" />
                             Locked
-                          </span>
+                          </Badge>
                         )}
                         {round.scoresStale && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-amber-100 text-amber-700">
+                          <Badge variant="warning" className="gap-1 px-2 py-0.5">
                             <AlertTriangle className="h-3 w-3" />
                             Stale
-                          </span>
+                          </Badge>
                         )}
                         {round.lastScoredAt && !round.scoresStale && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-green-100 text-green-700">
+                          <Badge variant="success" className="gap-1 px-2 py-0.5">
                             <CheckCircle className="h-3 w-3" />
                             Scored
-                          </span>
+                          </Badge>
                         )}
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
-                      <div className="w-24 h-2 bg-gray-200 rounded-full overflow-hidden">
+                      <div className="h-2 w-24 overflow-hidden rounded-full bg-muted">
                         <div
                           className={`h-full transition-all duration-300 ${
-                            stats.percentage === 100 ? 'bg-green-500' : 'bg-blue-500'
+                            stats.percentage === 100 ? 'bg-success' : 'bg-primary'
                           }`}
                           style={{ width: `${stats.percentage}%` }}
                         />
                       </div>
                       <span className={`text-sm font-medium ${
-                        stats.percentage === 100 ? 'text-green-600' : 'text-gray-600'
+                        stats.percentage === 100 ? 'text-success' : 'text-text-secondary'
                       }`}>
                         {stats.complete}/{stats.total}
                       </span>
@@ -119,7 +120,7 @@ export function ActualsProgressMatrix({
                   </button>
 
                   {isExpanded && (
-                    <div className="border-t bg-gray-50 p-3">
+                    <div className="border-t border-border bg-surface-secondary p-3">
                       <div className="flex gap-2 mb-3">
                         {round.isLockedActuals ? (
                           <Button
@@ -127,7 +128,7 @@ export function ActualsProgressMatrix({
                             size="sm"
                             onClick={() => onShowUnlock(round.id)}
                             disabled={actionLoading === round.id}
-                            className="text-amber-600 border-amber-200 hover:bg-amber-50"
+                            className="border-warning/20 bg-warning-background/60 text-warning hover:bg-warning-background"
                           >
                             <Unlock className="h-4 w-4 mr-1" />
                             Unlock (Override)
@@ -144,7 +145,7 @@ export function ActualsProgressMatrix({
                           </Button>
                         )}
                         {round.lastScoredAt && (
-                          <span className="text-xs text-gray-500 flex items-center gap-1">
+                          <span className="flex items-center gap-1 text-xs text-text-muted">
                             <Clock className="h-3 w-3" />
                             Last scored: {formatDate(round.lastScoredAt)}
                           </span>
@@ -152,7 +153,7 @@ export function ActualsProgressMatrix({
                       </div>
 
                       {roundActuals.length === 0 ? (
-                        <p className="text-sm text-gray-500 text-center py-2">No actuals entered</p>
+                        <p className="py-2 text-center text-sm text-text-muted">No actuals entered</p>
                       ) : (
                         <div className="grid grid-cols-3 gap-2 text-xs">
                           {markets.map((market) => {
@@ -170,20 +171,20 @@ export function ActualsProgressMatrix({
                                 <div
                                   key={`${market.id}-${weekOffset}`}
                                   className={`p-2 rounded border ${
-                                    hasData ? 'bg-white border-green-200' : 'bg-gray-100 border-gray-200'
+                                    hasData ? 'border-success/20 bg-card' : 'border-border bg-muted'
                                   }`}
                                 >
                                   <div className="flex items-center justify-between mb-1">
                                     <MarketChip name={market.name} />
-                                    <span className="text-gray-500">W+{weekOffset}</span>
+                                    <span className="text-text-muted">W+{weekOffset}</span>
                                   </div>
                                   {hasData ? (
-                                    <div className="text-gray-600">
+                                    <div className="text-text-secondary">
                                       {occ && <div>Occ: {occ.value.toFixed(2)}</div>}
                                       {adr && <div>ADR: ${adr.value.toFixed(2)}</div>}
                                     </div>
                                   ) : (
-                                    <div className="text-gray-400">Not entered</div>
+                                    <div className="text-text-muted">Not entered</div>
                                   )}
                                 </div>
                               )

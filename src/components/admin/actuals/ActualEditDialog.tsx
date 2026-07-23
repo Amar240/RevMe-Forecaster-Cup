@@ -3,6 +3,7 @@
 import type { RoundSummary, ActualSummary, ActualRevision } from '@/features/actuals/types'
 import { MarketChip, formatDate } from './actuals-types'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -14,6 +15,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog'
 import { RefreshCw } from 'lucide-react'
+import { actualMetricMeta } from '@/lib/status-metadata'
 
 interface ActualEditDialogProps {
   actual: ActualSummary | null
@@ -49,19 +51,15 @@ export function ActualEditDialog({
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="text-sm text-gray-600">
+          <div className="text-sm text-text-secondary">
             <div className="flex gap-2 mb-2">
               <MarketChip name={actual.marketName} />
-              <span className="px-2 py-0.5 rounded bg-gray-100">Round {actual.roundNumber}</span>
-              <span className="px-2 py-0.5 rounded bg-gray-100">W+{actual.weekOffset}</span>
+              <Badge variant="neutral">Round {actual.roundNumber}</Badge>
+              <Badge variant="neutral">W+{actual.weekOffset}</Badge>
             </div>
-            <span className={`px-2 py-0.5 rounded text-xs ${
-              actual.metric === 'OCCUPANCY'
-                ? 'bg-blue-100 text-blue-700'
-                : 'bg-purple-100 text-purple-700'
-            }`}>
+            <Badge variant={actualMetricMeta[actual.metric].tone}>
               {actual.metric}
-            </span>
+            </Badge>
           </div>
 
           <div>
@@ -76,7 +74,7 @@ export function ActualEditDialog({
 
           {requiresReason && (
             <div>
-              <Label className="text-amber-600">Reason (required for locked/scored round)</Label>
+              <Label className="text-warning">Reason (required for locked/scored round)</Label>
               <Textarea
                 className="mt-1"
                 rows={2}
@@ -104,19 +102,22 @@ export function ActualEditDialog({
               <h3 className="font-medium text-sm mb-2">Audit History</h3>
               <div className="space-y-2 max-h-48 overflow-y-auto">
                 {editRevisions.map((rev) => (
-                  <div key={rev.id} className="text-xs p-2 bg-gray-50 rounded">
+                  <div key={rev.id} className="rounded-lg border border-border bg-surface-secondary p-3 text-xs">
                     <div className="flex items-center justify-between mb-1">
-                      <span className={`px-1.5 py-0.5 rounded ${
-                        rev.action === 'CREATE' ? 'bg-green-100 text-green-700' :
-                        rev.action === 'EDIT' ? 'bg-blue-100 text-blue-700' :
-                        rev.action === 'VOID' ? 'bg-red-100 text-red-700' :
-                        'bg-purple-100 text-purple-700'
-                      }`}>
+                      <Badge
+                        variant={
+                          rev.action === 'CREATE' ? 'success' :
+                          rev.action === 'EDIT' ? 'info' :
+                          rev.action === 'VOID' ? 'error' :
+                          'medal'
+                        }
+                        className="px-1.5 py-0.5"
+                      >
                         {rev.action}
-                      </span>
-                      <span className="text-gray-500">{formatDate(rev.createdAt)}</span>
+                      </Badge>
+                      <span className="text-text-muted">{formatDate(rev.createdAt)}</span>
                     </div>
-                    <div className="text-gray-600">
+                    <div className="text-text-secondary">
                       {rev.oldValue !== null && rev.newValue !== null && (
                         <span>{rev.oldValue} {'->'} {rev.newValue}</span>
                       )}
@@ -127,9 +128,9 @@ export function ActualEditDialog({
                         <span>Voided from: {rev.oldValue}</span>
                       )}
                     </div>
-                    <div className="text-gray-500 mt-1">by {rev.actor}</div>
+                    <div className="mt-1 text-text-muted">by {rev.actor}</div>
                     {rev.reason && (
-                      <div className="text-gray-600 mt-1 italic">&quot;{rev.reason}&quot;</div>
+                      <div className="mt-1 italic text-text-secondary">&quot;{rev.reason}&quot;</div>
                     )}
                   </div>
                 ))}

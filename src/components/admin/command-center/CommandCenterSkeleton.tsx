@@ -1,13 +1,13 @@
-import { CardSkeleton } from '@/components/ui/skeleton'
+import { CardSkeleton, Skeleton } from '@/components/ui/skeleton'
 
 export function CommandCenterSkeleton() {
   return (
     <div className="space-y-6">
       <div className="space-y-2">
-        <div className="h-8 w-48 bg-gray-200 rounded animate-pulse" />
-        <div className="h-4 w-64 bg-gray-200 rounded animate-pulse" />
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-4 w-64" />
       </div>
-      <div className="grid md:grid-cols-4 gap-4">
+      <div className="grid gap-4 md:grid-cols-4">
         <CardSkeleton />
         <CardSkeleton />
         <CardSkeleton />

@@ -1,11 +1,12 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import { AlertTriangle, ChevronDown, ChevronUp, Database, RefreshCw, TrendingUp, XCircle } from 'lucide-react'
 import { csrfFetch } from '@/lib/csrf'
 import { clientLogger } from '@/lib/client-logger'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { AlertTriangle, XCircle, TrendingUp, Database, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
 
 interface Anomaly {
   type: 'high_error' | 'ranking_jump' | 'bad_actuals' | 'uniform_scores'
@@ -43,34 +44,25 @@ export function AnomalyAlerts() {
   }, [])
 
   useEffect(() => {
-    fetchAnomalies()
+    void fetchAnomalies()
   }, [fetchAnomalies])
 
-  if (loading) return null
-  if (anomalies.length === 0) return null
+  if (loading || anomalies.length === 0) return null
 
-  const criticalCount = anomalies.filter(a => a.severity === 'critical').length
-  const warningCount = anomalies.filter(a => a.severity === 'warning').length
+  const criticalCount = anomalies.filter((anomaly) => anomaly.severity === 'critical').length
+  const warningCount = anomalies.filter((anomaly) => anomaly.severity === 'warning').length
 
   return (
-    <Card className={criticalCount > 0 ? 'border-red-200 bg-red-50/50' : 'border-amber-200 bg-amber-50/50'}>
+    <Card className={criticalCount > 0 ? 'border-error/20 bg-error-background' : 'border-warning/20 bg-warning-background'}>
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center justify-between">
           <span className="flex items-center gap-2 text-base">
-            <AlertTriangle className={`h-5 w-5 ${criticalCount > 0 ? 'text-red-600' : 'text-amber-600'}`} />
-            Anomaly Detection — Round {roundNumber}
+            <AlertTriangle className={`h-5 w-5 ${criticalCount > 0 ? 'text-error' : 'text-warning'}`} />
+            Anomaly Detection - Round {roundNumber}
           </span>
           <div className="flex items-center gap-2">
-            {criticalCount > 0 && (
-              <span className="text-xs font-medium bg-red-100 text-red-700 px-2 py-0.5 rounded-full">
-                {criticalCount} critical
-              </span>
-            )}
-            {warningCount > 0 && (
-              <span className="text-xs font-medium bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
-                {warningCount} warning{warningCount !== 1 ? 's' : ''}
-              </span>
-            )}
+            {criticalCount > 0 && <Badge variant="error">{criticalCount} critical</Badge>}
+            {warningCount > 0 && <Badge variant="warning">{warningCount} warning{warningCount !== 1 ? 's' : ''}</Badge>}
             <Button variant="ghost" size="sm" onClick={fetchAnomalies}>
               <RefreshCw className="h-3.5 w-3.5" />
             </Button>
@@ -78,33 +70,26 @@ export function AnomalyAlerts() {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-2">
-        {anomalies.map((anomaly, i) => {
-          const Icon = typeIcons[anomaly.type]
-          const isExpanded = expanded[i]
+        {anomalies.map((anomaly, index) => {
+          const Icon = typeIcons[anomaly.type] ?? AlertTriangle
+          const isExpanded = expanded[index]
+          const variant = anomaly.severity === 'critical' ? 'error' : 'warning'
+
           return (
-            <div
-              key={i}
-              className={`rounded-lg border p-3 ${
-                anomaly.severity === 'critical'
-                  ? 'border-red-200 bg-white'
-                  : 'border-amber-200 bg-white'
-              }`}
-            >
+            <div key={index} className="rounded-lg border border-border bg-card p-3">
               <button
-                onClick={() => setExpanded(prev => ({ ...prev, [i]: !prev[i] }))}
-                className="flex items-center justify-between w-full text-left"
+                onClick={() => setExpanded((prev) => ({ ...prev, [index]: !prev[index] }))}
+                className="flex w-full items-center justify-between text-left"
               >
                 <div className="flex items-center gap-2">
-                  <Icon className={`h-4 w-4 ${anomaly.severity === 'critical' ? 'text-red-600' : 'text-amber-600'}`} />
-                  <span className="text-sm font-medium">{anomaly.message}</span>
+                  <Icon className={`h-4 w-4 ${anomaly.severity === 'critical' ? 'text-error' : 'text-warning'}`} />
+                  <span className="text-sm font-medium text-foreground">{anomaly.message}</span>
+                  <Badge variant={variant}>{anomaly.severity}</Badge>
                 </div>
-                {anomaly.details && (
-                  isExpanded ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />
-                )}
+                {anomaly.details &&
+                  (isExpanded ? <ChevronUp className="h-4 w-4 text-text-muted" /> : <ChevronDown className="h-4 w-4 text-text-muted" />)}
               </button>
-              {isExpanded && anomaly.details && (
-                <p className="text-xs text-gray-600 mt-2 ml-6">{anomaly.details}</p>
-              )}
+              {isExpanded && anomaly.details && <p className="ml-6 mt-2 text-xs text-text-secondary">{anomaly.details}</p>}
             </div>
           )
         })}

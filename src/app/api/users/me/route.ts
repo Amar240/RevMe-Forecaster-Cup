@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireUserOrResponse, jsonOk, jsonError, parseJson } from '@/server/http'
+import { getCurrentOperationalSeason } from '@/server/season'
 import { z } from 'zod'
 
 export const dynamic = 'force-dynamic'
@@ -15,11 +16,26 @@ export async function GET() {
     const { user, response } = await requireUserOrResponse()
     if (response) return response
 
+    const operationalSeason = await getCurrentOperationalSeason()
+    if (!operationalSeason) {
+      const fullUser = await prisma.user.findUnique({
+        where: { id: user!.id },
+        include: {
+          university: true, oauthAccounts: { where: { provider: 'GOOGLE' }, select: { email: true } },
+        },
+      })
+
+      return jsonOk({
+        user: fullUser ? { ...fullUser, passwordHash: undefined, oauthAccounts: undefined, teamMemberships: [], loginMethods: { hasPassword: Boolean(fullUser.passwordHash), google: { connected: Boolean(fullUser.oauthAccounts[0]), email: fullUser.oauthAccounts[0]?.email ?? null } } } : null,
+      })
+    }
+
     const fullUser = await prisma.user.findUnique({
       where: { id: user!.id },
       include: {
-        university: true,
+        university: true, oauthAccounts: { where: { provider: 'GOOGLE' }, select: { email: true } },
         teamMemberships: {
+          where: { team: { seasonId: operationalSeason.id } },
           include: {
             team: {
               include: { supervisor: true },
@@ -29,7 +45,7 @@ export async function GET() {
       },
     })
 
-    return jsonOk({ user: fullUser })
+    return jsonOk({ user: fullUser ? { ...fullUser, passwordHash: undefined, oauthAccounts: undefined, loginMethods: { hasPassword: Boolean(fullUser.passwordHash), google: { connected: Boolean(fullUser.oauthAccounts[0]), email: fullUser.oauthAccounts[0]?.email ?? null } } } : null })
   } catch (error) {
     return jsonError(error, 'Failed to get user')
   }

@@ -1,61 +1,77 @@
 'use client'
 
-import { clientLogger } from '@/lib/client-logger'
+import { useCallback, useEffect, useState } from 'react'
+import { toast } from 'sonner'
 import {
-  changeUserRole,
-  deleteUser,
+  Edit,
+  GraduationCap,
+  Key,
+  Loader2,
+  LogOut,
+  MoreVertical,
+  Plus,
+  RefreshCw,
+  Shield,
+  Trash2,
+  Upload,
+  UserCog,
+  Users,
+} from 'lucide-react'
+import { clientLogger } from '@/lib/client-logger'
+import { csrfFetch } from '@/lib/csrf'
+import {
+  createStudent,
   forceLogout,
-  generateResetLink,
   listUsers,
+  sendResetPasswordEmail,
+  setStudentActiveStatus,
+  updateStudent,
 } from '@/features/users/api'
 import type { AdminUser } from '@/features/users/types'
-import { useEffect, useState, useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { AccessDenied } from '@/components/ui/access-denied'
 import { usePermissions } from '@/hooks/usePermissions'
-import { Users, GraduationCap, UserCog, Shield, MoreVertical, RefreshCw, Key, LogOut, Trash2, Loader2 } from 'lucide-react'
-import { toast } from 'sonner'
 import { DataTable } from '@/components/ui/data-table'
 import { CardSkeleton, TableSkeleton } from '@/components/ui/skeleton'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+
+function getRoleVariant(role: string): 'medal' | 'success' | 'info' {
+  if (role === 'ADMIN') return 'medal'
+  if (role === 'SUPERVISOR') return 'success'
+  return 'info'
+}
 
 export default function AdminUsersPage() {
   const { loading: permLoading, canPerform } = usePermissions()
   const [loading, setLoading] = useState(true)
   const [users, setUsers] = useState<AdminUser[]>([])
   const [totalUsers, setTotalUsers] = useState(0)
+  const [universities, setUniversities] = useState<{ id: string; name: string }[]>([])
   const [actionLoading, setActionLoading] = useState<string | null>(null)
-  const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null)
-  const [showRoleDialog, setShowRoleDialog] = useState(false)
-  const [showResetDialog, setShowResetDialog] = useState(false)
-  const [newRole, setNewRole] = useState<string>('')
-  const [resetLink, setResetLink] = useState('')
+  const [selectedStudent, setSelectedStudent] = useState<AdminUser | null>(null)
+  const [showStudentDialog, setShowStudentDialog] = useState(false)
+  const [savingStudent, setSavingStudent] = useState(false)
+  const [studentForm, setStudentForm] = useState({
+    firstName: '',
+    lastName: '',
+    email: '',
+    universityId: '',
+  })
   const [logoutTarget, setLogoutTarget] = useState<AdminUser | null>(null)
+  const [statusTarget, setStatusTarget] = useState<AdminUser | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<AdminUser | null>(null)
+  const [showBulkImport, setShowBulkImport] = useState(false)
+  const [bulkCsv, setBulkCsv] = useState('')
+  const [bulkImporting, setBulkImporting] = useState(false)
+  const [bulkResults, setBulkResults] = useState<{ created: number; skipped: number; errors: number } | null>(null)
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -64,54 +80,105 @@ export default function AdminUsersPage() {
       setTotalUsers(data.total ?? data.users?.length ?? 0)
     } catch (error) {
       clientLogger.error('Failed to fetch users:', error)
-    } finally {
-      setLoading(false)
+    }
+  }, [])
+
+  const fetchUniversities = useCallback(async () => {
+    try {
+      const res = await csrfFetch('/api/admin/universities')
+      const data = await res.json() as { universities?: { id: string; name: string }[]; message?: string }
+      if (!res.ok) {
+        throw new Error(data.message || 'Failed to load universities')
+      }
+
+      setUniversities(data.universities ?? [])
+    } catch (error) {
+      clientLogger.error('Failed to fetch universities:', error)
     }
   }, [])
 
   useEffect(() => {
     if (!permLoading && canPerform('users:manage')) {
-      fetchUsers()
+      setLoading(true)
+      void Promise.all([fetchUsers(), fetchUniversities()]).finally(() => {
+        setLoading(false)
+      })
     }
-  }, [permLoading, canPerform, fetchUsers])
+  }, [permLoading, canPerform, fetchUsers, fetchUniversities])
 
-  if (permLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-      </div>
-    )
+  const resetStudentForm = useCallback(() => {
+    setSelectedStudent(null)
+    setStudentForm({
+      firstName: '',
+      lastName: '',
+      email: '',
+      universityId: '',
+    })
+  }, [])
+
+  const openCreateStudentDialog = () => {
+    resetStudentForm()
+    setShowStudentDialog(true)
   }
 
-  if (!canPerform('users:manage')) {
-    return <AccessDenied title="Access Denied" message="You do not have permission to access User Management. Please contact an administrator for access." />
+  const openEditStudentDialog = (user: AdminUser) => {
+    setSelectedStudent(user)
+    setStudentForm({
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      universityId: user.universityId ?? '',
+    })
+    setShowStudentDialog(true)
   }
 
-  const handleChangeRole = async () => {
-    if (!selectedUser || !newRole) return
-    setActionLoading(selectedUser.id)
+  const handleSaveStudent = async () => {
+    if (!studentForm.firstName.trim() || !studentForm.lastName.trim() || !studentForm.email.trim() || !studentForm.universityId) {
+      toast.error('First name, last name, email, and university are required.')
+      return
+    }
+
+    setSavingStudent(true)
     try {
-      await changeUserRole(selectedUser.id, newRole)
-      fetchUsers()
-      setShowRoleDialog(false)
+      if (selectedStudent) {
+        await updateStudent(selectedStudent.id, studentForm)
+        toast.success('Student updated successfully')
+      } else {
+        const createdEmail = studentForm.email.trim()
+        const data = await createStudent(studentForm)
+        if (data.devPassword) {
+          toast.success(`Account created! Dev login: ${data.devPassword}`, {
+            duration: 15000,
+            description: `${createdEmail} can log in with password: ${data.devPassword}`,
+          })
+        } else {
+          toast.success(
+            data.emailSent
+              ? 'Student created and password reset email sent'
+              : 'Student created. Password reset email could not be sent.'
+          )
+        }
+      }
+
+      await fetchUsers()
+      resetStudentForm()
+      setShowStudentDialog(false)
     } catch (error) {
-      clientLogger.error('Change role failed:', error)
-      toast.error(error instanceof Error ? error.message : 'Failed to change role')
+      clientLogger.error('Save student failed:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to save student')
     } finally {
-      setActionLoading(null)
+      setSavingStudent(false)
     }
   }
 
-  const handleGenerateResetLink = async (user: AdminUser) => {
+  const handleSendResetEmail = async (user: AdminUser) => {
     setActionLoading(user.id)
     try {
-      const data = await generateResetLink(user.id)
-      setResetLink(data.resetLink)
-      setSelectedUser(user)
-      setShowResetDialog(true)
+      const data = await sendResetPasswordEmail(user.id)
+      toast.success(data.message)
     } catch (error) {
-      clientLogger.error('Reset link failed:', error)
-      toast.error(error instanceof Error ? error.message : 'Failed to generate reset link')
+      clientLogger.error('Reset email failed:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to send password reset email')
     } finally {
       setActionLoading(null)
     }
@@ -131,11 +198,35 @@ export default function AdminUsersPage() {
     }
   }
 
+  const executeStatusChange = async (user: AdminUser) => {
+    setActionLoading(user.id)
+    try {
+      await setStudentActiveStatus(user.id, !user.isActive)
+      toast.success(user.isActive ? 'Student deactivated' : 'Student reactivated')
+      await fetchUsers()
+    } catch (error) {
+      clientLogger.error('Student status change failed:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to update student status')
+    } finally {
+      setActionLoading(null)
+      setStatusTarget(null)
+    }
+  }
+
   const executeDeleteUser = async (user: AdminUser) => {
     setActionLoading(user.id)
     try {
-      await deleteUser(user.id)
-      fetchUsers()
+      const res = await csrfFetch(`/api/admin/users/${user.id}/delete`, {
+        method: 'DELETE',
+      })
+      const data = await res.json() as { message?: string; error?: string }
+
+      if (!res.ok) {
+        throw new Error(data.message || data.error || 'Failed to delete user')
+      }
+
+      toast.success(data.message || 'User deleted successfully')
+      await fetchUsers()
     } catch (error) {
       clientLogger.error('Delete user failed:', error)
       toast.error(error instanceof Error ? error.message : 'Failed to delete user')
@@ -145,14 +236,31 @@ export default function AdminUsersPage() {
     }
   }
 
+  if (permLoading) {
+    return (
+      <div className="flex min-h-[400px] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    )
+  }
+
+  if (!canPerform('users:manage')) {
+    return (
+      <AccessDenied
+        title="Access Denied"
+        message="You do not have permission to manage users. Contact your administrator if you need access."
+      />
+    )
+  }
+
   if (loading) {
     return (
       <div className="space-y-6">
         <div className="space-y-2">
-          <div className="h-8 w-32 bg-gray-200 rounded animate-pulse" />
-          <div className="h-4 w-48 bg-gray-200 rounded animate-pulse" />
+          <div className="h-8 w-32 animate-pulse rounded bg-surface-secondary" />
+          <div className="h-4 w-48 animate-pulse rounded bg-muted" />
         </div>
-        <div className="grid md:grid-cols-4 gap-6">
+        <div className="grid gap-6 md:grid-cols-4">
           <CardSkeleton />
           <CardSkeleton />
           <CardSkeleton />
@@ -160,7 +268,7 @@ export default function AdminUsersPage() {
         </div>
         <Card>
           <CardHeader>
-            <div className="h-6 w-24 bg-gray-200 rounded animate-pulse" />
+            <div className="h-6 w-24 animate-pulse rounded bg-surface-secondary" />
           </CardHeader>
           <CardContent>
             <TableSkeleton rows={5} columns={6} />
@@ -170,67 +278,82 @@ export default function AdminUsersPage() {
     )
   }
 
-  const students = users.filter((u) => u.role === 'STUDENT')
-  const supervisors = users.filter((u) => u.role === 'SUPERVISOR')
-  const admins = users.filter((u) => u.role === 'ADMIN')
+  const handleBulkImport = async () => {
+    if (!bulkCsv.trim()) return
+    setBulkImporting(true)
+    setBulkResults(null)
+    try {
+      const lines = bulkCsv.trim().split('\n').filter((l) => l.trim())
+      const header = lines[0].toLowerCase()
+      const hasHeader = header.includes('email') || header.includes('first') || header.includes('role')
+      const dataLines = hasHeader ? lines.slice(1) : lines
+
+      const rows = dataLines.map((line) => {
+        const [email, firstName, lastName, role, universityName, password] = line.split(',').map((s) => s.trim())
+        return { email, firstName, lastName, role: (role || 'STUDENT').toUpperCase(), universityName, password: password || undefined }
+      }).filter((r) => r.email && r.firstName && r.lastName && r.universityName)
+
+      if (rows.length === 0) {
+        toast.error('No valid rows found. Check your CSV format.')
+        return
+      }
+
+      const res = await csrfFetch('/api/admin/users/bulk-import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rows, skipExisting: true }),
+      })
+      const data = await res.json() as { summary?: { created: number; skipped: number; errors: number }; error?: string }
+      if (!res.ok) throw new Error(data.error ?? 'Import failed')
+      setBulkResults(data.summary ?? null)
+      toast.success(`Import done: ${data.summary?.created ?? 0} created, ${data.summary?.skipped ?? 0} skipped`)
+      void fetchUsers()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Bulk import failed')
+    } finally {
+      setBulkImporting(false)
+    }
+  }
+
+  const students = users.filter((user) => user.role === 'STUDENT')
+  const supervisors = users.filter((user) => user.role === 'SUPERVISOR')
+  const admins = users.filter((user) => user.role === 'ADMIN')
 
   const columns = [
     {
       key: 'name',
       header: 'Name',
       sortable: true,
-      render: (user: AdminUser) => (
-        <span className="font-medium">{user.firstName} {user.lastName}</span>
-      ),
+      render: (user: AdminUser) => <span className="font-medium text-foreground">{user.firstName} {user.lastName}</span>,
     },
     {
       key: 'email',
       header: 'Email',
       sortable: true,
-      render: (user: AdminUser) => (
-        <span className="text-gray-600">{user.email}</span>
-      ),
+      render: (user: AdminUser) => <span className="text-text-secondary">{user.email}</span>,
     },
     {
       key: 'role',
       header: 'Role',
       sortable: true,
-      render: (user: AdminUser) => (
-        <span
-          className={`text-xs px-2 py-1 rounded-full ${
-            user.role === 'ADMIN'
-              ? 'bg-purple-100 text-purple-700'
-              : user.role === 'SUPERVISOR'
-              ? 'bg-emerald-100 text-emerald-700'
-              : 'bg-blue-100 text-blue-700'
-          }`}
-        >
-          {user.role}
-        </span>
-      ),
+      render: (user: AdminUser) => <Badge variant={getRoleVariant(user.role)}>{user.role}</Badge>,
     },
     {
       key: 'university.name',
       header: 'University',
       sortable: true,
-      render: (user: AdminUser) => (
-        <span className="text-gray-600">{user.university?.name || '-'}</span>
-      ),
+      render: (user: AdminUser) => <span className="text-text-secondary">{user.university?.name || '-'}</span>,
     },
     {
       key: 'team',
       header: 'Team',
-      render: (user: AdminUser) => (
-        <span className="text-gray-600">{user.teamMemberships[0]?.team.name || '-'}</span>
-      ),
+      render: (user: AdminUser) => <span className="text-text-secondary">{user.teamMemberships[0]?.team.name || '-'}</span>,
     },
     {
       key: 'createdAt',
       header: 'Joined',
       sortable: true,
-      render: (user: AdminUser) => (
-        <span className="text-gray-500">{new Date(user.createdAt).toLocaleDateString()}</span>
-      ),
+      render: (user: AdminUser) => <span className="text-text-muted">{new Date(user.createdAt).toLocaleDateString()}</span>,
     },
     {
       key: 'actions',
@@ -239,41 +362,51 @@ export default function AdminUsersPage() {
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="sm" disabled={actionLoading === user.id}>
-              {actionLoading === user.id ? (
-                <RefreshCw className="h-4 w-4 animate-spin" />
-              ) : (
-                <MoreVertical className="h-4 w-4" />
-              )}
+              {actionLoading === user.id ? <RefreshCw className="h-4 w-4 animate-spin" /> : <MoreVertical className="h-4 w-4" />}
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem
-              onClick={() => {
-                setSelectedUser(user)
-                setNewRole(user.role)
-                setShowRoleDialog(true)
-              }}
-            >
-              <Shield className="h-4 w-4 mr-2" />
-              Change Role
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleGenerateResetLink(user)}>
-              <Key className="h-4 w-4 mr-2" />
-              Generate Reset Link
+            {user.role === 'STUDENT' ? (
+              <>
+                <DropdownMenuItem onClick={() => openEditStudentDialog(user)}>
+                  <Edit className="mr-2 h-4 w-4" />
+                  Edit Student
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setStatusTarget(user)}>
+                  <Shield className="mr-2 h-4 w-4" />
+                  {user.isActive ? 'Deactivate Student' : 'Reactivate Student'}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+              </>
+            ) : null}
+            <DropdownMenuItem onClick={() => void handleSendResetEmail(user)}>
+              <Key className="mr-2 h-4 w-4" />
+              Send Password Reset Email
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => setLogoutTarget(user)}>
-              <LogOut className="h-4 w-4 mr-2" />
+              <LogOut className="mr-2 h-4 w-4" />
               Force Logout
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem
-              className="text-red-600"
-              onClick={() => setDeleteTarget(user)}
-              disabled={user.role === 'ADMIN'}
-            >
-              <Trash2 className="h-4 w-4 mr-2" />
-              Delete User
-            </DropdownMenuItem>
+            {user.canDelete ? (
+              <DropdownMenuItem
+                className="text-error focus:text-error"
+                onClick={() => setDeleteTarget(user)}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete User
+              </DropdownMenuItem>
+            ) : (
+              <>
+                <DropdownMenuItem disabled>
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete unavailable
+                </DropdownMenuItem>
+                <div className="px-2.5 py-2 text-xs text-text-muted">
+                  {user.deleteBlockedReason || 'This account cannot be deleted from this page.'}
+                </div>
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       ),
@@ -282,54 +415,69 @@ export default function AdminUsersPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">All Users</h1>
-        <p className="text-gray-600">{totalUsers} registered users</p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-3xl font-semibold tracking-tight text-foreground">All Users</h1>
+          <p className="text-text-secondary">{totalUsers} registered users</p>
+        </div>
+        <div className="flex gap-2">
+          <Button onClick={openCreateStudentDialog}>
+            <Plus className="h-4 w-4 mr-2" />
+            Add Student
+          </Button>
+          <Button variant="outline" onClick={() => { setShowBulkImport(true); setBulkResults(null); setBulkCsv('') }}>
+            <Upload className="h-4 w-4 mr-2" />
+            Import Users
+          </Button>
+        </div>
       </div>
 
-      <div className="grid md:grid-cols-4 gap-6">
-        <Card className="bg-gradient-to-br from-gray-50 to-white">
+      <div className="grid gap-6 md:grid-cols-4">
+        <Card variant="metric" className="bg-gradient-to-br from-surface-secondary to-card">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600 flex items-center">
-              <Users className="h-4 w-4 mr-2" />
+            <CardTitle className="flex items-center text-sm font-medium text-text-secondary">
+              <Users className="mr-2 h-4 w-4 text-foreground" />
               Total
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold">{users.length}</p>
+            <p className="text-3xl font-semibold text-foreground">{users.length}</p>
           </CardContent>
         </Card>
-        <Card className="bg-gradient-to-br from-blue-50 to-white border-blue-100">
+
+        <Card variant="metric" className="border-primary/10 bg-gradient-to-br from-primary-soft to-card">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600 flex items-center">
-              <GraduationCap className="h-4 w-4 mr-2" />
+            <CardTitle className="flex items-center text-sm font-medium text-text-secondary">
+              <GraduationCap className="mr-2 h-4 w-4 text-primary" />
               Students
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold text-blue-600">{students.length}</p>
+            <p className="text-3xl font-semibold text-primary">{students.length}</p>
           </CardContent>
         </Card>
-        <Card className="bg-gradient-to-br from-emerald-50 to-white border-emerald-100">
+
+        <Card variant="metric" className="border-success/10 bg-gradient-to-br from-success-background to-card">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600 flex items-center">
-              <UserCog className="h-4 w-4 mr-2" />
+            <CardTitle className="flex items-center text-sm font-medium text-text-secondary">
+              <UserCog className="mr-2 h-4 w-4 text-success" />
               Supervisors
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold text-emerald-600">{supervisors.length}</p>
+            <p className="text-3xl font-semibold text-success">{supervisors.length}</p>
           </CardContent>
         </Card>
-        <Card className="bg-gradient-to-br from-purple-50 to-white border-purple-100">
+
+        <Card variant="metric" className="border-accent/10 bg-gradient-to-br from-accent-soft to-card">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600 flex items-center">
-              <Shield className="h-4 w-4 mr-2" />
+            <CardTitle className="flex items-center text-sm font-medium text-text-secondary">
+              <Shield className="mr-2 h-4 w-4 text-accent" />
               Admins
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold text-purple-600">{admins.length}</p>
+            <p className="text-3xl font-semibold text-accent">{admins.length}</p>
           </CardContent>
         </Card>
       </div>
@@ -360,98 +508,164 @@ export default function AdminUsersPage() {
         </CardContent>
       </Card>
 
-      <Dialog open={showRoleDialog} onOpenChange={setShowRoleDialog}>
+      <Dialog
+        open={showStudentDialog}
+        onOpenChange={(open) => {
+          setShowStudentDialog(open)
+          if (!open) {
+            resetStudentForm()
+          }
+        }}
+      >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Change User Role</DialogTitle>
+            <DialogTitle>{selectedStudent ? 'Edit Student' : 'Add Student'}</DialogTitle>
             <DialogDescription>
-              Change role for {selectedUser?.firstName} {selectedUser?.lastName}
+              {selectedStudent
+                ? 'Update student details. Supervisor and admin management stays on the dedicated surfaces.'
+                : 'Create a student account from the admin users page.'}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label>Role</Label>
-              <Select value={newRole} onValueChange={setNewRole}>
+              <Label htmlFor="student-first-name">First name</Label>
+              <Input
+                id="student-first-name"
+                value={studentForm.firstName}
+                onChange={(event) => setStudentForm((current) => ({ ...current, firstName: event.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="student-last-name">Last name</Label>
+              <Input
+                id="student-last-name"
+                value={studentForm.lastName}
+                onChange={(event) => setStudentForm((current) => ({ ...current, lastName: event.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="student-email">Email</Label>
+              <Input
+                id="student-email"
+                type="email"
+                value={studentForm.email}
+                onChange={(event) => setStudentForm((current) => ({ ...current, email: event.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>University</Label>
+              <Select
+                value={studentForm.universityId}
+                onValueChange={(value) => setStudentForm((current) => ({ ...current, universityId: value }))}
+              >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select role" />
+                  <SelectValue placeholder="Select university" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="STUDENT">Student</SelectItem>
-                  <SelectItem value="SUPERVISOR">Supervisor</SelectItem>
-                  <SelectItem value="ADMIN">Admin</SelectItem>
+                  {universities.map((university) => (
+                    <SelectItem key={university.id} value={university.id}>
+                      {university.name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowRoleDialog(false)}>
+            <Button variant="outline" onClick={() => setShowStudentDialog(false)}>
               Cancel
             </Button>
-            <Button
-              onClick={handleChangeRole}
-              disabled={actionLoading === selectedUser?.id || newRole === selectedUser?.role}
-            >
-              {actionLoading === selectedUser?.id ? 'Saving...' : 'Save'}
+            <Button onClick={() => void handleSaveStudent()} disabled={savingStudent}>
+              {savingStudent ? 'Saving...' : selectedStudent ? 'Save Changes' : 'Add Student'}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={showResetDialog} onOpenChange={setShowResetDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Password Reset Link</DialogTitle>
-            <DialogDescription>
-              Share this link with {selectedUser?.firstName} {selectedUser?.lastName} to reset their password.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4">
-            <div className="bg-gray-50 p-3 rounded-lg">
-              <p className="text-sm break-all font-mono">{resetLink}</p>
-            </div>
-            <p className="text-xs text-gray-500 mt-2">This link expires in 24 hours.</p>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                navigator.clipboard.writeText(resetLink)
-                toast.success('Link copied to clipboard')
-              }}
-            >
-              Copy Link
-            </Button>
-            <Button onClick={() => setShowResetDialog(false)}>Done</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <ConfirmDialog
         open={logoutTarget !== null}
-        onOpenChange={(open) => { if (!open) setLogoutTarget(null) }}
+        onOpenChange={(open) => {
+          if (!open) setLogoutTarget(null)
+        }}
         title="Force Logout"
         description={`Force logout ${logoutTarget?.firstName} ${logoutTarget?.lastName}? Their active sessions will be terminated.`}
         confirmLabel="Force Logout"
         variant="destructive"
         loading={actionLoading === logoutTarget?.id}
-        onConfirm={() => { if (logoutTarget) executeForceLogout(logoutTarget) }}
+        onConfirm={() => {
+          if (logoutTarget) void executeForceLogout(logoutTarget)
+        }}
+      />
+
+      <ConfirmDialog
+        open={statusTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setStatusTarget(null)
+        }}
+        title={statusTarget?.isActive ? 'Deactivate Student' : 'Reactivate Student'}
+        description={
+          statusTarget
+            ? `${statusTarget.isActive ? 'Deactivate' : 'Reactivate'} ${statusTarget.firstName} ${statusTarget.lastName}?`
+            : ''
+        }
+        confirmLabel={statusTarget?.isActive ? 'Deactivate' : 'Reactivate'}
+        variant={statusTarget?.isActive ? 'destructive' : 'default'}
+        loading={actionLoading === statusTarget?.id}
+        onConfirm={() => {
+          if (statusTarget) void executeStatusChange(statusTarget)
+        }}
       />
 
       <ConfirmDialog
         open={deleteTarget !== null}
-        onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null)
+        }}
         title="Delete User"
-        description={`Delete ${deleteTarget?.firstName} ${deleteTarget?.lastName}? This action cannot be undone.`}
+        description="Are you sure you want to delete this user? This action cannot be undone."
         confirmLabel="Delete"
         variant="destructive"
         loading={actionLoading === deleteTarget?.id}
-        onConfirm={() => { if (deleteTarget) executeDeleteUser(deleteTarget) }}
+        onConfirm={() => {
+          if (deleteTarget) void executeDeleteUser(deleteTarget)
+        }}
       />
+
+      <Dialog open={showBulkImport} onOpenChange={setShowBulkImport}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Bulk Import Users</DialogTitle>
+            <DialogDescription>
+              Paste CSV rows below. Format: <code className="text-xs bg-muted px-1 rounded">email, firstName, lastName, role, universityName, password(optional)</code>
+              <br />
+              Role must be <strong>STUDENT</strong> or <strong>SUPERVISOR</strong>. Default password is <strong>RevMe@2025!</strong> if omitted.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <Label>CSV Data</Label>
+            <Textarea
+              className="font-mono h-52 text-xs"
+              placeholder={`email,firstName,lastName,role,universityName\njohn@uni.edu,John,Doe,STUDENT,University of Nashville\njane@uni.edu,Jane,Smith,SUPERVISOR,University of Nashville`}
+              value={bulkCsv}
+              onChange={(e) => setBulkCsv(e.target.value)}
+            />
+            {bulkResults && (
+              <div className="rounded-lg border border-border p-3 text-sm space-y-1">
+                <p className="font-medium">Import Results</p>
+                <p className="text-success">✓ {bulkResults.created} users created</p>
+                <p className="text-text-secondary">→ {bulkResults.skipped} skipped (already exist)</p>
+                {bulkResults.errors > 0 && <p className="text-error">✗ {bulkResults.errors} errors</p>}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowBulkImport(false)}>Cancel</Button>
+            <Button onClick={() => void handleBulkImport()} disabled={bulkImporting || !bulkCsv.trim()}>
+              {bulkImporting ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Importing...</> : <><Upload className="h-4 w-4 mr-2" />Import</>}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
-
-
-
-
-

@@ -3,6 +3,8 @@ import { prisma } from '@/server/db'
 import { MessageVisibility, TicketCategory } from '@prisma/client'
 import { logger } from '@/server/logger'
 import { requireUserOrResponse, jsonError } from '@/server/http'
+import { getCurrentOperationalSeason } from '@/server/season'
+import { getSeasonScopedTeamMemberWhere } from '@/server/team-membership'
 
 export const dynamic = 'force-dynamic'
 
@@ -76,8 +78,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: 'Subject and message are required' }, { status: 400 })
     }
 
-    const activeSeason = await prisma.season.findFirst({
-      where: { status: 'ACTIVE' },
+    const operationalSeason = await getCurrentOperationalSeason({
+      select: { id: true },
     })
 
     let supervisorId: string | null = null
@@ -86,8 +88,18 @@ export async function POST(request: NextRequest) {
     let initialStatus: 'OPEN' | 'WAITING_ON_SUPERVISOR' | 'ESCALATED' = 'OPEN'
 
     if (authUser.role === 'STUDENT') {
+      if (!operationalSeason) {
+        return NextResponse.json(
+          { message: 'There is no current season team to contact support for yet.' },
+          { status: 422 }
+        )
+      }
+
       const teamMembership = await prisma.teamMember.findFirst({
-        where: { userId: authUser.id },
+        where: getSeasonScopedTeamMemberWhere({
+          userId: authUser.id,
+          seasonId: operationalSeason.id,
+        }),
         include: {
           team: {
             include: {
@@ -112,7 +124,7 @@ export async function POST(request: NextRequest) {
     const ticket = await prisma.supportTicket.create({
       data: {
         createdById: authUser.id,
-        seasonId: activeSeason?.id || null,
+        seasonId: operationalSeason?.id || null,
         teamId,
         supervisorId,
         category: ticketCategory,

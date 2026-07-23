@@ -3,6 +3,7 @@
 import { csrfFetch } from '@/lib/csrf'
 import { clientLogger } from '@/lib/client-logger'
 import { useState, useEffect } from 'react'
+import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -11,6 +12,8 @@ import { PasswordInput } from '@/components/ui/password-input'
 import { Pencil, Check, X, Users, Download, User, Shield, FileText } from 'lucide-react'
 import { PageLoader } from '@/components/ui/page-loader'
 import { toast } from 'sonner'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { disconnectGoogle } from '@/features/auth/api'
 
 interface UserData {
   id: string
@@ -28,6 +31,7 @@ interface UserData {
       supervisor: { firstName: string; lastName: string }
     }
   }>
+  loginMethods: { hasPassword: boolean; google: { connected: boolean; email: string | null } }
 }
 
 export default function SettingsPage() {
@@ -44,6 +48,8 @@ export default function SettingsPage() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [changingPassword, setChangingPassword] = useState(false)
   const [passwordMessage, setPasswordMessage] = useState('')
+  const [disconnectOpen, setDisconnectOpen] = useState(false)
+  const [disconnecting, setDisconnecting] = useState(false)
 
   useEffect(() => {
     fetchUser()
@@ -159,8 +165,10 @@ export default function SettingsPage() {
     }
   }
 
+  const handleDisconnectGoogle = async () => { setDisconnecting(true); try { await disconnectGoogle(); setUser((current) => current ? { ...current, loginMethods: { ...current.loginMethods, google: { connected: false, email: null } } } : current); setDisconnectOpen(false); toast.success('Google disconnected') } catch (error) { toast.error(error instanceof Error ? error.message : 'Failed to disconnect Google') } finally { setDisconnecting(false) } }
+
   if (loading) {
-    return <PageLoader message="Loading settings…" />
+    return <PageLoader message="Loading settings..." />
   }
 
   if (!user) return null
@@ -174,19 +182,22 @@ export default function SettingsPage() {
   ]
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Settings</h1>
+    <div className="mx-auto max-w-2xl space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-foreground">Settings</h1>
+        <p className="mt-1 text-sm text-text-secondary">Manage your profile, account security, and competition access.</p>
+      </div>
 
-      <div className="flex gap-1 border-b border-gray-200 dark:border-gray-800">
+      <div className="flex gap-1 rounded-lg border border-border bg-surface-secondary p-1">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             type="button"
             onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
+            className={`flex items-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-colors ${
               activeTab === tab.id
-                ? 'border-violet-500 text-violet-600 dark:text-violet-400'
-                : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+                ? 'bg-card text-foreground shadow-sm'
+                : 'text-text-secondary hover:text-foreground'
             }`}
           >
             <tab.icon className="h-4 w-4" />
@@ -196,13 +207,13 @@ export default function SettingsPage() {
       </div>
 
       {activeTab === 'profile' && message && (
-        <div className={`px-4 py-2 rounded-md text-sm ${message.includes('success') ? 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400' : 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400'}`}>
+        <div className={`rounded-md px-4 py-2 text-sm ${message.includes('success') ? 'bg-success-background text-success' : 'bg-error-background text-error'}`}>
           {message}
         </div>
       )}
 
       {activeTab === 'security' && passwordMessage && (
-        <div className={`px-4 py-2 rounded-md text-sm ${passwordMessage.includes('success') ? 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400' : 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400'}`}>
+        <div className={`rounded-md px-4 py-2 text-sm ${passwordMessage.includes('success') ? 'bg-success-background text-success' : 'bg-error-background text-error'}`}>
           {passwordMessage}
         </div>
       )}
@@ -259,21 +270,21 @@ export default function SettingsPage() {
               ) : (
                 <>
                   <div>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Name</p>
-                    <p className="font-medium">{user.firstName} {user.lastName}</p>
+                    <p className="text-sm text-text-muted">Name</p>
+                    <p className="font-medium text-foreground">{user.firstName} {user.lastName}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Email</p>
-                    <p className="font-medium">{user.email}</p>
+                    <p className="text-sm text-text-muted">Email</p>
+                    <p className="font-medium text-foreground">{user.email}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Role</p>
-                    <p className="font-medium">{user.role}</p>
+                    <p className="text-sm text-text-muted">Role</p>
+                    <Badge variant="neutral" className="mt-1 w-fit">{user.role}</Badge>
                   </div>
                   {user.university && (
                     <div>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">University</p>
-                      <p className="font-medium">{user.university.name}</p>
+                      <p className="text-sm text-text-muted">University</p>
+                      <p className="font-medium text-foreground">{user.university.name}</p>
                     </div>
                   )}
                 </>
@@ -292,30 +303,26 @@ export default function SettingsPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Team Name</p>
-                  <p className="font-medium">{team.team.name}</p>
+                  <p className="text-sm text-text-muted">Team Name</p>
+                  <p className="font-medium text-foreground">{team.team.name}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Team ID</p>
-                  <p className="font-medium">{team.team.displayId}</p>
+                  <p className="text-sm text-text-muted">Team ID</p>
+                  <p className="font-medium text-foreground">{team.team.displayId}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Supervisor</p>
-                  <p className="font-medium">{team.team.supervisor.firstName} {team.team.supervisor.lastName}</p>
+                  <p className="text-sm text-text-muted">Supervisor</p>
+                  <p className="font-medium text-foreground">{team.team.supervisor.firstName} {team.team.supervisor.lastName}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Role in Team</p>
-                  <p className="font-medium">
+                  <p className="text-sm text-text-muted">Role in Team</p>
+                  <div className="mt-1">
                     {team.isSubmitter ? (
-                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300">
-                        Submitter
-                      </span>
+                      <Badge variant="info">Submitter</Badge>
                     ) : (
-                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-300">
-                        Member
-                      </span>
+                      <Badge variant="secondary">Member</Badge>
                     )}
-                  </p>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -324,7 +331,7 @@ export default function SettingsPage() {
       )}
 
       {activeTab === 'security' && (
-        <Card>
+        <div className="space-y-6"><Card>
           <CardHeader>
             <CardTitle>Change Password</CardTitle>
             <CardDescription>Update your password to keep your account secure</CardDescription>
@@ -366,8 +373,9 @@ export default function SettingsPage() {
               </Button>
             </form>
           </CardContent>
-        </Card>
+        </Card><Card><CardHeader><CardTitle>Connected accounts</CardTitle><CardDescription>Manage external sign-in methods.</CardDescription></CardHeader><CardContent>{user.loginMethods.google.connected ? <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-medium">Connected: Google</p><p className="text-sm text-text-secondary">{user.loginMethods.google.email}</p></div><div><Button variant="outline" disabled={!user.loginMethods.hasPassword} onClick={() => setDisconnectOpen(true)}>Disconnect Google</Button>{!user.loginMethods.hasPassword && <p className="mt-2 max-w-xs text-xs text-text-muted">Set a password using password reset before disconnecting your only sign-in method.</p>}</div></div> : <p className="text-sm text-text-secondary">No Google account connected.</p>}</CardContent></Card></div>
       )}
+      <ConfirmDialog open={disconnectOpen} onOpenChange={setDisconnectOpen} title="Disconnect Google?" description="You will continue signing in with your RevME password." confirmLabel="Disconnect" loading={disconnecting} onConfirm={handleDisconnectGoogle}/>
 
       {activeTab === 'account' && (
         <>
@@ -390,14 +398,14 @@ export default function SettingsPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Rules Acknowledged</p>
+                  <p className="text-sm text-text-muted">Rules Acknowledged</p>
                   <p className="font-medium">
                     {user.rulesAcknowledgedAt ? (
-                      <span className="text-green-600 dark:text-green-400">
+                      <span className="text-success">
                         Yes - {new Date(user.rulesAcknowledgedAt).toLocaleDateString()}
                       </span>
                     ) : (
-                      <span className="text-amber-600 dark:text-amber-400">Not yet acknowledged</span>
+                      <span className="text-warning">Not yet acknowledged</span>
                     )}
                   </p>
                 </div>
@@ -409,4 +417,3 @@ export default function SettingsPage() {
     </div>
   )
 }
-

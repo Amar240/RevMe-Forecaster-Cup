@@ -42,6 +42,36 @@ describe('Teams API', () => {
       expect(data.teams[0].name).toBe('My Team')
     })
 
+    it('defaults team listings to the current operational season', async () => {
+      const { season: oldSeason } = await createSeasonWithRounds({ name: 'Old Team Listing Season' })
+      await prisma.season.update({
+        where: { id: oldSeason.id },
+        data: { status: 'COMPLETED' },
+      })
+      const { season: currentSeason } = await createSeasonWithRounds({ name: 'Current Team Listing Season' })
+
+      await createTeam({
+        name: 'Historical Supervisor Team',
+        supervisorId: supervisor.id,
+        universityId: university.id,
+        seasonId: oldSeason.id,
+      })
+      await createTeam({
+        name: 'Current Supervisor Team',
+        supervisorId: supervisor.id,
+        universityId: university.id,
+        seasonId: currentSeason.id,
+      })
+
+      await loginAs(supervisor.id)
+      const res = await GET()
+      const data = await res.json()
+
+      expect(res.status).toBe(200)
+      expect(data.teams).toHaveLength(1)
+      expect(data.teams[0].name).toBe('Current Supervisor Team')
+    })
+
     it('as admin returns all teams', async () => {
       const { season } = await createSeasonWithRounds()
       await createTeam({ name: 'Team A', supervisorId: supervisor.id, universityId: university.id, seasonId: season.id })
@@ -73,9 +103,14 @@ describe('Teams API', () => {
       expect(data.team.supervisorId).toBe(supervisor.id)
     })
 
-    it('with duplicate name returns 422', async () => {
-      await createSeasonWithRounds()
-      await createTeam({ name: 'Duplicate Name', supervisorId: supervisor.id, universityId: university.id })
+    it('with duplicate name in the active season returns 422', async () => {
+      const { season } = await createSeasonWithRounds()
+      await createTeam({
+        name: 'Duplicate Name',
+        supervisorId: supervisor.id,
+        universityId: university.id,
+        seasonId: season.id,
+      })
 
       await loginAs(supervisor.id)
       const req = makeRequest('http://localhost/api/teams', {
@@ -83,12 +118,42 @@ describe('Teams API', () => {
         body: { name: 'Duplicate Name' },
       })
       const res = await POST(req)
+      const data = await res.json()
 
       expect(res.status).toBe(422)
+      expect(data.message).toContain('already exists in this season')
     })
 
-    it('when supervisor has 10 teams returns 422', async () => {
-      await createSeasonWithRounds()
+    it('allows reusing a team name from a previous season', async () => {
+      const { season: oldSeason } = await createSeasonWithRounds({ name: 'Previous Team Name Season' })
+      await prisma.season.update({
+        where: { id: oldSeason.id },
+        data: { status: 'COMPLETED' },
+      })
+      const { season: currentSeason } = await createSeasonWithRounds({ name: 'Current Team Name Season' })
+
+      await createTeam({
+        name: 'Duplicate Name',
+        supervisorId: supervisor.id,
+        universityId: university.id,
+        seasonId: oldSeason.id,
+      })
+
+      await loginAs(supervisor.id)
+      const req = makeRequest('http://localhost/api/teams', {
+        method: 'POST',
+        body: { name: 'Duplicate Name' },
+      })
+      const res = await POST(req)
+      const data = await res.json()
+
+      expect(res.status).toBe(201)
+      expect(data.team.name).toBe('Duplicate Name')
+      expect(data.team.seasonId).toBe(currentSeason.id)
+    })
+
+    it('when supervisor has 10 teams in the active season returns 422', async () => {
+      const { season } = await createSeasonWithRounds()
 
       for (let i = 0; i < 10; i++) {
         await createTeam({
@@ -96,6 +161,7 @@ describe('Teams API', () => {
           displayId: `T-${Date.now()}-${i}`,
           supervisorId: supervisor.id,
           universityId: university.id,
+          seasonId: season.id,
         })
       }
 
@@ -107,6 +173,36 @@ describe('Teams API', () => {
       const res = await POST(req)
 
       expect(res.status).toBe(422)
+    })
+
+    it('ignores prior-season teams when enforcing the supervisor cap', async () => {
+      const { season: oldSeason } = await createSeasonWithRounds({ name: 'Historical Cap Season' })
+      await prisma.season.update({
+        where: { id: oldSeason.id },
+        data: { status: 'COMPLETED' },
+      })
+      const { season: currentSeason } = await createSeasonWithRounds({ name: 'Current Cap Season' })
+
+      for (let i = 0; i < 10; i++) {
+        await createTeam({
+          name: `Historical Team ${i}`,
+          displayId: `T-HIST-${i}`,
+          supervisorId: supervisor.id,
+          universityId: university.id,
+          seasonId: oldSeason.id,
+        })
+      }
+
+      await loginAs(supervisor.id)
+      const req = makeRequest('http://localhost/api/teams', {
+        method: 'POST',
+        body: { name: 'Current Season Team' },
+      })
+      const res = await POST(req)
+      const data = await res.json()
+
+      expect(res.status).toBe(201)
+      expect(data.team.seasonId).toBe(currentSeason.id)
     })
 
     it('with no active season returns 422', async () => {

@@ -96,12 +96,12 @@ export function ActualsUploadForm({
       </div>
 
       {selectedRoundIsLocked && (
-        <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
-          <Label className="text-amber-700 text-sm font-medium">
+        <div className="rounded-lg border border-warning/20 bg-warning-background/70 p-3">
+          <Label className="text-sm font-medium text-warning">
             Reason (required - round is locked/scored)
           </Label>
           <Textarea
-            className="mt-1 border-amber-200"
+            className="mt-1"
             rows={2}
             placeholder="Explain why this change is needed..."
             value={singleEntryReason}
@@ -110,7 +110,7 @@ export function ActualsUploadForm({
         </div>
       )}
 
-      <Button type="submit" disabled={submitting} className="w-full bg-green-600 hover:bg-green-700">
+      <Button type="submit" disabled={submitting} className="w-full">
         {submitting ? (
           <><RefreshCw className="h-4 w-4 animate-spin mr-2" /> Saving...</>
         ) : (
