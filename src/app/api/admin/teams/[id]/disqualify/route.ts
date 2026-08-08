@@ -1,7 +1,8 @@
 import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireAdminOrResponse, jsonOk, jsonError, ApiError } from '@/server/http'
-import { logAuditAction } from '@/lib/audit'
+import { buildAuditLogData } from '@/lib/audit'
+import { closeOpenSupervisorAssignment } from '@/server/team-supervisor-assignment'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,8 +22,15 @@ export async function POST(
     if (!team) throw new ApiError('Team not found', 404, 'NOT_FOUND')
     if (team.status === 'DISQUALIFIED') throw new ApiError('Team is already disqualified', 400, 'INVALID_INPUT')
 
-    await prisma.team.update({ where: { id }, data: { status: 'DISQUALIFIED', disqualifiedAt: new Date(), disqualifiedReason: reason } })
-    await logAuditAction(user!.id, 'DISQUALIFY_TEAM', 'Team', id, { teamName: team.name, reason })
+    await prisma.$transaction(async (tx) => {
+      await tx.team.update({ where: { id }, data: { status: 'DISQUALIFIED', disqualifiedAt: new Date(), disqualifiedReason: reason } })
+      await closeOpenSupervisorAssignment({ teamId: id, endedById: user!.id, reason: `Team disqualified: ${reason}`, db: tx })
+      await tx.auditLog.create({ data: buildAuditLogData(user!, 'DISQUALIFY_TEAM', 'Team', id, {
+        details: { teamName: team.name, reason },
+        before: { status: team.status },
+        after: { status: 'DISQUALIFIED' },
+      }) })
+    })
 
     return jsonOk({ message: 'Team disqualified successfully' })
   } catch (error) {

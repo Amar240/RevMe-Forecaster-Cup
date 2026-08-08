@@ -1,4 +1,4 @@
-import { requireAdminOrResponse, jsonOk, jsonError } from '@/server/http'
+import { ApiError, requireAdminOrResponse, jsonOk, jsonError } from '@/server/http'
 import { readTeamImportFormData } from '@/lib/team-import/request'
 import { previewRosterImport } from '@/server/roster-import'
 
@@ -9,8 +9,9 @@ export async function POST(request: Request) {
     const { user, response } = await requireAdminOrResponse()
     if (response) return response
 
-    const { seasonId, fileName, fileBuffer, columnMapping } = await readTeamImportFormData(request)
-    return jsonOk(await previewRosterImport({ actor: user!, mode: 'admin', seasonId, fileName, fileBuffer, columnMapping }))
+    const { seasonId, fileName, fileBuffer, batchId, fileHash, overrides, columnMapping, excludedRowNumbers, universityId, supervisorId } = await readTeamImportFormData(request)
+    if (Boolean(universityId) !== Boolean(supervisorId)) throw new ApiError('University and supervisor must be selected together', 400, 'INVALID_INPUT')
+    return jsonOk(await previewRosterImport({ actor: user!, mode: 'admin', seasonId, fileName, fileBuffer, batchId, submittedFileHash: fileHash, overrides, columnMapping, excludedRowNumbers, trustedAdminContext: universityId && supervisorId ? { universityId, supervisorId } : null }))
   } catch (error) {
     return jsonError(error, 'Failed to preview team import')
   }

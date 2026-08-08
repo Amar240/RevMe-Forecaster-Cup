@@ -35,6 +35,19 @@ Use this file to track all deployment decisions and runtime values for each envi
 - After deploying new import-assist schemas, run `npm run prewarm:import-assist`
   once with the production Bedrock role. The task sends synthetic data only.
 
+### Local Bedrock testing with an AWS profile
+
+Do not place AWS access keys in `.env` or `.env.docker`. Authenticate the AWS CLI,
+then add the optional read-only profile mount when starting the development stack:
+
+```bash
+aws sso login --profile <profile>
+AWS_PROFILE=<profile> docker compose -f docker-compose.dev.yml -f docker-compose.aws.yml up -d --build
+```
+
+The override mounts `~/.aws` read-only inside the app container and enables the
+AWS SDK shared-config loader. Production continues to use the EC2 instance role.
+
 ## Monitoring
 - CloudWatch dashboard:
 - Alarm names:

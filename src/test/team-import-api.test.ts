@@ -13,6 +13,9 @@ import {
 import { GET as getAdminTeams } from '@/app/api/admin/teams/route'
 import { POST as previewTeamImport } from '@/app/api/admin/teams/import/preview/route'
 import { POST as confirmTeamImport } from '@/app/api/admin/teams/import/confirm/route'
+import { GET as downloadTeamImportTemplate } from '@/app/api/admin/teams/import/template/route'
+import { buildRosterTemplate } from '@/lib/team-import/template'
+import { parseTeamImportFile } from '@/lib/team-import/parser'
 
 function makeFormRequest(url: string, formData: FormData) {
   return new NextRequest(url, {
@@ -40,6 +43,19 @@ function makeImportFormData(seasonId: string, fileName: string, csv: string) {
   const formData = new FormData()
   formData.append('seasonId', seasonId)
   formData.append('file', new Blob([csv], { type: 'text/csv' }), fileName)
+  return formData
+}
+
+function makeGuidedImportFormData(args: { seasonId: string; universityId: string; supervisorId: string; file: Buffer; batchId?: string; fileHash?: string }) {
+  const formData = new FormData()
+  formData.append('seasonId', args.seasonId)
+  formData.append('universityId', args.universityId)
+  formData.append('supervisorId', args.supervisorId)
+  formData.append('file', new Blob([new Uint8Array(args.file)], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), 'guided-roster.xlsx')
+  formData.append('overrides', '[]')
+  formData.append('excludedRowNumbers', '[]')
+  if (args.batchId) formData.append('batchId', args.batchId)
+  if (args.fileHash) formData.append('fileHash', args.fileHash)
   return formData
 }
 
@@ -94,6 +110,70 @@ describe('team import API', () => {
       status: 'ACTIVE',
     })
     await addTeamMember(existingTeam.id, assignedStudent.id, true)
+  })
+
+  it('downloads a canonical guided template that its own parser can read', async () => {
+    await loginAs(admin.id)
+    const response = await downloadTeamImportTemplate(new Request(`http://localhost/api/admin/teams/import/template?seasonId=${season.id}&universityId=${university.id}&supervisorId=${supervisor.id}`))
+    const workbook = Buffer.from(await response.arrayBuffer())
+    const parsed = await parseTeamImportFile({ fileName: 'downloaded-template.xlsx', fileBuffer: workbook })
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get('content-type')).toContain('spreadsheetml.sheet')
+    expect(parsed.metadata).toMatchObject({ universityName: university.name, instructorEmail: supervisor.email })
+    expect(parsed.rows).toHaveLength(10)
+    expect(parsed.rows[0].rowNumber).toBe(9)
+  })
+
+  it('round-trips a populated guided workbook through preview and confirmation with bound context', async () => {
+    await loginAs(admin.id)
+    const workbook = buildRosterTemplate({
+      mode: 'admin',
+      seasonId: season.id,
+      seasonName: season.name,
+      universityId: university.id,
+      universityName: university.name,
+      supervisorId: supervisor.id,
+      instructorName: `${supervisor.firstName} ${supervisor.lastName}`,
+      instructorEmail: supervisor.email,
+      initialRows: [{
+        teamExternalId: 'GUIDED-001',
+        teamName: 'Guided Team',
+        people: [
+          { firstName: submitter.firstName, lastName: submitter.lastName, email: submitter.email },
+          { firstName: teammate.firstName, lastName: teammate.lastName, email: teammate.email },
+        ],
+      }],
+    })
+    const context = { seasonId: season.id, universityId: university.id, supervisorId: supervisor.id, file: workbook }
+    const previewResponse = await previewTeamImport(makeFormRequest('http://localhost/api/admin/teams/import/preview', makeGuidedImportFormData(context)))
+    const preview = await previewResponse.json()
+
+    expect(previewResponse.status).toBe(200)
+    expect(preview.templateVersion).toBe('2026.2')
+    expect(preview.trustedContext).toEqual({ universityId: university.id, supervisorId: supervisor.id })
+    expect(preview.summary.validRows).toBe(1)
+
+    const confirmResponse = await confirmTeamImport(makeFormRequest('http://localhost/api/admin/teams/import/confirm', makeGuidedImportFormData({ ...context, batchId: preview.batchId, fileHash: preview.fileHash })))
+    const result = await confirmResponse.json()
+    expect(confirmResponse.status, JSON.stringify(result)).toBe(200)
+    expect(result.summary.teamsCreated).toBe(1)
+    await expect(prisma.team.findFirstOrThrow({ where: { externalTeamId: 'GUIDED-001' } })).resolves.toMatchObject({ status: 'ACTIVE', universityId: university.id, supervisorId: supervisor.id })
+  })
+
+  it('rejects a guided workbook when visible university metadata is changed', async () => {
+    await loginAs(admin.id)
+    const wrongUniversity = await createUniversity('Wrong Context University')
+    const workbook = buildRosterTemplate({
+      mode: 'admin', seasonId: season.id, seasonName: season.name,
+      universityId: wrongUniversity.id, universityName: wrongUniversity.name,
+      supervisorId: supervisor.id, instructorName: `${supervisor.firstName} ${supervisor.lastName}`, instructorEmail: supervisor.email,
+      initialRows: [{ teamExternalId: 'WRONG-001', people: [{ firstName: submitter.firstName, lastName: submitter.lastName, email: submitter.email }] }],
+    })
+    const response = await previewTeamImport(makeFormRequest('http://localhost/api/admin/teams/import/preview', makeGuidedImportFormData({ seasonId: season.id, universityId: university.id, supervisorId: supervisor.id, file: workbook })))
+    const data = await response.json()
+    expect(response.status).toBe(409)
+    expect(data.details.importDiagnostics[0].code).toBe('METADATA_CONTEXT_MISMATCH')
   })
 
   it('preview validates rows without writing teams', async () => {

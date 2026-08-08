@@ -30,7 +30,21 @@ export async function GET(request: NextRequest) {
       status: { in: ['ACTIVE', 'DISQUALIFIED'] },
     }
     if (supervisorId) {
-      whereClause.supervisorId = supervisorId
+      whereClause.OR = [
+        { supervisorId },
+        {
+          supervisorAssignments: {
+            some: {
+              supervisorId,
+              startedAt: { lte: operationalSeason.endDate },
+              OR: [
+                { endedAt: null },
+                { endedAt: { gte: operationalSeason.startDate } },
+              ],
+            },
+          },
+        },
+      ]
     }
     if (universityId) whereClause.universityId = universityId
 
@@ -38,6 +52,15 @@ export async function GET(request: NextRequest) {
       where: whereClause,
       include: {
         supervisor: { select: { firstName: true, lastName: true, email: true } },
+        supervisorAssignments: {
+          orderBy: { startedAt: 'asc' },
+          select: {
+            startedAt: true,
+            endedAt: true,
+            isApproximate: true,
+            supervisor: { select: { firstName: true, lastName: true, email: true } },
+          },
+        },
         university: { select: { name: true } },
         submissions: {
           where: { round: { seasonId: operationalSeason.id } },
@@ -65,6 +88,7 @@ export async function GET(request: NextRequest) {
       'University',
       'Supervisor',
       'Supervisor Email',
+      'Supervisor Assignment History',
       'Status',
       ...rounds.map(r => `R${r.number} Submitted`),
       ...rounds.map(r => `R${r.number} Warnings`),
@@ -78,6 +102,11 @@ export async function GET(request: NextRequest) {
         : 'None'
       const supervisorEmail = team.supervisor?.email || ''
       const totalWarnings = team.warnings.length
+      const supervisorHistory = team.supervisorAssignments.map((assignment) => {
+        const name = `${assignment.supervisor.firstName} ${assignment.supervisor.lastName}`.trim()
+        const end = assignment.endedAt?.toISOString() ?? 'present'
+        return `${name} <${assignment.supervisor.email}> [${assignment.startedAt.toISOString()} to ${end}]${assignment.isApproximate ? ' (approximate)' : ''}`
+      }).join(' | ')
 
       const submissionByRound = new Map(
         team.submissions.map(s => [s.roundId, true])
@@ -92,6 +121,7 @@ export async function GET(request: NextRequest) {
         team.university?.name || 'Unknown',
         supervisorName,
         supervisorEmail,
+        supervisorHistory,
         team.status,
         ...rounds.map(r => submissionByRound.has(r.id) ? 'Yes' : 'No'),
         ...rounds.map(r => String(warningsByRound.get(r.id) || 0)),

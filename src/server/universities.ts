@@ -27,6 +27,52 @@ export function normalizeUniversityName(name: string) {
   return formatUniversityDisplayName(name).toLowerCase()
 }
 
+function universityNameTokens(name: string) {
+  return new Set(
+    normalizeUniversityName(name)
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .split(/\s+/)
+      .filter((token) => token.length > 2 && !['the', 'and', 'of', 'university', 'college'].includes(token))
+  )
+}
+
+export function universityNameSimilarity(left: string, right: string) {
+  const normalizedLeft = normalizeUniversityName(left)
+  const normalizedRight = normalizeUniversityName(right)
+  if (normalizedLeft === normalizedRight) return 1
+  if (normalizedLeft.includes(normalizedRight) || normalizedRight.includes(normalizedLeft)) return 0.9
+
+  const leftTokens = universityNameTokens(left)
+  const rightTokens = universityNameTokens(right)
+  if (leftTokens.size === 0 || rightTokens.size === 0) return 0
+  const intersection = [...leftTokens].filter((token) => rightTokens.has(token)).length
+  return intersection / Math.max(leftTokens.size, rightTokens.size)
+}
+
+export async function findSimilarListedUniversities(
+  name: string,
+  country?: string | null,
+  db: DbClient = prisma
+) {
+  const normalizedCountry = country?.trim().toLowerCase() || null
+  const universities = await db.university.findMany({
+    where: { isListed: true },
+    select: { id: true, name: true, normalizedName: true, country: true },
+  })
+
+  return universities
+    .map((university) => ({
+      ...university,
+      similarity: universityNameSimilarity(name, university.normalizedName || university.name),
+    }))
+    .filter((university) => {
+      const countryMatches = !normalizedCountry || !university.country || university.country.toLowerCase() === normalizedCountry
+      return countryMatches && university.similarity >= 0.5
+    })
+    .sort((left, right) => right.similarity - left.similarity || left.name.localeCompare(right.name))
+    .slice(0, 5)
+}
+
 export function sameUniversity(left: UniversityRecord | null | undefined, right: UniversityRecord | null | undefined) {
   if (!left || !right) {
     return false

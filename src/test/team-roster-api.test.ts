@@ -571,7 +571,7 @@ describe('Team roster APIs', () => {
 
     const req = makeRequest(`http://localhost/api/admin/teams/${team.id}/supervisor`, {
       method: 'PATCH',
-      body: { supervisorId: otherSupervisor.id },
+      body: { supervisorId: otherSupervisor.id, reason: 'Advisor changed during competition', fingerprint: team.updatedAt.toISOString() },
     })
     const res = await patchAdminSupervisor(req, { params: Promise.resolve({ id: team.id }) })
     const data = await res.json()
@@ -593,7 +593,7 @@ describe('Team roster APIs', () => {
     await loginAs(admin.id)
     const req = makeRequest(`http://localhost/api/admin/teams/${team.id}/supervisor`, {
       method: 'PATCH',
-      body: { supervisorId: student.id },
+      body: { supervisorId: student.id, reason: 'Testing invalid supervisor selection', fingerprint: team.updatedAt.toISOString() },
     })
     const res = await patchAdminSupervisor(req, { params: Promise.resolve({ id: team.id }) })
 
@@ -610,7 +610,7 @@ describe('Team roster APIs', () => {
     await loginAs(admin.id)
     const req = makeRequest(`http://localhost/api/admin/teams/${team.id}/supervisor`, {
       method: 'PATCH',
-      body: { supervisorId: outsideSupervisor.id },
+      body: { supervisorId: outsideSupervisor.id, reason: 'Testing cross-university protection', fingerprint: team.updatedAt.toISOString() },
     })
     const res = await patchAdminSupervisor(req, { params: Promise.resolve({ id: team.id }) })
 
@@ -632,7 +632,7 @@ describe('Team roster APIs', () => {
     await loginAs(admin.id)
     const req = makeRequest(`http://localhost/api/admin/teams/${team.id}/supervisor`, {
       method: 'PATCH',
-      body: { supervisorId: otherSupervisor.id },
+      body: { supervisorId: otherSupervisor.id, reason: 'Testing supervisor capacity protection', fingerprint: team.updatedAt.toISOString() },
     })
     const res = await patchAdminSupervisor(req, { params: Promise.resolve({ id: team.id }) })
 

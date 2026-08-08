@@ -1,5 +1,9 @@
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/server/db'
+import {
+  CURRENT_SUPERVISOR_SEASON_STATUSES,
+  CURRENT_SUPERVISOR_TEAM_STATUSES,
+} from '@/server/team-supervisor-assignment'
 
 type DbClient = Prisma.TransactionClient | typeof prisma
 
@@ -79,8 +83,13 @@ export function getSeasonScopedSupervisorTeamWhere(args: {
 }): Prisma.TeamWhereInput {
   return {
     ...(args.supervisorId ? { supervisorId: args.supervisorId } : {}),
-    ...(args.seasonId ? { seasonId: args.seasonId } : {}),
+    ...(args.seasonId !== undefined ? { seasonId: args.seasonId } : {}),
     ...(args.excludeTeamId ? { id: { not: args.excludeTeamId } } : {}),
+    status: { in: [...CURRENT_SUPERVISOR_TEAM_STATUSES] },
+    OR: [
+      { seasonId: null },
+      { season: { status: { in: [...CURRENT_SUPERVISOR_SEASON_STATUSES] } } },
+    ],
   }
 }
 
@@ -118,8 +127,15 @@ export async function getSupervisorTeamCountsForSeason(args: {
     by: ['supervisorId'],
     where: {
       supervisorId: { in: supervisorIds },
-      ...(args.seasonId ? { seasonId: args.seasonId } : {}),
-      ...(args.excludeStatuses?.length ? { status: { notIn: args.excludeStatuses } } : {}),
+      ...(args.seasonId !== undefined ? { seasonId: args.seasonId } : {}),
+      status: {
+        in: [...CURRENT_SUPERVISOR_TEAM_STATUSES],
+        ...(args.excludeStatuses?.length ? { notIn: args.excludeStatuses } : {}),
+      },
+      OR: [
+        { seasonId: null },
+        { season: { status: { in: [...CURRENT_SUPERVISOR_SEASON_STATUSES] } } },
+      ],
     },
     _count: { _all: true },
   })

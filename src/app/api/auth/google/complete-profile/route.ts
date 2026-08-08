@@ -6,7 +6,7 @@ import { ApiError, jsonError, jsonOk, parseJson } from '@/server/http'
 import { registrationProfileSchema } from '@/server/registration-schema'
 import { getGoogleOAuthConfig } from '@/server/oauth-config'
 import { clearOAuthCookie, OAUTH_TTL_MS, readOAuthCookie, SIGNUP_COOKIE } from '@/server/oauth-cookies'
-import { resolveOrReusePendingUniversity } from '@/server/universities'
+import { findSimilarListedUniversities, resolveOrReusePendingUniversity } from '@/server/universities'
 
 type Pending = { sub: string; email: string; emailVerified: boolean; givenName: string; familyName: string; createdAt: number }
 export async function POST(request: NextRequest) {
@@ -15,6 +15,12 @@ export async function POST(request: NextRequest) {
     const pending = await readOAuthCookie<Pending>(SIGNUP_COOKIE, 'signup'); await clearOAuthCookie(SIGNUP_COOKIE)
     if (!pending || !pending.emailVerified || Date.now() - pending.createdAt >= OAUTH_TTL_MS) throw new ApiError('Google signup session is missing or expired', 401, 'UNAUTHORIZED')
     const data = await parseJson(request, registrationProfileSchema)
+    if (data.universitySelectionMode === 'OTHER' && !data.confirmedNoMatchingUniversity) {
+      const similarUniversities = await findSimilarListedUniversities(data.universityName!, data.country)
+      if (similarUniversities.length > 0) {
+        throw new ApiError('We found similar universities. Select the correct university or confirm that none match.', 409, 'CONFLICT', { similarUniversities })
+      }
+    }
     const university = data.universitySelectionMode === 'EXISTING' ? await prisma.university.findFirst({ where: { id: data.universityId, isListed: true }, select: { id: true } }) : await resolveOrReusePendingUniversity({ name: data.universityName!, country: data.country! })
     if (!university) throw new ApiError('Please select a listed university.', 422, 'INVALID_INPUT')
     let userId: string

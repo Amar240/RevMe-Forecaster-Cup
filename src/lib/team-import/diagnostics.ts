@@ -4,7 +4,7 @@ export const IMPORT_DIAGNOSTIC_CODES = [
   'FILE_REQUIRED', 'FILE_EMPTY', 'FILE_TOO_LARGE', 'FILE_UNSUPPORTED', 'FILE_TEMPORARY',
   'FILE_CONTENT_MISMATCH', 'CSV_BINARY', 'CSV_ENCODING_UNSUPPORTED', 'WORKBOOK_UNREADABLE',
   'WORKBOOK_UNSAFE', 'LAYOUT_UNRECOGNIZED', 'LAYOUT_REQUIRED_COLUMNS_MISSING',
-  'METADATA_TEAM_COUNT_MISMATCH', 'METADATA_INSTRUCTOR_MISMATCH', 'UNIVERSITY_REQUIRED',
+  'METADATA_TEAM_COUNT_MISMATCH', 'METADATA_INSTRUCTOR_MISMATCH', 'METADATA_CONTEXT_MISMATCH', 'UNIVERSITY_REQUIRED',
   'UNIVERSITY_UNKNOWN', 'UNIVERSITY_MISMATCH', 'TEAM_ID_REQUIRED', 'TEAM_ID_DUPLICATE_FILE',
   'TEAM_ID_DUPLICATE_SEASON', 'TEAM_NAME_REQUIRED', 'TEAM_NAME_DUPLICATE_FILE',
   'TEAM_NAME_DUPLICATE_SEASON', 'PERSON_EMAIL_REQUIRED', 'PERSON_EMAIL_MALFORMED',
@@ -23,4 +23,3 @@ export type ImportResolutionAction = 'EDIT_FIELD' | 'MAP_COLUMNS' | 'REPLACE_FIL
 export type ImportAiPolicy = 'NEVER' | 'EXPLAIN_ONLY' | 'SUGGEST_EDIT'
 export interface ImportDiagnosticTarget { rowNumber?: number; columnLabel?: TeamImportColumnLabel; field?: TeamImportOverrideField | 'universityName' }
 export interface ImportDiagnostic { code: ImportDiagnosticCode; severity: 'ERROR' | 'WARNING'; scope: ImportScope; target?: ImportDiagnosticTarget; provenance?: string; title: string; explanation: string; resolution: ImportResolutionAction; editable: boolean; aiPolicy: ImportAiPolicy; legacyMessage: string }
-

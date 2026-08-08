@@ -48,7 +48,7 @@ describe('Google OAuth routes', () => {
     process.env.GOOGLE_CLIENT_ID = 'client-id'; process.env.GOOGLE_CLIENT_SECRET = 'client-secret'
     const university = await createUniversity('Google Signup University')
     await setOAuthCookie(SIGNUP_COOKIE, { sub: 'new-sub', email: 'new-google@oauth.test', emailVerified: true, givenName: 'New', familyName: 'Google', createdAt: Date.now() }, 'signup')
-    const request = new NextRequest('http://localhost:5000/api/auth/google/complete-profile', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role: 'STUDENT', universitySelectionMode: 'EXISTING', universityId: university.id }) })
+    const request = new NextRequest('http://localhost:5000/api/auth/google/complete-profile', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role: 'STUDENT', universitySelectionMode: 'EXISTING', universityId: university.id, universityConfirmed: true }) })
     const response = await completeProfile(request)
     expect(response.status).toBe(201)
     const user = await prisma.user.findUniqueOrThrow({ where: { email: 'new-google@oauth.test' }, include: { oauthAccounts: true } })
@@ -56,7 +56,7 @@ describe('Google OAuth routes', () => {
     expect(user.oauthAccounts).toHaveLength(1)
     expect(global.__testCookieOps.some((item) => item.type === 'delete' && item.name === SIGNUP_COOKIE)).toBe(true)
     expect(await prisma.session.count({ where: { userId: user.id } })).toBe(1)
-    const replay = new NextRequest('http://localhost:5000/api/auth/google/complete-profile', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role: 'STUDENT', universitySelectionMode: 'EXISTING', universityId: university.id }) })
+    const replay = new NextRequest('http://localhost:5000/api/auth/google/complete-profile', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role: 'STUDENT', universitySelectionMode: 'EXISTING', universityId: university.id, universityConfirmed: true }) })
     expect((await completeProfile(replay)).status).toBe(401)
   })
 })

@@ -13,6 +13,14 @@ export type TeamImportCanonicalField =
 export interface TeamImportColumnMappingEntry { column: number; field: TeamImportCanonicalField; confidence: number }
 export interface TeamImportColumnMapping { headerRowIndex: number; columnMap: TeamImportColumnMappingEntry[] }
 export type ImportAssistOutcome = 'PENDING' | 'ACCEPTED' | 'REJECTED'
+export type ImportAssistUnavailableCategory =
+  | 'CREDENTIALS_MISSING'
+  | 'ACCESS_DENIED'
+  | 'MODEL_UNAVAILABLE'
+  | 'THROTTLED'
+  | 'TIMEOUT'
+  | 'SERVICE_UNAVAILABLE'
+  | 'SCHEMA_REJECTED'
 export interface ImportAssistSuggestion {
   id: string
   useCase: 'LAYOUT' | 'REPAIR'

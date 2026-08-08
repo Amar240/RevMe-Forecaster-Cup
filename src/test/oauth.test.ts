@@ -10,8 +10,9 @@ describe('Google OAuth security primitives', () => {
     const sealed = sealOAuthValue({ email: 'private@example.com' }, 'signup')
     expect(sealed).not.toContain('private@example.com')
     expect(openOAuthValue<{ email: string }>(sealed, 'signup')?.email).toBe('private@example.com')
-    const tampered = `${sealed.slice(0, -1)}${sealed.endsWith('a') ? 'b' : 'a'}`
-    expect(openOAuthValue(tampered, 'signup')).toBeNull()
+    const tamperedBytes = Buffer.from(sealed, 'base64url')
+    tamperedBytes[28] ^= 1
+    expect(openOAuthValue(tamperedBytes.toString('base64url'), 'signup')).toBeNull()
   })
 
   it('covers all reconciliation decisions', () => {

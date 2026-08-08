@@ -24,6 +24,8 @@ export async function readTeamImportFormData(request: Request) {
   const overridesEntry = formData.get('overrides')
   const columnMappingEntry = formData.get('columnMapping')
   const excludedRowsEntry = formData.get('excludedRowNumbers')
+  const universityIdEntry = formData.get('universityId')
+  const supervisorIdEntry = formData.get('supervisorId')
 
   if (typeof seasonIdEntry !== 'string' || !seasonIdEntry.trim()) {
     throw new ApiError('Season is required', 400, 'INVALID_INPUT')
@@ -49,5 +51,7 @@ export async function readTeamImportFormData(request: Request) {
     overrides: parseTeamImportOverrides(typeof overridesEntry === 'string' ? overridesEntry : null),
     columnMapping: parseColumnMapping(typeof columnMappingEntry === 'string' ? columnMappingEntry : null),
     excludedRowNumbers: parseExcludedRowNumbers(typeof excludedRowsEntry === 'string' ? excludedRowsEntry : null),
+    universityId: typeof universityIdEntry === 'string' && universityIdEntry.trim() ? universityIdEntry.trim() : null,
+    supervisorId: typeof supervisorIdEntry === 'string' && supervisorIdEntry.trim() ? supervisorIdEntry.trim() : null,
   }
 }

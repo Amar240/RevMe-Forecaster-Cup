@@ -16,6 +16,7 @@ import { POST as outcomeAssist } from '@/app/api/supervisor/roster-import/assist
 import { POST as repairAssist } from '@/app/api/supervisor/roster-import/assist/repair/route'
 import { POST as explainAssist } from '@/app/api/supervisor/roster-import/assist/explain/route'
 import { POST as previewImport } from '@/app/api/supervisor/roster-import/preview/route'
+import { POST as sharedLayoutAssist } from '@/app/api/roster-import/assist/layout/route'
 
 function upload(content: string, options: { batchId?: string; fileHash?: string } = {}) {
   const form = new FormData()
@@ -27,14 +28,44 @@ function upload(content: string, options: { batchId?: string; fileHash?: string 
 }
 
 describe('import assist API', () => {
+  let university: Awaited<ReturnType<typeof createUniversity>>
+  let season: Awaited<ReturnType<typeof createSeasonWithRounds>>['season']
+  let supervisor: Awaited<ReturnType<typeof createUser>>
+
   beforeEach(async () => {
     vi.stubEnv('BEDROCK_IMPORT_ASSIST', 'true')
     invoke.mockReset()
-    const university = await createUniversity('Assist University')
-    const { season } = await createSeasonWithRounds({ name: 'Assist Season' })
+    university = await createUniversity('Assist University')
+    season = (await createSeasonWithRounds({ name: 'Assist Season' })).season
     await prisma.season.update({ where: { id: season.id }, data: { importAssistMode: 'ON_DEMAND' } })
-    const supervisor = await createUser({ email: 'assist-supervisor@example.edu', role: 'SUPERVISOR', universityId: university.id })
+    supervisor = await createUser({ email: 'assist-supervisor@example.edu', role: 'SUPERVISOR', universityId: university.id })
     await loginAs(supervisor.id)
+  })
+
+  it('allows full admins through the shared route with trusted context and excludes sub-admins', async () => {
+    const mapping = { headerRowIndex: 0, columnMap: [
+      { column: 0, field: 'universityName', confidence: 0.9 }, { column: 1, field: 'teamExternalId', confidence: 0.9 },
+      { column: 2, field: 'submitter.firstName', confidence: 0.9 }, { column: 3, field: 'submitter.lastName', confidence: 0.9 },
+      { column: 4, field: 'submitter.email', confidence: 0.9 }, { column: 5, field: 'teamName', confidence: 0.8 },
+    ] }
+    invoke.mockResolvedValue({ data: mapping, modelId: 'test-model', inputTokens: 4, outputTokens: 2, latencyMs: 5 })
+    const request = () => {
+      const form = new FormData()
+      form.append('seasonId', season.id)
+      form.append('universityId', university.id)
+      form.append('supervisorId', supervisor.id)
+      form.append('file', new Blob(['Odd A,Odd B,Odd C,Odd D,Odd E,Odd F\nSchool,T-1,Ada,Lovelace,ada@example.edu,Team']), 'unmapped.csv')
+      return new NextRequest('http://localhost/api/roster-import/assist/layout', { method: 'POST', body: form })
+    }
+    const admin = await createUser({ email: 'assist-admin@example.edu', role: 'ADMIN' })
+    await loginAs(admin.id)
+    const response = await sharedLayoutAssist(request())
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({ available: true })
+
+    const subAdmin = await createUser({ email: 'assist-subadmin@example.edu', role: 'SUB_ADMIN', hasFullAccess: true })
+    await loginAs(subAdmin.id)
+    expect((await sharedLayoutAssist(request())).status).toBe(403)
   })
 
   it('returns 404 while disabled without invoking the model', async () => {
@@ -67,16 +98,39 @@ describe('import assist API', () => {
     expect((await layoutAssist(upload('Odd A,Odd B\nvalue,value'))).status).toBe(403)
   })
 
-  it('counts unavailable model attempts against the per-version layout limit', async () => {
-    invoke.mockResolvedValue(null)
+  it('does not count unavailable attempts as successful quota and applies a temporary cooldown', async () => {
+    invoke.mockResolvedValue({ unavailableCategory: 'CREDENTIALS_MISSING', modelId: 'test-model', region: 'us-east-2', latencyMs: 2, retryable: false })
     const csv = 'Odd A,Odd B\nvalue,value'
     const first = await layoutAssist(upload(csv))
     const data = await first.json()
     expect(first.status).toBe(200)
     expect(data.available).toBe(false)
-    const second = await layoutAssist(upload(csv, { batchId: data.batchId, fileHash: data.fileHash }))
-    expect(second.status).toBe(429)
-    expect(invoke).toHaveBeenCalledTimes(1)
+    expect(data.unavailable).toMatchObject({ category: 'CREDENTIALS_MISSING' })
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const response = await layoutAssist(upload(csv, { batchId: data.batchId, fileHash: data.fileHash }))
+      expect(response.status).toBe(200)
+      expect((await response.json()).available).toBe(false)
+    }
+    const cooldown = await layoutAssist(upload(csv, { batchId: data.batchId, fileHash: data.fileHash }))
+    expect(cooldown.status).toBe(429)
+    expect(cooldown.headers.get('Retry-After')).toBeTruthy()
+    expect(invoke).toHaveBeenCalledTimes(3)
+    const summary = (await prisma.importBatch.findUniqueOrThrow({ where: { id: data.batchId } })).summaryJson as { assist: { invocations: Array<{ outcome: string }> } }
+    expect(summary.assist.invocations).toHaveLength(3)
+    expect(summary.assist.invocations.every((item) => item.outcome === 'UNAVAILABLE')).toBe(true)
+
+    const stored = await prisma.importBatch.findUniqueOrThrow({ where: { id: data.batchId } })
+    const expiredSummary = JSON.parse(JSON.stringify(stored.summaryJson)) as {
+      assist: { invocations: Array<{ createdAt: string }> }
+    }
+    const expiredAt = new Date(Date.now() - 10 * 60_000).toISOString()
+    expiredSummary.assist.invocations.forEach((item) => { item.createdAt = expiredAt })
+    await prisma.importBatch.update({ where: { id: data.batchId }, data: { summaryJson: expiredSummary } })
+
+    const afterCooldown = await layoutAssist(upload(csv, { batchId: data.batchId, fileHash: data.fileHash }))
+    expect(afterCooldown.status).toBe(200)
+    expect((await afterCooldown.json()).available).toBe(false)
+    expect(invoke).toHaveBeenCalledTimes(4)
   })
 
   it('returns targeted repair suggestions and deterministic validation still rejects an invalid fix', async () => {
@@ -85,6 +139,11 @@ describe('import assist API', () => {
     const initialForm = new FormData(); initialForm.append('file', new Blob([new Uint8Array(workbook)]), 'registration.xlsx'); initialForm.append('overrides', '[]')
     const previewResponse = await previewImport(new NextRequest('http://localhost/api/supervisor/roster-import/preview', { method: 'POST', body: initialForm }))
     const preview = await previewResponse.json()
+    expect(preview.assist).toMatchObject({
+      repairRelevant: true,
+      repairEligible: true,
+      usage: { successfulTotal: 0, remainingTotal: 8, repair: { used: 0, remaining: 5 } },
+    })
     const affectedRow = preview.rows.find((row: { warnings: string[] }) => row.warnings.some((warning) => warning.includes('glued name')))
     const affectedPerson = [affectedRow.submitter, ...affectedRow.members].find((person: { provenance: string }) => affectedRow.warnings.some((warning: string) => warning.includes(person.provenance)))
     const columnLabel = affectedPerson.provenance.split(' · ')[1]

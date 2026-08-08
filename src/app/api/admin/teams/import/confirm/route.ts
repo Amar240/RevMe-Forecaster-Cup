@@ -9,8 +9,9 @@ export async function POST(request: Request) {
     const { user, response } = await requireAdminOrResponse()
     if (response) return response
 
-    const { seasonId, fileName, fileBuffer, batchId, columnMapping } = await readTeamImportFormData(request)
-    return jsonOk(await confirmRosterImport({ actor: user!, mode: 'admin', seasonId, batchId, fileName, fileBuffer, columnMapping }))
+    const { seasonId, fileName, fileBuffer, batchId, fileHash, overrides, columnMapping, excludedRowNumbers, universityId, supervisorId } = await readTeamImportFormData(request)
+    if (Boolean(universityId) !== Boolean(supervisorId)) throw new ApiError('University and supervisor must be selected together', 400, 'INVALID_INPUT')
+    return jsonOk(await confirmRosterImport({ actor: user!, mode: 'admin', seasonId, batchId, fileName, fileBuffer, submittedFileHash: fileHash, overrides, columnMapping, excludedRowNumbers, trustedAdminContext: universityId && supervisorId ? { universityId, supervisorId } : null }))
   } catch (error) {
     return jsonError(error, 'Failed to confirm team import')
   }

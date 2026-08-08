@@ -83,7 +83,7 @@ describe('VinUniversity roster workbook parser', () => {
     }
   })
 
-  it('selects Registration Form from the guided two-sheet template and excludes its example row', async () => {
+  it('selects Registration Form from the guided four-sheet template and excludes the separate example sheet', async () => {
     const fileBuffer = buildRosterTemplate({ universityName: 'University of Delaware', instructorName: 'Mara M', instructorEmail: 'mara@udel.edu' })
     const parsed = await parseTeamImportFile({ fileName: 'roster-template.xlsx', fileBuffer })
 
@@ -93,9 +93,9 @@ describe('VinUniversity roster workbook parser', () => {
       instructorEmail: 'mara@udel.edu',
     })
     expect(parsed.rows).toHaveLength(10)
-    expect(parsed.rows[0]).toMatchObject({ rowNumber: 10, teamExternalId: 'University of Delaware1' })
+    expect(parsed.rows[0]).toMatchObject({ rowNumber: 9, teamExternalId: 'University of Delaware1' })
     expect(parsed.rows.some((row) => row.teamExternalId.includes('EXAMPLE'))).toBe(false)
-    expect(parsed.ignoredEmptyRows).toBeGreaterThan(0)
+    expect(parsed.ignoredEmptyRows).toBe(0)
   })
 
   it('normalizes and applies overrides while rejecting changed originals', async () => {

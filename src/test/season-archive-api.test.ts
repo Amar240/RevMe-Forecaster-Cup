@@ -355,7 +355,7 @@ describe('Season archive and wipe APIs', () => {
     const resultsCsv = resultsUpload?.input.Body as string
 
     expect(participantsCsv.split('\n')[0]).toBe(
-      'seasonName,seasonStatus,seasonStartDate,seasonEndDate,teamId,teamDisplayId,teamExternalId,teamName,teamStatus,disqualifiedReason,warningCount,universityName,universityCountry,supervisorEmail,supervisorFirstName,supervisorLastName,memberEmail,memberFirstName,memberLastName,memberUniversity,memberCountry,isSubmitter,joinedAt'
+      'seasonName,seasonStatus,seasonStartDate,seasonEndDate,teamId,teamDisplayId,teamExternalId,teamName,teamStatus,disqualifiedReason,warningCount,universityName,universityCountry,supervisorEmail,supervisorFirstName,supervisorLastName,supervisorAssignmentHistory,memberEmail,memberFirstName,memberLastName,memberUniversity,memberCountry,isSubmitter,joinedAt'
     )
     const participantRows = parseCsv(participantsCsv)
     const alphaParticipant = participantRows.find((row) => row.teamDisplayId === 'T-ARCH-1')
@@ -400,7 +400,7 @@ describe('Season archive and wipe APIs', () => {
     })
 
     expect(resultsCsv.split('\n')[0]).toBe(
-      'seasonName,rank,teamDisplayId,teamExternalId,teamName,teamStatus,universityName,supervisorEmail,supervisorFirstName,supervisorLastName,submitterEmail,submitterFirstName,submitterLastName,memberCount,submissionCount,totalRounds,warningCount,disqualifiedReason,combinedMape,occupancyMape,adrMape,nErrors,nashvilleCombinedMape,nashvilleOccupancyMape,nashvilleAdrMape,dubaiCombinedMape,dubaiOccupancyMape,dubaiAdrMape,hamburgCombinedMape,hamburgOccupancyMape,hamburgAdrMape,round1Mape,round2Mape,round3Mape,round4Mape,round5Mape,round6Mape,round7Mape'
+      'seasonName,rank,teamDisplayId,teamExternalId,teamName,teamStatus,universityName,supervisorEmail,supervisorFirstName,supervisorLastName,supervisorAssignmentHistory,submitterEmail,submitterFirstName,submitterLastName,memberCount,submissionCount,totalRounds,warningCount,disqualifiedReason,combinedMape,occupancyMape,adrMape,nErrors,nashvilleCombinedMape,nashvilleOccupancyMape,nashvilleAdrMape,dubaiCombinedMape,dubaiOccupancyMape,dubaiAdrMape,hamburgCombinedMape,hamburgOccupancyMape,hamburgAdrMape,round1Mape,round2Mape,round3Mape,round4Mape,round5Mape,round6Mape,round7Mape'
     )
     const resultRows = parseCsv(resultsCsv)
     const betaResult = resultRows.find((row) => row.teamDisplayId === 'T-ARCH-2')

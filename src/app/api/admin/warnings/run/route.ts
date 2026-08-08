@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/db'
 import { requireAdminOrResponse, jsonOk, jsonError } from '@/server/http'
 import { logAuditAction } from '@/lib/audit'
+import { closeOpenSupervisorAssignment } from '@/server/team-supervisor-assignment'
 
 export const dynamic = 'force-dynamic'
 
@@ -81,22 +82,23 @@ export async function POST() {
     })
 
     let disqualified = 0
-    const disqualifyOps = teamsToDisqualify
-      .filter((t) => t._count.warnings >= 3)
-      .map((team) =>
-        prisma.team.update({
-          where: { id: team.id },
-          data: {
-            status: 'DISQUALIFIED',
-            disqualifiedAt: new Date(),
-            disqualifiedReason: 'Three missed submissions',
-          },
-        })
-      )
+    const disqualifiedTeams = teamsToDisqualify.filter((t) => t._count.warnings >= 3)
 
-    if (disqualifyOps.length > 0) {
-      await prisma.$transaction(disqualifyOps)
-      disqualified = disqualifyOps.length
+    if (disqualifiedTeams.length > 0) {
+      await prisma.$transaction(async (tx) => {
+        for (const team of disqualifiedTeams) {
+          await tx.team.update({
+            where: { id: team.id },
+            data: {
+              status: 'DISQUALIFIED',
+              disqualifiedAt: new Date(),
+              disqualifiedReason: 'Three missed submissions',
+            },
+          })
+          await closeOpenSupervisorAssignment({ teamId: team.id, endedById: user!.id, reason: 'Team disqualified after three missed submissions', db: tx })
+        }
+      })
+      disqualified = disqualifiedTeams.length
     }
 
     await logAuditAction(user!.id, 'RUN_WARNINGS', 'System', null, {

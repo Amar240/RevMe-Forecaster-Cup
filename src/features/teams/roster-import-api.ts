@@ -11,9 +11,23 @@ async function parse<T>(response: Response): Promise<T> {
   return data as T
 }
 
-function form(file: File, options?: { batchId?: string; fileHash?: string; overrides?: TeamImportOverride[]; columnMapping?: TeamImportColumnMapping | null; excludedRowNumbers?: number[] }) {
+type RosterRequestOptions = {
+  seasonId?: string
+  universityId?: string
+  supervisorId?: string
+  batchId?: string
+  fileHash?: string
+  overrides?: TeamImportOverride[]
+  columnMapping?: TeamImportColumnMapping | null
+  excludedRowNumbers?: number[]
+}
+
+function form(file: File, options?: RosterRequestOptions) {
   const data = new FormData()
   data.append('file', file)
+  if (options?.seasonId) data.append('seasonId', options.seasonId)
+  if (options?.universityId) data.append('universityId', options.universityId)
+  if (options?.supervisorId) data.append('supervisorId', options.supervisorId)
   if (options?.batchId) data.append('batchId', options.batchId)
   if (options?.fileHash) data.append('fileHash', options.fileHash)
   data.append('overrides', JSON.stringify(options?.overrides ?? []))
@@ -31,7 +45,7 @@ export async function downloadSupervisorRosterTemplate() {
   const blob = await response.blob(); const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'revme-roster-template.xlsx'; anchor.click(); URL.revokeObjectURL(url)
 }
 export async function withdrawSupervisorImportedTeam(teamId: string, reason?: string) { return parse<{ message: string }>(await csrfFetch(`/api/supervisor/roster-import/teams/${teamId}/withdraw`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason }) })) }
-export async function requestImportLayoutAssist<T>(file: File, options?: { batchId?: string; fileHash?: string }) { return parse<T>(await csrfFetch('/api/supervisor/roster-import/assist/layout', { method: 'POST', body: form(file, options) })) }
-export async function requestImportRepairAssist<T>(file: File, options: { batchId: string; fileHash: string; overrides: TeamImportOverride[]; columnMapping?: TeamImportColumnMapping | null; excludedRowNumbers?: number[] }) { return parse<T>(await csrfFetch('/api/supervisor/roster-import/assist/repair', { method: 'POST', body: form(file, options) })) }
-export async function requestImportExplanation<T>(file: File, options: { batchId: string; fileHash: string; overrides: TeamImportOverride[]; columnMapping?: TeamImportColumnMapping | null; excludedRowNumbers?: number[] }) { return parse<T>(await csrfFetch('/api/supervisor/roster-import/assist/explain', { method: 'POST', body: form(file, options) })) }
-export async function recordImportAssistOutcome(batchId: string, suggestionId: string, outcome: 'ACCEPTED' | 'REJECTED') { return parse<{ recorded: true }>(await csrfFetch('/api/supervisor/roster-import/assist/outcome', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ batchId, suggestionId, outcome }) })) }
+export async function requestImportLayoutAssist<T>(file: File, options?: Pick<RosterRequestOptions, 'seasonId' | 'universityId' | 'supervisorId' | 'batchId' | 'fileHash'>) { return parse<T>(await csrfFetch('/api/roster-import/assist/layout', { method: 'POST', body: form(file, options) })) }
+export async function requestImportRepairAssist<T>(file: File, options: RosterRequestOptions & { batchId: string; fileHash: string; overrides: TeamImportOverride[] }) { return parse<T>(await csrfFetch('/api/roster-import/assist/repair', { method: 'POST', body: form(file, options) })) }
+export async function requestImportExplanation<T>(file: File, options: RosterRequestOptions & { batchId: string; fileHash: string; overrides: TeamImportOverride[] }) { return parse<T>(await csrfFetch('/api/roster-import/assist/explain', { method: 'POST', body: form(file, options) })) }
+export async function recordImportAssistOutcome(batchId: string, suggestionId: string, outcome: 'ACCEPTED' | 'REJECTED', seasonId?: string) { return parse<{ recorded: true }>(await csrfFetch('/api/roster-import/assist/outcome', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ batchId, suggestionId, outcome, seasonId }) })) }

@@ -5,6 +5,10 @@ import { prisma } from '@/server/db'
 import { ApiError } from '@/server/http'
 import { countSupervisorTeamsInSeason } from '@/server/team-membership'
 import { sameUniversity } from '@/server/universities'
+import {
+  closeOpenSupervisorAssignment,
+  createInitialSupervisorAssignment,
+} from '@/server/team-supervisor-assignment'
 
 type DbClient = Prisma.TransactionClient | typeof prisma
 type TeamManagementActor = Pick<User, 'id' | 'email' | 'role'>
@@ -313,6 +317,14 @@ export async function createAdminTeam(args: {
       select: teamMutationSelect,
     })
 
+    await createInitialSupervisorAssignment({
+      teamId: team.id,
+      supervisorId: team.supervisorId,
+      assignedById: args.actor.id,
+      reason: 'Initial admin team assignment',
+      db: tx,
+    })
+
     await tx.auditLog.create({
       data: buildAuditLogData(args.actor, 'TEAM_CREATED', 'Team', team.id, {
         details: {
@@ -459,6 +471,12 @@ export async function setAdminTeamStatus(args: {
         data: { status: 'ARCHIVED' },
         select: teamMutationSelect,
       })
+      await closeOpenSupervisorAssignment({
+        teamId: currentTeam.id,
+        endedById: args.actor.id,
+        reason: 'Team archived',
+        db: tx,
+      })
 
       await tx.auditLog.create({
         data: buildAuditLogData(args.actor, 'TEAM_ARCHIVED', 'Team', currentTeam.id, {
@@ -479,6 +497,26 @@ export async function setAdminTeamStatus(args: {
     assertCanRestoreTeam(currentTeam)
 
     return prisma.$transaction(async (tx) => {
+      let restoredSupervisorId = currentTeam.supervisorId
+      if (
+        !currentTeam.season ||
+        currentTeam.season.status === 'COMPLETED' ||
+        !currentTeam.supervisor ||
+        !currentTeam.supervisor.isActive ||
+        !sameUniversity(currentTeam.university, currentTeam.supervisor.university)
+      ) {
+        restoredSupervisorId = null
+      }
+      if (restoredSupervisorId) {
+        const currentCount = await countSupervisorTeamsInSeason({
+          supervisorId: restoredSupervisorId,
+          seasonId: currentTeam.seasonId,
+          excludeTeamId: currentTeam.id,
+          db: tx,
+        })
+        if (currentCount >= TEAM_SUPERVISOR_CAP) restoredSupervisorId = null
+      }
+
       const updatedTeam = await tx.team.update({
         where: { id: currentTeam.id },
         data: {
@@ -488,8 +526,18 @@ export async function setAdminTeamStatus(args: {
           rejectionReason: null,
           disqualifiedAt: null,
           disqualifiedReason: null,
+          supervisorId: restoredSupervisorId,
         },
         select: teamMutationSelect,
+      })
+
+      await createInitialSupervisorAssignment({
+        teamId: currentTeam.id,
+        supervisorId: restoredSupervisorId,
+        assignedById: args.actor.id,
+        reason: 'Assignment restored with team',
+        source: 'RESTORED',
+        db: tx,
       })
 
       await tx.auditLog.create({

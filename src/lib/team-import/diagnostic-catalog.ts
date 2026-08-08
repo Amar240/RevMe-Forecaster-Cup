@@ -18,6 +18,7 @@ export const IMPORT_DIAGNOSTIC_CATALOG = {
   LAYOUT_REQUIRED_COLUMNS_MISSING: d('LAYOUT', 'Required roster columns are missing', 'Add or map the university, team ID, and corresponding member fields.', 'MAP_COLUMNS', true, 'EXPLAIN_ONLY'),
   METADATA_TEAM_COUNT_MISMATCH: d('METADATA', 'Declared team count differs from the rows found', 'Review the workbook metadata and team rows before importing.', 'EDIT_FIELD', true, 'EXPLAIN_ONLY'),
   METADATA_INSTRUCTOR_MISMATCH: d('METADATA', 'Instructor email differs from the uploader', 'Check that this is the correct roster for your account.', 'NONE', false, 'EXPLAIN_ONLY'),
+  METADATA_CONTEXT_MISMATCH: d('METADATA', 'Workbook context was changed', 'This guided workbook belongs to a different university or supervisor. Download a new template for the selected context.', 'DOWNLOAD_TEMPLATE'),
   UNIVERSITY_REQUIRED: d('UNIVERSITY', 'University is required', 'Enter the university associated with this team.', 'EDIT_FIELD', true),
   UNIVERSITY_UNKNOWN: d('UNIVERSITY', 'University was not recognized', 'Use the university registered in RevME or contact an administrator.', 'CONTACT_ADMIN'),
   UNIVERSITY_MISMATCH: d('UNIVERSITY', 'University does not match your account', 'Supervisors may import teams only for their own university.', 'CONTACT_ADMIN'),

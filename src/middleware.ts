@@ -76,6 +76,10 @@ export function middleware(request: NextRequest) {
   const method = request.method.toUpperCase()
   const isUnsafe = UNSAFE_METHODS.has(method)
 
+  if (pathname === '/templates/team-import-template.xlsx') {
+    return NextResponse.redirect(new URL('/admin/teams/import?template=select-context', request.url))
+  }
+
   if (pathname.startsWith('/api')) {
     const host = normalizeOrigin(request.nextUrl.origin)
     const configuredOrigin = normalizeOrigin(getAppBaseUrl())

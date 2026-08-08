@@ -17,13 +17,14 @@ export async function GET(request: NextRequest) {
         id: true,
         name: true,
         normalizedName: true,
+        country: true,
         createdAt: true,
       },
       orderBy: [{ createdAt: 'asc' }, { name: 'asc' }],
     })
 
     const seen = new Set<string>()
-    const options: { id: string; name: string }[] = []
+    const options: { id: string; name: string; country: string | null; normalizedName: string }[] = []
 
     for (const university of universities) {
       const normalizedName = normalizeUniversityName(university.normalizedName || university.name)
@@ -36,7 +37,12 @@ export async function GET(request: NextRequest) {
       }
 
       seen.add(normalizedName)
-      options.push({ id: university.id, name: university.name })
+      options.push({
+        id: university.id,
+        name: university.name,
+        country: university.country,
+        normalizedName,
+      })
 
     }
 

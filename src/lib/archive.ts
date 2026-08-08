@@ -31,6 +31,7 @@ type ParticipantsRow = {
   supervisorEmail: string
   supervisorFirstName: string
   supervisorLastName: string
+  supervisorAssignmentHistory: string
   memberEmail: string
   memberFirstName: string
   memberLastName: string
@@ -57,6 +58,7 @@ type ResultsRow = {
   supervisorEmail: string
   supervisorFirstName: string
   supervisorLastName: string
+  supervisorAssignmentHistory: string
   submitterEmail: string
   submitterFirstName: string
   submitterLastName: string
@@ -172,6 +174,20 @@ function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error)
 }
 
+function formatSupervisorAssignmentHistory(assignments: Array<{
+  startedAt: Date
+  endedAt: Date | null
+  isApproximate: boolean
+  supervisor: { email: string; firstName: string; lastName: string }
+}>) {
+  return assignments.map((assignment) => {
+    const name = `${assignment.supervisor.firstName} ${assignment.supervisor.lastName}`.trim()
+    const start = assignment.startedAt.toISOString()
+    const end = assignment.endedAt?.toISOString() ?? 'present'
+    return `${name} <${assignment.supervisor.email}> [${start} to ${end}]${assignment.isApproximate ? ' (approximate)' : ''}`
+  }).join(' | ')
+}
+
 async function buildParticipantsCsv(seasonId: string) {
   const season = await prisma.season.findUnique({
     where: { id: seasonId },
@@ -208,6 +224,15 @@ async function buildParticipantsCsv(seasonId: string) {
           email: true,
           firstName: true,
           lastName: true,
+        },
+      },
+      supervisorAssignments: {
+        orderBy: { startedAt: 'asc' },
+        select: {
+          startedAt: true,
+          endedAt: true,
+          isApproximate: true,
+          supervisor: { select: { email: true, firstName: true, lastName: true } },
         },
       },
       members: {
@@ -250,6 +275,7 @@ async function buildParticipantsCsv(seasonId: string) {
     'supervisorEmail',
     'supervisorFirstName',
     'supervisorLastName',
+    'supervisorAssignmentHistory',
     'memberEmail',
     'memberFirstName',
     'memberLastName',
@@ -279,6 +305,7 @@ async function buildParticipantsCsv(seasonId: string) {
       supervisorEmail: team.supervisor?.email ?? '',
       supervisorFirstName: team.supervisor?.firstName ?? '',
       supervisorLastName: team.supervisor?.lastName ?? '',
+      supervisorAssignmentHistory: formatSupervisorAssignmentHistory(team.supervisorAssignments),
     }
 
     if (team.members.length === 0) {
@@ -328,6 +355,7 @@ async function buildParticipantsCsv(seasonId: string) {
       row.supervisorEmail,
       row.supervisorFirstName,
       row.supervisorLastName,
+      row.supervisorAssignmentHistory,
       row.memberEmail,
       row.memberFirstName,
       row.memberLastName,
@@ -394,6 +422,15 @@ async function buildResultsCsv(seasonId: string) {
           email: true,
           firstName: true,
           lastName: true,
+        },
+      },
+      supervisorAssignments: {
+        orderBy: { startedAt: 'asc' },
+        select: {
+          startedAt: true,
+          endedAt: true,
+          isApproximate: true,
+          supervisor: { select: { email: true, firstName: true, lastName: true } },
         },
       },
       members: {
@@ -532,6 +569,7 @@ async function buildResultsCsv(seasonId: string) {
       supervisorEmail: team.supervisor?.email ?? '',
       supervisorFirstName: team.supervisor?.firstName ?? '',
       supervisorLastName: team.supervisor?.lastName ?? '',
+      supervisorAssignmentHistory: formatSupervisorAssignmentHistory(team.supervisorAssignments),
       submitterEmail: submitter?.email ?? '',
       submitterFirstName: submitter?.firstName ?? '',
       submitterLastName: submitter?.lastName ?? '',
@@ -601,6 +639,7 @@ async function buildResultsCsv(seasonId: string) {
     'supervisorEmail',
     'supervisorFirstName',
     'supervisorLastName',
+    'supervisorAssignmentHistory',
     'submitterEmail',
     'submitterFirstName',
     'submitterLastName',
@@ -644,6 +683,7 @@ async function buildResultsCsv(seasonId: string) {
       row.supervisorEmail,
       row.supervisorFirstName,
       row.supervisorLastName,
+      row.supervisorAssignmentHistory,
       row.submitterEmail,
       row.submitterFirstName,
       row.submitterLastName,

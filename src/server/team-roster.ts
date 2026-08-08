@@ -6,7 +6,6 @@ import { sameUniversity } from '@/server/universities'
 import {
   ensureUniqueTeamName,
   normalizeTeamName,
-  resolveAssignableSupervisor,
   TEAM_SUPERVISOR_CAP,
 } from '@/server/team-management'
 import {
@@ -14,6 +13,8 @@ import {
   getSeasonScopedMembershipFilter,
   getSupervisorTeamCountsForSeason,
 } from '@/server/team-membership'
+import { changeTeamSupervisorInTransaction } from '@/server/team-supervisor-change'
+import { getTeamDeletionEligibility } from '@/server/team-cleanup'
 
 type DbClient = Prisma.TransactionClient | typeof prisma
 type AccessMode = 'admin' | 'supervisor'
@@ -451,50 +452,27 @@ export async function setTeamSubmitter(args: {
 export async function reassignTeamSupervisor(args: {
   actor: RosterActor
   teamId: string
-  supervisorId: string
+  supervisorId: string | null
+  reason: string
+  fingerprint: Date
 }) {
-  return prisma.$transaction(async (tx) => {
-    const team = await getRosterTeam(args.teamId, tx)
+  if (args.actor.role !== 'ADMIN') {
+    throw new ApiError('Only full administrators can change team supervisors.', 403, 'FORBIDDEN')
+  }
 
-    if (team.supervisorId === args.supervisorId) {
-      return team
-    }
-
-    const supervisor = await resolveAssignableSupervisor({
+  await prisma.$transaction(
+    (tx) => changeTeamSupervisorInTransaction({
+      tx,
+      actor: args.actor,
+      teamId: args.teamId,
       supervisorId: args.supervisorId,
-      university: team.university,
-      seasonId: team.seasonId,
-      teamIdToExclude: team.id,
-      db: tx,
-    })
+      reason: args.reason,
+      expectedUpdatedAt: args.fingerprint,
+    }),
+    { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
+  )
 
-    const updatedTeam = await tx.team.update({
-      where: { id: team.id },
-      data: { supervisorId: supervisor.id },
-      include: teamRosterInclude,
-    })
-
-    await tx.auditLog.create({
-      data: buildAuditLogData(args.actor, 'TEAM_SUPERVISOR_CHANGED', 'Team', team.id, {
-        details: {
-          previousSupervisorId: team.supervisorId,
-          previousSupervisorEmail: team.supervisor?.email ?? null,
-          nextSupervisorId: supervisor.id,
-          nextSupervisorEmail: supervisor.email,
-        },
-        before: {
-          supervisorId: team.supervisorId,
-          supervisorEmail: team.supervisor?.email ?? null,
-        },
-        after: {
-          supervisorId: updatedTeam.supervisorId,
-          supervisorEmail: updatedTeam.supervisor?.email ?? null,
-        },
-      }),
-    })
-
-    return updatedTeam
-  })
+  return getRosterTeam(args.teamId, prisma)
 }
 
 export async function moveTeamMembers(args: {
@@ -646,16 +624,37 @@ export async function getAdminTeamDetail(teamId: string) {
     throw new ApiError('Team not found', 404, 'NOT_FOUND')
   }
 
-  const recentActivity = await prisma.auditLog.findMany({
-    where: {
-      entityType: 'Team',
-      entityId: teamId,
-    },
-    orderBy: { createdAt: 'desc' },
-    take: 12,
-  })
+  const [recentActivity, assignmentHistory, deletionEligibility] = await Promise.all([
+    prisma.auditLog.findMany({
+      where: {
+        entityType: 'Team',
+        entityId: teamId,
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 12,
+    }),
+    prisma.teamSupervisorAssignment.findMany({
+      where: { teamId },
+      select: {
+        id: true,
+        startedAt: true,
+        endedAt: true,
+        reason: true,
+        endReason: true,
+        source: true,
+        isApproximate: true,
+        supervisor: {
+          select: { id: true, firstName: true, lastName: true, email: true },
+        },
+        assignedBy: { select: { id: true, firstName: true, lastName: true, email: true } },
+        endedBy: { select: { id: true, firstName: true, lastName: true, email: true } },
+      },
+      orderBy: { startedAt: 'desc' },
+    }),
+    getTeamDeletionEligibility(teamId),
+  ])
 
-  return { team, recentActivity }
+  return { team, recentActivity, assignmentHistory, deletionEligibility }
 }
 
 export async function searchEligibleStudents(args: {

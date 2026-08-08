@@ -124,6 +124,24 @@ describe('POST /api/auth/login', () => {
 })
 
 describe('POST /api/auth/register', () => {
+  it('requires the university review confirmation on the server', async () => {
+    const university = await createUniversity('Unconfirmed Registration University')
+    const response = await registerHandler(makeRequest(`${BASE}/api/auth/register`, {
+      method: 'POST',
+      body: {
+        email: 'unconfirmed@test.com',
+        password: 'Password123!',
+        firstName: 'Not',
+        lastName: 'Confirmed',
+        role: 'SUPERVISOR',
+        universitySelectionMode: 'EXISTING',
+        universityId: university.id,
+      },
+    }))
+    expect(response.status).toBe(400)
+    expect(await prisma.user.findUnique({ where: { email: 'unconfirmed@test.com' } })).toBeNull()
+  })
+
   it('creates a new unverified user and returns verification metadata', async () => {
     const university = await createUniversity('Listed Registration University')
 
@@ -136,6 +154,7 @@ describe('POST /api/auth/register', () => {
         lastName: 'User',
         role: 'STUDENT',
         universitySelectionMode: 'EXISTING',
+        universityConfirmed: true,
         universityId: university.id,
         country: 'United States',
       },
@@ -173,6 +192,7 @@ describe('POST /api/auth/register', () => {
         lastName: 'User',
         role: 'STUDENT',
         universitySelectionMode: 'EXISTING',
+        universityConfirmed: true,
         universityId: uni.id,
         country: 'United States',
       },
@@ -197,6 +217,7 @@ describe('POST /api/auth/register', () => {
         lastName: 'Pass',
         role: 'STUDENT',
         universitySelectionMode: 'EXISTING',
+        universityConfirmed: true,
         universityId: university.id,
         country: 'United States',
       },
@@ -231,6 +252,8 @@ describe('POST /api/auth/register', () => {
         lastName: 'Fill',
         role: 'SUPERVISOR',
         universitySelectionMode: 'OTHER',
+        universityConfirmed: true,
+        confirmedNoMatchingUniversity: true,
         universityName: 'Existing University',
         country: 'India',
       },
@@ -258,6 +281,8 @@ describe('POST /api/auth/register', () => {
         lastName: 'User',
         role: 'STUDENT',
         universitySelectionMode: 'OTHER',
+        universityConfirmed: true,
+        confirmedNoMatchingUniversity: true,
         universityName: '  ohio   state   university  ',
         country: 'United States',
       },

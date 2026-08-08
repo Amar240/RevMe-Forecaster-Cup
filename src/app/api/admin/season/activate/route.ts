@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/db'
 import { logAuditAction } from '@/server/audit'
 import { requireAdminOrResponse, jsonOk, jsonError } from '@/server/http'
+import { closeSeasonSupervisorAssignments } from '@/server/team-supervisor-assignment'
 
 export const dynamic = 'force-dynamic'
 
@@ -55,9 +56,12 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      await prisma.season.updateMany({
-        where: { status: 'ACTIVE' },
-        data: { status: 'COMPLETED' },
+      const activeSeasons = await prisma.season.findMany({ where: { status: 'ACTIVE' }, select: { id: true } })
+      await prisma.$transaction(async (tx) => {
+        await tx.season.updateMany({ where: { status: 'ACTIVE' }, data: { status: 'COMPLETED' } })
+        for (const active of activeSeasons) {
+          await closeSeasonSupervisorAssignments({ seasonId: active.id, actorId: user!.id, reason: 'Season completed when a new season started', db: tx })
+        }
       })
 
       const updatedSeason = await prisma.season.update({
@@ -101,10 +105,15 @@ export async function POST(request: NextRequest) {
             422
           )
         }
-        await prisma.season.updateMany({
-          where: { status: 'ACTIVE' },
-          data: { status: 'COMPLETED' },
-        })
+        {
+          const activeSeasons = await prisma.season.findMany({ where: { status: 'ACTIVE' }, select: { id: true } })
+          await prisma.$transaction(async (tx) => {
+            await tx.season.updateMany({ where: { status: 'ACTIVE' }, data: { status: 'COMPLETED' } })
+            for (const active of activeSeasons) {
+              await closeSeasonSupervisorAssignments({ seasonId: active.id, actorId: user!.id, reason: 'Season completed when a new season started', db: tx })
+            }
+          })
+        }
         newStatus = 'ACTIVE'
         break
       case 'pause':
@@ -140,10 +149,16 @@ export async function POST(request: NextRequest) {
       await openRoundOneIfUpcoming(season.id)
     }
 
-    const updatedSeason = await prisma.season.update({
-      where: { id: season.id },
-      data: { status: newStatus },
-    })
+    const updatedSeason = action === 'complete'
+      ? await prisma.$transaction(async (tx) => {
+          const completed = await tx.season.update({ where: { id: season.id }, data: { status: newStatus } })
+          await closeSeasonSupervisorAssignments({ seasonId: season.id, actorId: user!.id, reason: 'Season completed', db: tx })
+          return completed
+        })
+      : await prisma.season.update({
+          where: { id: season.id },
+          data: { status: newStatus },
+        })
 
     await logAuditAction(user!.id, `SEASON_${action.toUpperCase()}`, 'Season', season.id, {
       seasonName: season.name,

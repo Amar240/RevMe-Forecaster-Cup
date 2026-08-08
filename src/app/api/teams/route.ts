@@ -5,6 +5,7 @@ import { getCurrentOperationalSeason } from '@/server/season'
 import { countSupervisorTeamsInSeason } from '@/server/team-membership'
 import { ensureUniqueTeamName, normalizeTeamName } from '@/server/team-management'
 import { z } from 'zod'
+import { createInitialSupervisorAssignment } from '@/server/team-supervisor-assignment'
 
 export const dynamic = 'force-dynamic'
 
@@ -98,18 +99,28 @@ export async function POST(request: NextRequest) {
 
     const displayId = `${university?.name || 'Team'}${existingTeamsCount + 1}`
 
-    const team = await prisma.team.create({
-      data: {
-        name: teamName,
-        displayId,
-        supervisorId: user!.id,
-        universityId: user!.universityId,
-        seasonId: operationalSeason.id,
-      },
-      include: {
-        university: true,
-        members: true,
-      },
+    const team = await prisma.$transaction(async (tx) => {
+      const createdTeam = await tx.team.create({
+        data: {
+          name: teamName,
+          displayId,
+          supervisorId: user!.id,
+          universityId: user!.universityId!,
+          seasonId: operationalSeason.id,
+        },
+        include: {
+          university: true,
+          members: true,
+        },
+      })
+      await createInitialSupervisorAssignment({
+        teamId: createdTeam.id,
+        supervisorId: createdTeam.supervisorId,
+        assignedById: user!.id,
+        reason: 'Initial team registration assignment',
+        db: tx,
+      })
+      return createdTeam
     })
 
     return jsonOk({ team }, 201)

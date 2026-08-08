@@ -5,6 +5,7 @@ import { requireUserOrResponse, jsonOk, jsonError, ApiError } from '@/server/htt
 import { getCurrentOperationalSeason } from '@/server/season'
 import { countSupervisorTeamsInSeason, findSeasonMembershipConflict } from '@/server/team-membership'
 import { sameUniversity } from '@/server/universities'
+import { createInitialSupervisorAssignment } from '@/server/team-supervisor-assignment'
 
 export const dynamic = 'force-dynamic'
 
@@ -179,15 +180,25 @@ export async function POST(request: NextRequest) {
         }
 
         const displayId = `T-${Date.now().toString(36).toUpperCase()}`
-        const newTeam = await prisma.team.create({
-          data: {
-            name: teamName,
-            displayId,
-            supervisorId: user!.id,
-            universityId: joinRequest.student.universityId || user!.universityId!,
-            seasonId: targetSeasonId,
-            status: 'PENDING_APPROVAL',
-          },
+        const newTeam = await prisma.$transaction(async (tx) => {
+          const createdTeam = await tx.team.create({
+            data: {
+              name: teamName,
+              displayId,
+              supervisorId: user!.id,
+              universityId: joinRequest.student.universityId || user!.universityId!,
+              seasonId: targetSeasonId,
+              status: 'PENDING_APPROVAL',
+            },
+          })
+          await createInitialSupervisorAssignment({
+            teamId: createdTeam.id,
+            supervisorId: createdTeam.supervisorId,
+            assignedById: user!.id,
+            reason: 'Initial assignment from accepted join request',
+            db: tx,
+          })
+          return createdTeam
         })
         targetTeamId = newTeam.id
       }

@@ -18,6 +18,7 @@ import {
   MoreVertical,
   Plus,
   RefreshCw,
+  ArrowRightLeft,
   UserCog,
   Users,
 } from 'lucide-react'
@@ -48,6 +49,8 @@ import { usePermissions } from '@/hooks/usePermissions'
 import { AccessDenied } from '@/components/ui/access-denied'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Badge } from '@/components/ui/badge'
+import { SupervisorTransitionDialog } from '@/components/admin/supervisor-transition-dialog'
+import { SupervisorAffiliationCorrectionDialog } from '@/components/admin/supervisor-affiliation-correction-dialog'
 
 interface Supervisor {
   id: string
@@ -57,7 +60,7 @@ interface Supervisor {
   isActive: boolean
   universityId: string | null
   university: { id: string; name: string } | null
-  _count: { supervisedTeams: number }
+  _count: { supervisedTeams: number; currentTeams?: number; historicalTeams?: number }
 }
 
 interface University {
@@ -95,7 +98,10 @@ export default function AdminSupervisorsPage() {
   const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([])
   const [loadingTeams, setLoadingTeams] = useState(false)
   const [assigning, setAssigning] = useState(false)
+  const [assignReason, setAssignReason] = useState('')
   const [statusTarget, setStatusTarget] = useState<Supervisor | null>(null)
+  const [transitionTarget, setTransitionTarget] = useState<Supervisor | null>(null)
+  const [correctionTarget, setCorrectionTarget] = useState<Supervisor | null>(null)
 
   const hasAccess = isAdmin || hasFullAccess
 
@@ -159,9 +165,14 @@ export default function AdminSupervisorsPage() {
     setShowForm(true)
   }
 
+  const openTransition = (supervisor: Supervisor) => {
+    setTransitionTarget(supervisor)
+  }
+
   const fetchAssignableTeams = async (supervisor: Supervisor) => {
     setAssignTarget(supervisor)
     setSelectedTeamIds([])
+    setAssignReason('')
     setLoadingTeams(true)
 
     try {
@@ -245,7 +256,7 @@ export default function AdminSupervisorsPage() {
       const res = await csrfFetch(`/api/admin/supervisors/${assignTarget.id}/assign-teams`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ teamIds: selectedTeamIds }),
+        body: JSON.stringify({ teamIds: selectedTeamIds, reason: assignReason }),
       })
       const data = await res.json() as { teamsUpdated?: number; message?: string }
 
@@ -369,7 +380,10 @@ export default function AdminSupervisorsPage() {
       header: 'Teams',
       className: 'text-center',
       render: (supervisor: Supervisor) => (
-        <span>{supervisor._count.supervisedTeams}</span>
+        <div>
+          <span className="font-medium">{supervisor._count.currentTeams ?? supervisor._count.supervisedTeams} current</span>
+          <p className="text-xs text-text-muted">{supervisor._count.historicalTeams ?? 0} historical</p>
+        </div>
       ),
     },
     {
@@ -393,13 +407,29 @@ export default function AdminSupervisorsPage() {
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() => void fetchAssignableTeams(supervisor)}
-              disabled={!supervisor.universityId || !supervisor.isActive}
+              disabled={!isAdmin || !supervisor.universityId || !supervisor.isActive}
             >
               <Users className="mr-2 h-4 w-4" />
-              Assign Teams
+              Assign unassigned teams
             </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/admin/teams">
+                <UserCog className="mr-2 h-4 w-4" />
+                Manage team assignments
+              </Link>
+            </DropdownMenuItem>
+            {isAdmin ? (
+              <DropdownMenuItem onClick={() => setCorrectionTarget(supervisor)}>
+                <ArrowRightLeft className="mr-2 h-4 w-4" />
+                Correct university affiliation
+              </DropdownMenuItem>
+            ) : null}
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => setStatusTarget(supervisor)}>
+            <DropdownMenuItem
+              onClick={() => supervisor.isActive && isAdmin
+                ? openTransition(supervisor)
+                : setStatusTarget(supervisor)}
+            >
               {supervisor.isActive ? 'Deactivate Supervisor' : 'Reactivate Supervisor'}
             </DropdownMenuItem>
           </DropdownMenuContent>
@@ -512,7 +542,7 @@ export default function AdminSupervisorsPage() {
             <DialogTitle>{editingSupervisor ? 'Edit Supervisor' : 'Add Supervisor'}</DialogTitle>
             <DialogDescription>
               {editingSupervisor
-                ? 'Update supervisor profile details. University changes are blocked while teams are still assigned.'
+                ? 'Update the supervisor name or email here. Use the guided transition to change universities.'
                 : 'Create a new supervisor account. A password reset email will be sent automatically.'}
             </DialogDescription>
           </DialogHeader>
@@ -552,22 +582,36 @@ export default function AdminSupervisorsPage() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="sup-university">University</Label>
-              <Select
-                value={form.universityId}
-                onValueChange={(value) => setForm((current) => ({ ...current, universityId: value }))}
-                disabled={submitting}
-              >
-                <SelectTrigger id="sup-university">
-                  <SelectValue placeholder="Select university..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {universities.map((university) => (
-                    <SelectItem key={university.id} value={university.id}>
-                      {university.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {editingSupervisor ? (
+                <>
+                  <div id="sup-university" className="rounded-md border border-border bg-surface-secondary px-3 py-2 text-sm text-foreground">
+                    {editingSupervisor.university?.name ?? 'No university'}
+                  </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="mt-2"
+                  onClick={() => {
+                    setShowForm(false)
+                    setCorrectionTarget(editingSupervisor)
+                  }}
+                >
+                  <ArrowRightLeft className="mr-2 h-4 w-4" />
+                  Correct university affiliation
+                </Button>
+                </>
+              ) : (
+                <Select
+                  value={form.universityId}
+                  onValueChange={(value) => setForm((current) => ({ ...current, universityId: value }))}
+                  disabled={submitting}
+                >
+                  <SelectTrigger id="sup-university"><SelectValue placeholder="Select university..." /></SelectTrigger>
+                  <SelectContent>
+                    {universities.map((university) => <SelectItem key={university.id} value={university.id}>{university.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
             <DialogFooter className="mt-4">
               <Button type="button" variant="outline" onClick={() => setShowForm(false)} disabled={submitting}>
@@ -628,11 +672,21 @@ export default function AdminSupervisorsPage() {
               </div>
             )}
           </div>
+          <div className="space-y-2">
+            <Label htmlFor="assign-team-reason">Reason</Label>
+            <Input
+              id="assign-team-reason"
+              value={assignReason}
+              onChange={(event) => setAssignReason(event.target.value)}
+              placeholder="Example: Filling a temporary advisor gap"
+              maxLength={500}
+            />
+          </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setAssignTarget(null)} disabled={assigning}>
               Cancel
             </Button>
-            <Button onClick={handleAssign} disabled={selectedTeamIds.length === 0 || assigning}>
+            <Button onClick={handleAssign} disabled={selectedTeamIds.length === 0 || assignReason.trim().length < 5 || assigning}>
               {assigning ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -663,6 +717,22 @@ export default function AdminSupervisorsPage() {
         onConfirm={() => {
           if (statusTarget) void executeStatusChange(statusTarget)
         }}
+      />
+
+      <SupervisorTransitionDialog
+        open={transitionTarget !== null}
+        supervisor={transitionTarget}
+        universities={universities}
+        operation="DEACTIVATE"
+        onOpenChange={(open) => { if (!open) setTransitionTarget(null) }}
+        onCompleted={fetchSupervisors}
+      />
+      <SupervisorAffiliationCorrectionDialog
+        open={correctionTarget !== null}
+        supervisor={correctionTarget}
+        universities={universities}
+        onOpenChange={(open) => { if (!open) setCorrectionTarget(null) }}
+        onCompleted={fetchSupervisors}
       />
     </div>
   )

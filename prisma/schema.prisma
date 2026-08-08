@@ -97,6 +97,13 @@ enum ImportAssistMode {
   ON_DEMAND
 }
 
+enum TeamSupervisorAssignmentSource {
+  INITIAL
+  REASSIGNMENT
+  RESTORED
+  LEGACY_BACKFILL
+}
+
 enum WarningType {
   MISSED_SUBMISSION
   LATE_SUBMISSION
@@ -183,7 +190,10 @@ model User {
   seasonArchives           SeasonArchive[]
   importBatches            ImportBatch[]
   emailVerificationCodes   EmailVerificationCode[]
-  oauthAccounts             OAuthAccount[]
+  oauthAccounts            OAuthAccount[]
+  teamSupervisorAssignments TeamSupervisorAssignment[] @relation("AssignmentSupervisor")
+  teamAssignmentsStarted    TeamSupervisorAssignment[] @relation("AssignmentStartedBy")
+  teamAssignmentsEnded      TeamSupervisorAssignment[] @relation("AssignmentEndedBy")
 
   @@index([email])
   @@index([role])
@@ -260,6 +270,7 @@ model Team {
   supportTickets   SupportTicket[] @relation("TicketTeam")
   importBatchId    String?
   importBatch      ImportBatch? @relation(fields: [importBatchId], references: [id])
+  supervisorAssignments TeamSupervisorAssignment[]
 
   @@index([supervisorId])
   @@index([universityId])
@@ -268,6 +279,29 @@ model Team {
   @@index([externalTeamId])
   @@index([importBatchId])
   @@unique([seasonId, externalTeamId])
+}
+
+model TeamSupervisorAssignment {
+  id            String                         @id @default(cuid())
+  teamId        String
+  team          Team                           @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  supervisorId  String
+  supervisor    User                           @relation("AssignmentSupervisor", fields: [supervisorId], references: [id])
+  startedAt     DateTime                       @default(now())
+  endedAt       DateTime?
+  assignedById  String?
+  assignedBy    User?                          @relation("AssignmentStartedBy", fields: [assignedById], references: [id], onDelete: SetNull)
+  endedById     String?
+  endedBy       User?                          @relation("AssignmentEndedBy", fields: [endedById], references: [id], onDelete: SetNull)
+  reason        String?
+  endReason     String?
+  source        TeamSupervisorAssignmentSource @default(INITIAL)
+  isApproximate Boolean                        @default(false)
+  createdAt     DateTime                       @default(now())
+
+  @@index([teamId, startedAt])
+  @@index([supervisorId, startedAt])
+  @@index([endedAt])
 }
 
 model TeamMember {

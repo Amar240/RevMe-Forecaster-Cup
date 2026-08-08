@@ -1,12 +1,13 @@
 import { prisma } from '@/lib/db'
 import { requireAdminOrResponse, jsonOk, jsonError, ApiError } from '@/server/http'
 import { sendMissedSubmissionWarning } from '@/lib/email'
+import { closeOpenSupervisorAssignment } from '@/server/team-supervisor-assignment'
 
 export const dynamic = 'force-dynamic'
 
 export async function POST() {
   try {
-    const { response } = await requireAdminOrResponse()
+    const { user, response } = await requireAdminOrResponse()
     if (response) return response
 
     const activeSeason = await prisma.season.findFirst({ where: { status: 'ACTIVE' } })
@@ -42,7 +43,10 @@ export async function POST() {
 
       const warningCount = team.warnings.length + 1
       if (warningCount >= 3) {
-        await prisma.team.update({ where: { id: team.id }, data: { status: 'DISQUALIFIED' } })
+        await prisma.$transaction(async (tx) => {
+          await tx.team.update({ where: { id: team.id }, data: { status: 'DISQUALIFIED', disqualifiedAt: new Date(), disqualifiedReason: 'Three missed submissions' } })
+          await closeOpenSupervisorAssignment({ teamId: team.id, endedById: user!.id, reason: 'Team disqualified after three missed submissions', db: tx })
+        })
         disqualified++
       }
 

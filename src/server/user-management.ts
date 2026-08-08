@@ -5,6 +5,7 @@ import { hashPassword } from '@/lib/auth'
 import { sendPasswordResetEmail } from '@/lib/email'
 import { logAuditAction } from '@/lib/audit'
 import { ApiError } from '@/server/http'
+import { getCurrentSupervisorResponsibilityWhere } from '@/server/team-supervisor-assignment'
 
 type DbClient = Prisma.TransactionClient | typeof prisma
 
@@ -94,6 +95,11 @@ const managedUserDeleteEligibilitySelect = Prisma.validator<Prisma.UserSelect>()
   firstName: true,
   lastName: true,
   role: true,
+  teamMemberships: {
+    select: {
+      team: { select: { id: true, name: true, displayId: true } },
+    },
+  },
   _count: {
     select: {
       supervisedTeams: true,
@@ -422,12 +428,21 @@ export async function updateManagedUser(args: {
     )
   }
 
-  if (currentUser.role === 'SUPERVISOR' && universityChanged && currentUser._count.supervisedTeams > 0) {
-    throw new ApiError(
-      'Supervisor university cannot be changed while teams are still assigned.',
-      422,
-      'INVALID_INPUT'
-    )
+  if (currentUser.role === 'SUPERVISOR' && universityChanged) {
+    if (args.actor.role !== 'ADMIN') {
+      throw new ApiError('Only full administrators can change a supervisor university.', 403, 'FORBIDDEN')
+    }
+    const affectedTeamCount = await prisma.team.count({
+      where: { supervisorId: currentUser.id },
+    })
+    if (affectedTeamCount > 0) {
+      throw new ApiError(
+        'Use Correct university affiliation to review and move the supervisor, their teams, and affected students together.',
+        409,
+        'CONFLICT',
+        { transitionRequired: true, operation: 'CORRECT_AFFILIATION', affectedTeamCount }
+      )
+    }
   }
 
   const updatedUser = await prisma.$transaction(async (tx) => {
@@ -491,12 +506,22 @@ export async function setManagedUserActiveStatus(args: {
     assertSupervisorScopeMatch(args.actor, currentUser, 'write')
   }
 
-  if (currentUser.role === 'SUPERVISOR' && !args.isActive && currentUser._count.supervisedTeams > 0) {
-    throw new ApiError(
-      'Supervisor cannot be deactivated while teams are still assigned.',
-      422,
-      'INVALID_INPUT'
-    )
+  if (currentUser.role === 'SUPERVISOR' && !args.isActive && args.actor.role !== 'ADMIN') {
+    throw new ApiError('Only full administrators can deactivate supervisors.', 403, 'FORBIDDEN')
+  }
+
+  if (currentUser.role === 'SUPERVISOR' && !args.isActive) {
+    const currentTeamCount = await prisma.team.count({
+      where: getCurrentSupervisorResponsibilityWhere(currentUser.id),
+    })
+    if (currentTeamCount > 0) {
+      throw new ApiError(
+        'Resolve the supervisor’s current team assignments before deactivation.',
+        409,
+        'CONFLICT',
+        { transitionRequired: true, operation: 'DEACTIVATE', currentTeamCount }
+      )
+    }
   }
 
   const updatedUser = await prisma.$transaction(async (tx) => {
@@ -547,7 +572,19 @@ export async function deleteManagedStudent(args: {
     throw new ApiError(
       eligibility.deleteBlockedReason ?? 'This user cannot be deleted. Deactivate the account instead.',
       422,
-      'INVALID_INPUT'
+      'INVALID_INPUT',
+      {
+        deletionEligibility: {
+          ...eligibility,
+          memberships: targetUser.teamMemberships.map((membership) => ({
+            teamId: membership.team.id,
+            teamName: membership.team.name,
+            displayId: membership.team.displayId,
+            link: `/admin/teams/${membership.team.id}`,
+          })),
+          relatedRecordCounts: targetUser._count,
+        },
+      }
     )
   }
 

@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { requireUserOrResponse, jsonOk, jsonError, parseJson } from '@/server/http'
 import { getCurrentOperationalSeason } from '@/server/season'
 import { z } from 'zod'
+import { getSupervisorSelfCorrectionEligibility } from '@/server/affiliation-correction'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,6 +18,10 @@ export async function GET() {
     if (response) return response
 
     const operationalSeason = await getCurrentOperationalSeason()
+    const affiliationCorrection = user!.role === 'SUPERVISOR'
+      ? await getSupervisorSelfCorrectionEligibility(user!.id)
+      : null
+
     if (!operationalSeason) {
       const fullUser = await prisma.user.findUnique({
         where: { id: user!.id },
@@ -26,7 +31,7 @@ export async function GET() {
       })
 
       return jsonOk({
-        user: fullUser ? { ...fullUser, passwordHash: undefined, oauthAccounts: undefined, teamMemberships: [], loginMethods: { hasPassword: Boolean(fullUser.passwordHash), google: { connected: Boolean(fullUser.oauthAccounts[0]), email: fullUser.oauthAccounts[0]?.email ?? null } } } : null,
+        user: fullUser ? { ...fullUser, passwordHash: undefined, oauthAccounts: undefined, teamMemberships: [], affiliationCorrection, loginMethods: { hasPassword: Boolean(fullUser.passwordHash), google: { connected: Boolean(fullUser.oauthAccounts[0]), email: fullUser.oauthAccounts[0]?.email ?? null } } } : null,
       })
     }
 
@@ -45,7 +50,7 @@ export async function GET() {
       },
     })
 
-    return jsonOk({ user: fullUser ? { ...fullUser, passwordHash: undefined, oauthAccounts: undefined, loginMethods: { hasPassword: Boolean(fullUser.passwordHash), google: { connected: Boolean(fullUser.oauthAccounts[0]), email: fullUser.oauthAccounts[0]?.email ?? null } } } : null })
+    return jsonOk({ user: fullUser ? { ...fullUser, passwordHash: undefined, oauthAccounts: undefined, affiliationCorrection, loginMethods: { hasPassword: Boolean(fullUser.passwordHash), google: { connected: Boolean(fullUser.oauthAccounts[0]), email: fullUser.oauthAccounts[0]?.email ?? null } } } : null })
   } catch (error) {
     return jsonError(error, 'Failed to get user')
   }

@@ -40,7 +40,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
-type TeamStatus = 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'ACTIVE' | 'REJECTED' | 'DISQUALIFIED'
+type TeamStatus = 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'ACTIVE' | 'REJECTED' | 'DISQUALIFIED' | 'ARCHIVED'
 
 interface Team {
   id: string
@@ -49,7 +49,7 @@ interface Team {
   status: TeamStatus
   disqualifiedReason?: string
   university: { name: string }
-  supervisor: { firstName: string; lastName: string; email: string }
+  supervisor: { firstName: string; lastName: string; email: string } | null
   members: { user: { firstName: string; lastName: string; email: string }; isSubmitter: boolean }[]
   _count: { submissions: number; warnings: number }
 }
@@ -94,6 +94,7 @@ const STATUS_CONFIG: Record<TeamStatus, { label: string; tone: 'neutral' | 'info
   ACTIVE: { label: teamStatusMeta.ACTIVE.label, tone: teamStatusMeta.ACTIVE.tone, icon: Check },
   REJECTED: { label: teamStatusMeta.REJECTED.label, tone: teamStatusMeta.REJECTED.tone, icon: Ban },
   DISQUALIFIED: { label: teamStatusMeta.DISQUALIFIED.label, tone: teamStatusMeta.DISQUALIFIED.tone, icon: AlertTriangle },
+  ARCHIVED: { label: teamStatusMeta.ARCHIVED.label, tone: teamStatusMeta.ARCHIVED.tone, icon: Ban },
 }
 
 export default function AdminTeamsPage() {
@@ -341,7 +342,12 @@ export default function AdminTeamsPage() {
 
   const riskFilter = searchParams.get('risk')
   const isAtRiskFilter = riskFilter === 'at-risk'
-  const visibleTeams = isAtRiskFilter ? teams.filter((team) => team._count.warnings > 0) : teams
+  const needsSupervisorFilter = searchParams.get('assignment') === 'unassigned'
+  const needsSupervisorCount = teams.filter((team) => !team.supervisor).length
+  const visibleTeams = teams.filter((team) =>
+    (!isAtRiskFilter || team._count.warnings > 0) &&
+    (!needsSupervisorFilter || !team.supervisor)
+  )
   const availableSupervisors = supervisors.filter(
     (supervisor) =>
       supervisor.isActive &&
@@ -377,12 +383,12 @@ export default function AdminTeamsPage() {
       key: 'supervisor',
       header: 'Supervisor',
       render: (team: Team) => (
-        <div>
-          <span className="text-text-secondary">
-            {team.supervisor.firstName} {team.supervisor.lastName}
-          </span>
-          <p className="text-xs text-text-muted">{team.supervisor.email}</p>
-        </div>
+        team.supervisor ? (
+          <div>
+            <span className="text-text-secondary">{team.supervisor.firstName} {team.supervisor.lastName}</span>
+            <p className="text-xs text-text-muted">{team.supervisor.email}</p>
+          </div>
+        ) : <Badge variant="warning">Needs supervisor</Badge>
       ),
     },
     {
@@ -484,10 +490,10 @@ export default function AdminTeamsPage() {
         </div>
         <div className="flex flex-col gap-3 sm:flex-row">
           <Button asChild variant="outline">
-            <a href="/templates/team-import-template.xlsx" download>
+            <Link href="/admin/teams/import?template=select-context">
               <FileSpreadsheet className="mr-2 h-4 w-4" />
               Download Template
-            </a>
+            </Link>
           </Button>
           {resolvedSeason ? (
             <Button asChild variant="outline">
@@ -539,9 +545,21 @@ export default function AdminTeamsPage() {
         </Card>
       )}
 
+      {resolvedSeason && needsSupervisorFilter ? (
+        <Card className="border-warning/20 bg-warning-background/70">
+          <CardContent className="flex items-center justify-between gap-3 py-4">
+            <div>
+              <p className="font-medium text-foreground">Needs-supervisor filter active</p>
+              <p className="text-sm text-text-secondary">These teams remain usable by students but require a new advisor.</p>
+            </div>
+            <Button asChild variant="outline"><Link href="/admin/teams">Clear filter</Link></Button>
+          </CardContent>
+        </Card>
+      ) : null}
+
       {resolvedSeason && (
         <>
-          <div className="grid md:grid-cols-4 gap-6">
+          <div className="grid gap-6 md:grid-cols-5">
             <Card variant="metric">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium text-text-secondary">Total Teams</CardTitle>
@@ -574,6 +592,14 @@ export default function AdminTeamsPage() {
                 <p className="text-3xl font-bold text-error">{summary.disqualifiedTeams}</p>
               </CardContent>
             </Card>
+            <Card variant="metric" className="border-warning/20 bg-warning-background/60">
+              <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-text-secondary">Needs Supervisor</CardTitle></CardHeader>
+              <CardContent>
+                <Button asChild variant="ghost" className="h-auto p-0 text-3xl font-bold text-warning">
+                  <Link href="/admin/teams?assignment=unassigned">{needsSupervisorCount}</Link>
+                </Button>
+              </CardContent>
+            </Card>
           </div>
 
           {visibleTeams.length === 0 ? (
@@ -581,11 +607,13 @@ export default function AdminTeamsPage() {
               <CardContent className="py-12 text-center">
                 <Users className="mx-auto mb-4 h-12 w-12 text-text-muted" />
                 <h3 className="mb-2 text-lg font-medium text-foreground">
-                  {isAtRiskFilter ? 'No At-Risk Teams' : 'No Teams Yet'}
+                  {isAtRiskFilter ? 'No At-Risk Teams' : needsSupervisorFilter ? 'No Teams Need a Supervisor' : 'No Teams Yet'}
                 </h3>
                 <p className="text-text-secondary">
                   {isAtRiskFilter
                     ? 'No teams currently have warning-based disqualification risk.'
+                    : needsSupervisorFilter
+                      ? 'Every current team has an assigned supervisor.'
                     : 'Teams will appear here once supervisors create them.'}
                 </p>
               </CardContent>

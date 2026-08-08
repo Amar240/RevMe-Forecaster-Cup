@@ -69,6 +69,11 @@ describe('Admin team management APIs', () => {
     expect(created?.seasonId).toBe(season.id)
     expect(created?.universityId).toBe(university.id)
     expect(created?.supervisorId).toBe(supervisor.id)
+    const assignment = await prisma.teamSupervisorAssignment.findFirst({
+      where: { teamId: data.team.id, endedAt: null },
+    })
+    expect(assignment?.supervisorId).toBe(supervisor.id)
+    expect(assignment?.source).toBe('INITIAL')
   })
 
   it('manual create allows reusing a team name from a different season', async () => {

@@ -2,6 +2,7 @@ import crypto from 'crypto'
 import { Prisma, type User } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { ApiError } from '@/server/http'
+import { closeOpenSupervisorAssignment } from '@/server/team-supervisor-assignment'
 import { logAuditAction } from '@/lib/audit'
 import { sendAccountActivationEmail } from '@/lib/email'
 import { logger } from '@/lib/logger'
@@ -70,6 +71,12 @@ export async function rejectPendingTeam(actor: Actor, teamId: string, reason: st
   if (team.status !== 'PENDING_APPROVAL') throw new ApiError('Team is not pending approval', 422, 'INVALID_INPUT')
   await prisma.$transaction(async (tx) => {
     await tx.team.update({ where: { id: teamId }, data: { status: 'REJECTED', rejectionReason: trimmed } })
+    await closeOpenSupervisorAssignment({
+      teamId,
+      endedById: actor.id,
+      reason: `Team rejected: ${trimmed}`,
+      db: tx,
+    })
     if (team.supervisor) await tx.notification.create({ data: { userId: team.supervisor.id, type: 'TEAM_REJECTED', title: `${team.name} was not approved`, message: trimmed, link: '/supervisor/import' } })
   })
   await logAuditAction(actor.id, 'TEAM_REJECTED', 'Team', teamId, { teamName: team.name, reason: trimmed, importBatchId: team.importBatchId })

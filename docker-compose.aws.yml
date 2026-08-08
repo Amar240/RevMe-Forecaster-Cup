@@ -1,0 +1,7 @@
+services:
+  app:
+    environment:
+      AWS_PROFILE: ${AWS_PROFILE:-default}
+      AWS_SDK_LOAD_CONFIG: "1"
+    volumes:
+      - ${HOME}/.aws:/root/.aws:ro

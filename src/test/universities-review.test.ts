@@ -25,6 +25,7 @@ describe('university review queue', () => {
         lastName: 'Mode',
         role: 'STUDENT',
         universitySelectionMode: 'EXISTING',
+        universityConfirmed: true,
         universityId: listed.id,
       },
     })
@@ -50,6 +51,8 @@ describe('university review queue', () => {
         lastName: 'Mode',
         role: 'STUDENT',
         universitySelectionMode: 'OTHER',
+        universityConfirmed: true,
+        confirmedNoMatchingUniversity: true,
         universityName: 'Pending University',
         country: 'India',
       },
@@ -80,7 +83,7 @@ describe('university review queue', () => {
     expect(res.status).toBe(200)
 
     const data = await res.json()
-    expect(data.universities).toEqual([{ id: listed.id, name: listed.name }])
+    expect(data.universities).toEqual([{ id: listed.id, name: listed.name, country: listed.country, normalizedName: listed.normalizedName }])
   })
 
   it('a second OTHER registration with the same name reuses the existing pending university', async () => {
@@ -93,6 +96,8 @@ describe('university review queue', () => {
         lastName: 'One',
         role: 'STUDENT',
         universitySelectionMode: 'OTHER',
+        universityConfirmed: true,
+        confirmedNoMatchingUniversity: true,
         universityName: 'Shared Pending University',
         country: 'United States',
       },
@@ -107,6 +112,8 @@ describe('university review queue', () => {
         lastName: 'Two',
         role: 'SUPERVISOR',
         universitySelectionMode: 'OTHER',
+        universityConfirmed: true,
+        confirmedNoMatchingUniversity: true,
         universityName: '  shared   pending university  ',
         country: 'United States',
       },
@@ -174,7 +181,7 @@ describe('university review queue', () => {
     const publicRes = await getPublicUniversities(publicReq)
     const publicData = await publicRes.json()
 
-    expect(publicData.universities).toEqual([{ id: pending.id, name: 'Pending Approval University' }])
+    expect(publicData.universities).toEqual([{ id: pending.id, name: 'Pending Approval University', country: pending.country, normalizedName: pending.normalizedName }])
   })
 
   it('admin sync moves linked users and teams to the listed target and removes the pending source when empty', async () => {

@@ -673,10 +673,10 @@ describe('admin supervisor management', () => {
     const res = await patchAdminSupervisorStatus(req, {
       params: Promise.resolve({ id: supervisor.id }),
     })
-    expect(res.status).toBe(422)
+    expect(res.status).toBe(409)
 
     const data = await res.json()
-    expect(data.message).toContain('Supervisor cannot be deactivated')
+    expect(data.message).toContain('Resolve the supervisor’s current team assignments')
   })
 
   it('reactivates an inactive supervisor when they have no assigned teams', async () => {

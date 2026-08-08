@@ -1,12 +1,15 @@
-import { requireAdmin, jsonOk, jsonError, ApiError, parseJson } from '@/server/http'
+import { requireAdminOrResponse, jsonOk, jsonError, ApiError, parseJson } from '@/server/http'
 import { z } from 'zod'
 import { prisma } from '@/lib/db'
 import { countSupervisorTeamsInSeason } from '@/server/team-membership'
+import { changeTeamSupervisorInTransaction } from '@/server/team-supervisor-change'
+import { Prisma } from '@prisma/client'
 
 export const dynamic = 'force-dynamic'
 
 const assignTeamsSchema = z.object({
   teamIds: z.array(z.string()).min(1, 'teamIds must be a non-empty array'),
+  reason: z.string().trim().min(5).max(500),
 })
 
 export async function PATCH(
@@ -14,7 +17,11 @@ export async function PATCH(
   { params }: { params: { id: string } }
 ) {
   try {
-    await requireAdmin()
+    const { user, response } = await requireAdminOrResponse()
+    if (response) return response
+    if (user!.role !== 'ADMIN') {
+      throw new ApiError('Only full administrators can assign team supervisors.', 403, 'FORBIDDEN')
+    }
 
     const supervisor = await prisma.user.findUnique({
       where: { id: params.id, role: 'SUPERVISOR' },
@@ -37,7 +44,7 @@ export async function PATCH(
       throw new ApiError('Supervisor must be linked to a university before teams can be assigned', 422, 'INVALID_INPUT')
     }
 
-    const { teamIds } = await parseJson(
+    const { teamIds, reason } = await parseJson(
       request as import('next/server').NextRequest,
       assignTeamsSchema
     )
@@ -81,16 +88,19 @@ export async function PATCH(
       }
     }
 
-    const { count } = await prisma.team.updateMany({
-      where: { id: { in: teamIds }, supervisorId: null },
-      data: { supervisorId: params.id },
-    })
+    await prisma.$transaction(async (tx) => {
+      for (const team of teams) {
+        await changeTeamSupervisorInTransaction({
+          tx,
+          actor: user!,
+          teamId: team.id,
+          supervisorId: supervisor.id,
+          reason,
+        })
+      }
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
 
-    if (count !== teamIds.length) {
-      throw new ApiError('One or more teams were assigned before this request completed. Please refresh and try again.', 409, 'CONFLICT')
-    }
-
-    return jsonOk({ teamsUpdated: count })
+    return jsonOk({ teamsUpdated: teams.length })
   } catch (error) {
     return jsonError(error, 'Failed to assign teams')
   }

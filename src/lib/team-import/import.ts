@@ -13,6 +13,7 @@ import type {
   TeamImportValidationResult,
 } from './types'
 import type { TeamImportColumnMapping, TeamImportOverride } from './types'
+import { createInitialSupervisorAssignment } from '@/server/team-supervisor-assignment'
 
 async function generateDisplayId(tx: Prisma.TransactionClient) {
   for (let attempt = 0; attempt < 5; attempt += 1) {
@@ -128,8 +129,18 @@ export async function importValidatedTeams(args: {
           importBatchId: args.batchId,
         },
         update: { importBatchId: args.batchId },
-        select: { id: true, displayId: true },
+        select: { id: true, displayId: true, supervisorId: true, status: true },
       })
+
+      if (['DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'ACTIVE'].includes(team.status)) {
+        await createInitialSupervisorAssignment({
+          teamId: team.id,
+          supervisorId: team.supervisorId,
+          assignedById: args.actor.id,
+          reason: `Initial assignment from ${args.mode} roster import`,
+          db: tx,
+        })
+      }
 
       const people = [validRow.source.submitter, ...validRow.source.members]
       const memberships = people.map((person, index) => {

@@ -6,6 +6,10 @@ export const registrationProfileSchema = z.object({
   universityId: z.string().trim().min(1).optional(),
   universityName: z.string().trim().min(1).optional(),
   country: z.string().trim().min(1).optional(),
+  universityConfirmed: z.literal(true, {
+    errorMap: () => ({ message: 'Review and confirm your university before registering' }),
+  }),
+  confirmedNoMatchingUniversity: z.literal(true).optional(),
 }).superRefine((data, ctx) => {
   if (data.universitySelectionMode === 'EXISTING' && !data.universityId) ctx.addIssue({ code: 'custom', path: ['universityId'], message: 'University is required' })
   if (data.universitySelectionMode === 'OTHER' && !data.universityName) ctx.addIssue({ code: 'custom', path: ['universityName'], message: 'University name is required' })

@@ -10,12 +10,40 @@ import { archiveImportFile } from '@/lib/import-archive'
 import type { ParsedTeamImportRow, TeamImportConfirmResult, TeamImportPersonSummary, TeamImportPreviewRow } from '@/lib/team-import/types'
 import type { TeamImportColumnMapping, TeamImportOverride } from '@/lib/team-import/types'
 import { applyTeamImportOverrides } from '@/lib/team-import/overrides'
+import { cleanImportCell } from '@/lib/team-import/overrides'
 import { isImportAssistEnabled } from '@/server/import-assist'
 import { logAuditAction } from '@/lib/audit'
+import { closeOpenSupervisorAssignment } from '@/server/team-supervisor-assignment'
 import { importErrorDetails } from '@/lib/team-import/diagnostic-catalog'
 import { importAssistContextFingerprint } from '@/lib/team-import/assist'
+import { getRosterAssistAvailability } from '@/server/roster-import-assist'
+import { sameImportState } from '@/lib/team-import/state'
 
 type ImportActor = Pick<User, 'id' | 'email' | 'role' | 'universityId' | 'isActive' | 'hasFullAccess'>
+type TrustedAdminContext = { universityId: string; supervisorId: string }
+
+async function applyTrustedAdminContext(args: { seasonId: string; context: TrustedAdminContext; parsedFile: Awaited<ReturnType<typeof parseTeamImportFile>> }) {
+  const [season, university, supervisor] = await Promise.all([
+    prisma.season.findFirst({ where: { id: args.seasonId, status: { not: 'COMPLETED' } }, select: { id: true } }),
+    prisma.university.findFirst({ where: { id: args.context.universityId, isListed: true }, select: { id: true, name: true } }),
+    prisma.user.findFirst({ where: { id: args.context.supervisorId, role: 'SUPERVISOR', isActive: true, universityId: args.context.universityId }, select: { id: true, email: true } }),
+  ])
+  if (!season) throw new ApiError('The selected season is not available for import', 422, 'INVALID_INPUT')
+  if (!university) throw new ApiError('The selected university is not available', 422, 'INVALID_INPUT')
+  if (!supervisor) throw new ApiError('Select an active supervisor from this university', 422, 'INVALID_INPUT')
+  const normalizedUniversity = cleanImportCell(university.name).toLowerCase()
+  const workbookUniversity = cleanImportCell(args.parsedFile.metadata.universityName).toLowerCase()
+  const workbookSupervisor = cleanImportCell(args.parsedFile.metadata.instructorEmail).toLowerCase()
+  const alteredRow = args.parsedFile.rows.find((row) => cleanImportCell(row.universityName).toLowerCase() !== normalizedUniversity)
+  if (!workbookUniversity || workbookUniversity !== normalizedUniversity || !workbookSupervisor || workbookSupervisor !== supervisor.email.toLowerCase() || alteredRow) {
+    throw new ApiError('This workbook does not match the selected university and supervisor. Download a current template for this import setup.', 409, 'CONFLICT', importErrorDetails('METADATA_CONTEXT_MISMATCH', 'This workbook does not match the selected university and supervisor. Download a current template for this import setup.'))
+  }
+  return {
+    ...args.parsedFile,
+    metadata: { ...args.parsedFile.metadata, universityName: university.name, instructorEmail: supervisor.email },
+    rows: args.parsedFile.rows.map((row) => ({ ...row, universityName: university.name, supervisorEmail: supervisor.email })),
+  }
+}
 
 function fileHash(buffer: Buffer) {
   return crypto.createHash('sha256').update(buffer).digest('hex')
@@ -61,6 +89,7 @@ export async function previewRosterImport(args: {
   overrides?: TeamImportOverride[]
   columnMapping?: TeamImportColumnMapping | null
   excludedRowNumbers?: number[]
+  trustedAdminContext?: TrustedAdminContext | null
 }) {
   const hash = fileHash(args.fileBuffer)
   const overrides = args.overrides ?? []
@@ -71,8 +100,16 @@ export async function previewRosterImport(args: {
     if (existingBatch.seasonId !== args.seasonId || existingBatch.uploaderRole !== (args.mode === 'supervisor' ? 'SUPERVISOR' : 'ADMIN')) throw new ApiError('Import batch does not match this request', 409, 'CONFLICT')
     if (existingBatch.status !== 'PREVIEWED') throw new ApiError('Only previewed batches can be re-checked', 409, 'CONFLICT')
     if (!args.submittedFileHash || args.submittedFileHash !== hash || existingBatch.fileHash !== hash) throw new ApiError('Workbook has changed since preview; preview it again', 409, 'CONFLICT', importErrorDetails('STALE_FILE_HASH', 'Workbook has changed since preview; preview it again'))
+    if (args.mode === 'admin' && args.trustedAdminContext) {
+      const storedContext = (existingBatch.summaryJson as { trustedContext?: TrustedAdminContext | null } | null)?.trustedContext ?? null
+      if (!sameImportState(storedContext, args.trustedAdminContext)) throw new ApiError('The selected university or supervisor changed after preview began', 409, 'CONFLICT')
+    }
   }
-  const parsedFile = applyTeamImportOverrides(await parseTeamImportFile({ fileName: args.fileName, fileBuffer: args.fileBuffer, columnMapping: args.columnMapping }), overrides)
+  const initiallyParsed = await parseTeamImportFile({ fileName: args.fileName, fileBuffer: args.fileBuffer, columnMapping: args.columnMapping })
+  const contextParsed = args.mode === 'admin' && args.trustedAdminContext
+    ? await applyTrustedAdminContext({ seasonId: args.seasonId, context: args.trustedAdminContext, parsedFile: initiallyParsed })
+    : initiallyParsed
+  const parsedFile = applyTeamImportOverrides(contextParsed, overrides)
   const excludedRowNumbers = args.excludedRowNumbers ?? []
   const { includedFile, excludedRows } = splitExcludedRows(parsedFile, excludedRowNumbers)
   const validation = await validateTeamImport({
@@ -113,6 +150,7 @@ export async function previewRosterImport(args: {
     overrides,
     excludedRowNumbers,
     columnMapping: args.columnMapping ?? null,
+    trustedContext: args.trustedAdminContext ?? null,
     assist: { ...previousAssist, contextFingerprint },
   })
   const batch = existingBatch ? await prisma.importBatch.update({ where: { id: existingBatch.id }, data: { summaryJson } }) : await prisma.importBatch.create({
@@ -120,7 +158,7 @@ export async function previewRosterImport(args: {
       uploaderId: args.actor.id,
       uploaderRole: args.mode === 'supervisor' ? 'SUPERVISOR' : 'ADMIN',
       seasonId: args.seasonId,
-      universityId: args.mode === 'supervisor' ? args.actor.universityId : null,
+      universityId: args.mode === 'supervisor' ? args.actor.universityId : args.trustedAdminContext?.universityId ?? null,
       fileName: args.fileName,
       fileHash: hash,
       status: 'PREVIEWED',
@@ -132,6 +170,7 @@ export async function previewRosterImport(args: {
     if (s3Key) await prisma.importBatch.update({ where: { id: batch.id }, data: { s3Key } })
   }
   const assistEnabled = isImportAssistEnabled() && (await prisma.season.findUnique({ where: { id: args.seasonId }, select: { importAssistMode: true } }))?.importAssistMode === 'ON_DEMAND'
+  const layoutCandidate = !args.columnMapping && getTeamImportHeaderCoverage(readTeamImportGrid({ fileName: args.fileName, fileBuffer: args.fileBuffer })) < 0.8
   return {
     batchId: batch.id,
     fileHash: hash,
@@ -143,7 +182,9 @@ export async function previewRosterImport(args: {
     fileWarnings: validation.fileWarnings,
     summary: validation.summary,
     rows: validation.rows,
-    ...(assistEnabled ? { assist: { layoutEligible: !args.columnMapping && getTeamImportHeaderCoverage(readTeamImportGrid({ fileName: args.fileName, fileBuffer: args.fileBuffer })) < 0.8 } } : {}),
+    templateVersion: args.trustedAdminContext ? '2026.2' : null,
+    trustedContext: args.trustedAdminContext ?? null,
+    ...(assistEnabled ? { assist: getRosterAssistAvailability(summaryJson, validation.rows, layoutCandidate) } : {}),
   }
 }
 
@@ -158,6 +199,7 @@ export async function confirmRosterImport(args: {
   overrides?: TeamImportOverride[]
   columnMapping?: TeamImportColumnMapping | null
   excludedRowNumbers?: number[]
+  trustedAdminContext?: TrustedAdminContext | null
 }) {
   let batch = args.batchId ? await prisma.importBatch.findUnique({ where: { id: args.batchId } }) : null
   if (!batch) {
@@ -174,17 +216,24 @@ export async function confirmRosterImport(args: {
 
   const overrides = args.overrides ?? []
   const excludedRowNumbers = args.excludedRowNumbers ?? []
-  const stored = batch.summaryJson as { result?: TeamImportConfirmResult; overrides?: TeamImportOverride[]; excludedRowNumbers?: number[]; columnMapping?: TeamImportColumnMapping | null }
-  if (args.mode === 'supervisor' && JSON.stringify(stored.columnMapping ?? null) !== JSON.stringify(args.columnMapping ?? null)) throw new ApiError('Confirmed import mapping does not match the latest preview', 409, 'CONFLICT')
-  if (args.mode === 'supervisor' && JSON.stringify(stored.overrides ?? []) !== JSON.stringify(overrides)) throw new ApiError('Confirmed import overrides do not match the latest preview', 409, 'CONFLICT')
-  if (args.mode === 'supervisor' && JSON.stringify(stored.excludedRowNumbers ?? []) !== JSON.stringify(excludedRowNumbers)) throw new ApiError('Confirmed import exclusions do not match the latest preview', 409, 'CONFLICT')
+  const stored = batch.summaryJson as { result?: TeamImportConfirmResult; overrides?: TeamImportOverride[]; excludedRowNumbers?: number[]; columnMapping?: TeamImportColumnMapping | null; trustedContext?: TrustedAdminContext | null }
+  const strict = args.mode === 'supervisor' || Boolean(args.trustedAdminContext)
+  if (strict && !args.submittedFileHash) throw new ApiError('File hash is required', 400, 'INVALID_INPUT')
+  if (strict && !sameImportState(stored.columnMapping ?? null, args.columnMapping ?? null)) throw new ApiError('Confirmed import mapping does not match the latest preview', 409, 'CONFLICT')
+  if (strict && !sameImportState(stored.overrides ?? [], overrides)) throw new ApiError('Confirmed import overrides do not match the latest preview', 409, 'CONFLICT')
+  if (strict && !sameImportState(stored.excludedRowNumbers ?? [], excludedRowNumbers)) throw new ApiError('Confirmed import exclusions do not match the latest preview', 409, 'CONFLICT')
+  if (strict && !sameImportState(stored.trustedContext ?? null, args.trustedAdminContext ?? null)) throw new ApiError('Confirmed import context does not match the latest preview', 409, 'CONFLICT')
   if ((batch.status === 'CONFIRMED' || batch.status === 'COMPLETED') && stored.result) {
-    if (JSON.stringify(stored.overrides ?? []) !== JSON.stringify(overrides)) throw new ApiError('Confirmed import overrides do not match', 409, 'CONFLICT')
-    if (JSON.stringify(stored.excludedRowNumbers ?? []) !== JSON.stringify(excludedRowNumbers)) throw new ApiError('Confirmed import exclusions do not match', 409, 'CONFLICT')
+    if (!sameImportState(stored.overrides ?? [], overrides)) throw new ApiError('Confirmed import overrides do not match', 409, 'CONFLICT')
+    if (!sameImportState(stored.excludedRowNumbers ?? [], excludedRowNumbers)) throw new ApiError('Confirmed import exclusions do not match', 409, 'CONFLICT')
     return stored.result
   }
 
-  const parsedFile = applyTeamImportOverrides(await parseTeamImportFile({ fileName: args.fileName, fileBuffer: args.fileBuffer, columnMapping: args.columnMapping }), overrides)
+  const initiallyParsed = await parseTeamImportFile({ fileName: args.fileName, fileBuffer: args.fileBuffer, columnMapping: args.columnMapping })
+  const contextParsed = args.mode === 'admin' && args.trustedAdminContext
+    ? await applyTrustedAdminContext({ seasonId: args.seasonId, context: args.trustedAdminContext, parsedFile: initiallyParsed })
+    : initiallyParsed
+  const parsedFile = applyTeamImportOverrides(contextParsed, overrides)
   const { includedFile, excludedRows } = splitExcludedRows(parsedFile, excludedRowNumbers)
   const validation = await validateTeamImport({
     seasonId: args.seasonId,
@@ -235,6 +284,7 @@ export async function withdrawSupervisorImportedTeam(actor: ImportActor, teamId:
     if (team.supervisorId !== actor.id || team.importBatch.uploaderId !== actor.id || team.importBatch.uploaderRole !== 'SUPERVISOR') throw new ApiError('Imported team does not belong to this supervisor', 403, 'FORBIDDEN')
     if (team.status !== 'PENDING_APPROVAL') throw new ApiError('Only teams awaiting approval can be withdrawn', 409, 'CONFLICT')
     await tx.team.update({ where: { id: team.id }, data: { status: 'REJECTED', rejectionReason: `Withdrawn by supervisor: ${trimmedReason}` } })
+    await closeOpenSupervisorAssignment({ teamId: team.id, endedById: actor.id, reason: `Imported team withdrawn: ${trimmedReason}`, db: tx })
     const remaining = await tx.team.count({ where: { importBatchId: team.importBatch.id, status: 'PENDING_APPROVAL', id: { not: team.id } } })
     const summary = (team.importBatch.summaryJson ?? {}) as Record<string, unknown>
     const withdrawals = Array.isArray(summary.withdrawals) ? summary.withdrawals : []

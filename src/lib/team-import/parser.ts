@@ -182,8 +182,8 @@ function harvestMetadata(rows: string[][]): TeamImportMetadata {
     const value = normalizeWhitespace(row[2])
     if (!label || !value) continue
     if ((label === 'youruniversity' || label === 'university' || label === 'institution') && !metadata.universityName) metadata.universityName = value
-    else if (label === 'instructorsname' || label === 'instructorname') metadata.instructorName = value
-    else if (label === 'instructorsemail' || label === 'instructoremail') metadata.instructorEmail = value.toLowerCase()
+    else if (label === 'instructorsname' || label === 'instructorname' || label === 'supervisor') metadata.instructorName = value
+    else if (label === 'instructorsemail' || label === 'instructoremail' || label === 'supervisoremail') metadata.instructorEmail = value.toLowerCase()
     else if (label.startsWith('numberofteams')) {
       const parsed = Number(value)
       metadata.declaredTeamCount = Number.isInteger(parsed) && parsed >= 0 ? parsed : null
@@ -530,6 +530,28 @@ function parseSharedStrings(xml: string) {
   return Array.from(xml.matchAll(/<si\b[\s\S]*?<\/si>/g), (match) => collectTextFragments(match[0]).join(''))
 }
 
+function xmlAttributes(fragment: string) {
+  return Object.fromEntries(
+    Array.from(fragment.matchAll(/(?:^|\s)([\w:-]+)="([^"]*)"/g), (match) => [match[1], decodeXmlText(match[2])])
+  )
+}
+
+function normalizeWorksheetTarget(target: string) {
+  const withoutFragment = target.split('#')[0].replace(/\\/g, '/')
+  const rooted = withoutFragment.startsWith('/')
+    ? withoutFragment.slice(1)
+    : withoutFragment.startsWith('xl/')
+      ? withoutFragment
+      : `xl/${withoutFragment.replace(/^\.\//, '')}`
+  const parts: string[] = []
+  for (const part of rooted.split('/')) {
+    if (!part || part === '.') continue
+    if (part === '..') parts.pop()
+    else parts.push(part)
+  }
+  return parts.join('/')
+}
+
 function resolveFirstWorksheetPath(entries: Map<string, Buffer>) {
   const workbookXml = entries.get('xl/workbook.xml')?.toString('utf8')
   const relationshipsXml = entries.get('xl/_rels/workbook.xml.rels')?.toString('utf8')
@@ -540,29 +562,26 @@ function resolveFirstWorksheetPath(entries: Map<string, Buffer>) {
     throw new ApiError('Workbook is missing sheet metadata', 422, 'INVALID_INPUT', importErrorDetails('WORKBOOK_UNREADABLE', 'Workbook is missing sheet metadata'))
   }
 
-  const sheets = Array.from(workbookXml.matchAll(/<sheet\b([^>]*)\/?\s*>/g), (match) => ({
-    name: match[1].match(/\bname="([^"]+)"/)?.[1],
-    relationshipId: match[1].match(/\br:id="([^"]+)"/)?.[1],
-  })).filter((sheet): sheet is { name: string | undefined; relationshipId: string } => Boolean(sheet.relationshipId))
-  const selectedSheet = sheets.find((sheet) => sheet.name === 'Registration Form') ?? sheets[0]
+  const sheets = Array.from(workbookXml.matchAll(/<sheet\b([^>]*)\/?\s*>/g), (match) => {
+    const attributes = xmlAttributes(match[1])
+    return { name: attributes.name, relationshipId: attributes['r:id'] }
+  }).filter((sheet): sheet is { name: string; relationshipId: string } => Boolean(sheet.name && sheet.relationshipId))
+  const supportedNames = ['Registration Form', 'Team Import']
+  const selectedSheet = supportedNames
+    .map((name) => sheets.find((sheet) => sheet.name.trim().toLowerCase() === name.toLowerCase()))
+    .find(Boolean) ?? (sheets.length === 1 ? sheets[0] : undefined)
   if (!selectedSheet) {
-    if (workbookXml.includes('Registration Form') && entries.has('xl/worksheets/sheet2.xml')) {
-      return 'xl/worksheets/sheet2.xml'
-    }
-    throw new ApiError('Workbook does not contain any sheets', 422, 'INVALID_INPUT', importErrorDetails('WORKBOOK_UNREADABLE', 'Workbook does not contain any sheets'))
+    throw new ApiError('This workbook does not contain a supported roster sheet. Use “Registration Form” or “Team Import”, or download a fresh RevME template.', 422, 'INVALID_INPUT', importErrorDetails('LAYOUT_UNRECOGNIZED', 'This workbook does not contain a supported roster sheet. Use “Registration Form” or “Team Import”, or download a fresh RevME template.'))
   }
 
-  const relationshipId = selectedSheet.relationshipId
-  const relationshipMatch = relationshipsXml.match(
-    new RegExp(`<Relationship\\b[^>]*Id="${relationshipId}"[^>]*Target="([^"]+)"`, 'i')
-  )
+  const relationships = Array.from(relationshipsXml.matchAll(/<Relationship\b([^>]*)\/?\s*>/gi), (match) => xmlAttributes(match[1]))
+  const relationship = relationships.find((item) => item.Id === selectedSheet.relationshipId)
 
-  if (!relationshipMatch) {
+  if (!relationship?.Target) {
     throw new ApiError('We could not read the worksheets in this Excel file. Save it again as an Excel Workbook (.xlsx) or use a fresh RevME template, then retry.', 422, 'INVALID_INPUT', importErrorDetails('WORKBOOK_UNREADABLE', 'We could not read the worksheets in this Excel file. Save it again as an Excel Workbook (.xlsx) or use a fresh RevME template, then retry.'))
   }
 
-  const target = relationshipMatch[1].replace(/^\.\//, '')
-  return target.startsWith('xl/') ? target : `xl/${target.replace(/^\//, '')}`
+  return normalizeWorksheetTarget(relationship.Target)
 }
 
 function parseWorksheetRows(xml: string, sharedStrings: string[]) {

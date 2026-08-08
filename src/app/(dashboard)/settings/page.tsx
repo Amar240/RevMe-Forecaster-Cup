@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { PasswordInput } from '@/components/ui/password-input'
-import { Pencil, Check, X, Users, Download, User, Shield, FileText } from 'lucide-react'
+import { Pencil, Check, X, Users, Download, User, Shield, FileText, School } from 'lucide-react'
 import { PageLoader } from '@/components/ui/page-loader'
 import { toast } from 'sonner'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
@@ -22,7 +22,7 @@ interface UserData {
   email: string
   role: string
   rulesAcknowledgedAt: string | null
-  university: { name: string } | null
+  university: { id: string; name: string; country: string | null } | null
   teamMemberships: Array<{
     isSubmitter: boolean
     team: {
@@ -32,6 +32,11 @@ interface UserData {
     }
   }>
   loginMethods: { hasPassword: boolean; google: { connected: boolean; email: string | null } }
+  affiliationCorrection: {
+    eligible: boolean
+    currentUniversityId: string | null
+    blockers: Array<{ code: string; count: number; message: string; link: string }>
+  } | null
 }
 
 export default function SettingsPage() {
@@ -50,9 +55,15 @@ export default function SettingsPage() {
   const [passwordMessage, setPasswordMessage] = useState('')
   const [disconnectOpen, setDisconnectOpen] = useState(false)
   const [disconnecting, setDisconnecting] = useState(false)
+  const [universities, setUniversities] = useState<Array<{ id: string; name: string; country: string | null }>>([])
+  const [affiliationOpen, setAffiliationOpen] = useState(false)
+  const [targetUniversityId, setTargetUniversityId] = useState('')
+  const [affiliationReason, setAffiliationReason] = useState('')
+  const [correctingAffiliation, setCorrectingAffiliation] = useState(false)
 
   useEffect(() => {
     fetchUser()
+    void csrfFetch('/api/universities').then((response) => response.json()).then((data) => setUniversities(data.universities ?? [])).catch(() => setUniversities([]))
   }, [])
 
   const fetchUser = async () => {
@@ -166,6 +177,29 @@ export default function SettingsPage() {
   }
 
   const handleDisconnectGoogle = async () => { setDisconnecting(true); try { await disconnectGoogle(); setUser((current) => current ? { ...current, loginMethods: { ...current.loginMethods, google: { connected: false, email: null } } } : current); setDisconnectOpen(false); toast.success('Google disconnected') } catch (error) { toast.error(error instanceof Error ? error.message : 'Failed to disconnect Google') } finally { setDisconnecting(false) } }
+
+  const correctOwnAffiliation = async () => {
+    if (!targetUniversityId) return
+    setCorrectingAffiliation(true)
+    try {
+      const response = await csrfFetch('/api/users/me/affiliation', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetUniversityId, universityConfirmed: true, reason: affiliationReason }),
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.message || 'Failed to correct university')
+      setAffiliationOpen(false)
+      setTargetUniversityId('')
+      setAffiliationReason('')
+      await fetchUser()
+      toast.success('University affiliation corrected')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to correct university')
+    } finally {
+      setCorrectingAffiliation(false)
+    }
+  }
 
   if (loading) {
     return <PageLoader message="Loading settings..." />
@@ -292,6 +326,30 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
 
+          {user.role === 'SUPERVISOR' ? (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2"><School className="h-5 w-5" /> University affiliation</CardTitle>
+                <CardDescription>Correct a university selected incorrectly during registration.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {user.affiliationCorrection?.eligible ? (
+                  <>
+                    <p className="text-sm text-text-secondary">Because no teams, imports, pending requests, or unresolved tickets are linked to your account, you can correct this once without administrator help.</p>
+                    <Button variant="outline" onClick={() => setAffiliationOpen(true)}>Correct my university</Button>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm text-text-secondary">An administrator must correct your affiliation so related records move together safely.</p>
+                    <ul className="space-y-1 text-sm text-text-muted">
+                      {user.affiliationCorrection?.blockers.map((blocker) => <li key={blocker.code}>• {blocker.message}</li>)}
+                    </ul>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          ) : null}
+
           {team && (
             <Card>
               <CardHeader>
@@ -376,6 +434,27 @@ export default function SettingsPage() {
         </Card><Card><CardHeader><CardTitle>Connected accounts</CardTitle><CardDescription>Manage external sign-in methods.</CardDescription></CardHeader><CardContent>{user.loginMethods.google.connected ? <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-medium">Connected: Google</p><p className="text-sm text-text-secondary">{user.loginMethods.google.email}</p></div><div><Button variant="outline" disabled={!user.loginMethods.hasPassword} onClick={() => setDisconnectOpen(true)}>Disconnect Google</Button>{!user.loginMethods.hasPassword && <p className="mt-2 max-w-xs text-xs text-text-muted">Set a password using password reset before disconnecting your only sign-in method.</p>}</div></div> : <p className="text-sm text-text-secondary">No Google account connected.</p>}</CardContent></Card></div>
       )}
       <ConfirmDialog open={disconnectOpen} onOpenChange={setDisconnectOpen} title="Disconnect Google?" description="You will continue signing in with your RevME password." confirmLabel="Disconnect" loading={disconnecting} onConfirm={handleDisconnectGoogle}/>
+      <ConfirmDialog
+        open={affiliationOpen}
+        onOpenChange={setAffiliationOpen}
+        title="Confirm university correction"
+        description="Review the university carefully. This self-service option is available only before related competition records exist."
+        confirmLabel="Correct university"
+        loading={correctingAffiliation}
+        confirmDisabled={!targetUniversityId || affiliationReason.trim().length < 5}
+        onConfirm={() => void correctOwnAffiliation()}
+      >
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="self-affiliation-university">Correct university</Label>
+            <select id="self-affiliation-university" className="flex h-11 w-full rounded-md border border-input bg-card px-3.5 text-foreground" value={targetUniversityId} onChange={(event) => setTargetUniversityId(event.target.value)}>
+              <option value="">Select university</option>
+              {universities.filter((university) => university.id !== user.university?.id).map((university) => <option key={university.id} value={university.id}>{university.name}{university.country ? ` — ${university.country}` : ''}</option>)}
+            </select>
+          </div>
+          <div className="space-y-2"><Label htmlFor="self-affiliation-reason">Why is this correction needed?</Label><Input id="self-affiliation-reason" value={affiliationReason} onChange={(event) => setAffiliationReason(event.target.value)} maxLength={500} placeholder="Example: I selected the wrong university during registration" /></div>
+        </div>
+      </ConfirmDialog>
 
       {activeTab === 'account' && (
         <>

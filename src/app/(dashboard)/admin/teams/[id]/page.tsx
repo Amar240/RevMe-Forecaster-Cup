@@ -10,6 +10,8 @@ import {
   Loader2,
   Search,
   ShieldCheck,
+  History,
+  Trash2,
   UserMinus,
   UserPlus,
   Users,
@@ -62,6 +64,7 @@ interface TeamSummary {
   name: string
   displayId: string
   status: keyof typeof teamStatusMeta
+  updatedAt: string
   season: { id: string; name: string } | null
   university: { id: string; name: string }
   supervisor: {
@@ -76,6 +79,25 @@ interface TeamSummary {
     warnings: number
     supportTickets?: number
   }
+}
+
+interface AssignmentHistoryEntry {
+  id: string
+  startedAt: string
+  endedAt: string | null
+  reason: string | null
+  endReason: string | null
+  source: string
+  isApproximate: boolean
+  supervisor: { id: string; firstName: string; lastName: string; email: string }
+  assignedBy: { firstName: string; lastName: string; email: string } | null
+  endedBy: { firstName: string; lastName: string; email: string } | null
+}
+
+interface DeletionEligibility {
+  canDelete: boolean
+  memberAccountsPreserved: number
+  blockers: Array<{ code: string; count: number; message: string; action: string }>
 }
 
 interface AuditEntry {
@@ -106,6 +128,7 @@ const actionLabels: Record<string, string> = {
   TEAM_MEMBER_ADDED: 'Member added',
   TEAM_MEMBER_REMOVED: 'Member removed',
   TEAM_SUBMITTER_CHANGED: 'Submitter changed',
+  TEAM_AFFILIATION_CORRECTED: 'University affiliation corrected',
   TEAM_SUPERVISOR_CHANGED: 'Supervisor changed',
   TEAM_MEMBER_MOVED: 'Member moved',
   TEAM_MEMBERS_BULK_MOVED: 'Members moved',
@@ -238,6 +261,13 @@ export default function AdminTeamDetailPage() {
   const [supervisorSearch, setSupervisorSearch] = useState('')
   const [eligibleSupervisors, setEligibleSupervisors] = useState<EligibleSupervisorResult[]>([])
   const [selectedSupervisorId, setSelectedSupervisorId] = useState('')
+  const [supervisorReason, setSupervisorReason] = useState('')
+  const [assignmentHistory, setAssignmentHistory] = useState<AssignmentHistoryEntry[]>([])
+  const [deletionEligibility, setDeletionEligibility] = useState<DeletionEligibility | null>(null)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [deleteDisplayId, setDeleteDisplayId] = useState('')
+  const [deleteReason, setDeleteReason] = useState('')
+  const [deletingTeam, setDeletingTeam] = useState(false)
   const [removeDialogOpen, setRemoveDialogOpen] = useState(false)
   const [memberToRemove, setMemberToRemove] = useState<AdminRosterMember | null>(null)
   const [replacementMemberId, setReplacementMemberId] = useState('')
@@ -260,8 +290,10 @@ export default function AdminTeamDetailPage() {
 
     setTeam(data.team)
     setRecentActivity(data.recentActivity || [])
+    setAssignmentHistory(data.assignmentHistory || [])
+    setDeletionEligibility(data.deletionEligibility || null)
     setTeamName(data.team.name)
-    setSelectedSupervisorId(data.team.supervisor?.id ?? '')
+    setSelectedSupervisorId(data.team.supervisor?.id ?? '__UNASSIGNED__')
     return data.team as TeamSummary
   }, [teamId])
 
@@ -556,7 +588,9 @@ export default function AdminTeamDetailPage() {
 
   const handleReassignSupervisor = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (!team || !selectedSupervisorId || selectedSupervisorId === team.supervisor?.id) return
+    if (!team || !selectedSupervisorId) return
+    const supervisorId = selectedSupervisorId === '__UNASSIGNED__' ? null : selectedSupervisorId
+    if (supervisorId === (team.supervisor?.id ?? null)) return
 
     setRosterError('')
     setSavingSupervisor(true)
@@ -565,7 +599,11 @@ export default function AdminTeamDetailPage() {
       const res = await csrfFetch(`/api/admin/teams/${team.id}/supervisor`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ supervisorId: selectedSupervisorId }),
+        body: JSON.stringify({
+          supervisorId,
+          reason: supervisorReason,
+          fingerprint: team.updatedAt,
+        }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -573,8 +611,9 @@ export default function AdminTeamDetailPage() {
       }
 
       setTeam(data.team)
-      setSelectedSupervisorId(data.team.supervisor?.id ?? '')
-      toast.success('Supervisor updated')
+      setSelectedSupervisorId(data.team.supervisor?.id ?? '__UNASSIGNED__')
+      setSupervisorReason('')
+      toast.success(supervisorId ? 'Supervisor updated' : 'Team temporarily unassigned')
       await refreshTeamAndDirectory()
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to update supervisor'
@@ -582,6 +621,26 @@ export default function AdminTeamDetailPage() {
       toast.error(message)
     } finally {
       setSavingSupervisor(false)
+    }
+  }
+
+  const handleDeleteTeam = async () => {
+    if (!team) return
+    setDeletingTeam(true)
+    try {
+      const response = await csrfFetch(`/api/admin/teams/${team.id}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirmDisplayId: deleteDisplayId, reason: deleteReason }),
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.message || 'Failed to delete team')
+      toast.success(`Deleted ${team.name}. Student accounts were preserved.`)
+      window.location.assign('/admin/teams')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to delete team')
+    } finally {
+      setDeletingTeam(false)
     }
   }
 
@@ -1055,6 +1114,10 @@ export default function AdminTeamDetailPage() {
                       <SelectValue placeholder="Select supervisor" />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="__UNASSIGNED__">Unassigned — needs supervisor</SelectItem>
+                      {team.supervisor && !eligibleSupervisors.some((supervisor) => supervisor.id === team.supervisor?.id) ? (
+                        <SelectItem value={team.supervisor.id}>{formatPersonOptionLabel(team.supervisor)}</SelectItem>
+                      ) : null}
                       {eligibleSupervisors.map((supervisor) => (
                         <SelectItem key={supervisor.id} value={supervisor.id}>
                           {formatPersonOptionLabel(supervisor)}
@@ -1063,9 +1126,27 @@ export default function AdminTeamDetailPage() {
                     </SelectContent>
                   </Select>
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="supervisor-reason">Reason for assignment change</Label>
+                  <Input
+                    id="supervisor-reason"
+                    value={supervisorReason}
+                    onChange={(event) => setSupervisorReason(event.target.value)}
+                    placeholder="Example: Advisor changed during competition"
+                    maxLength={500}
+                  />
+                  <p className="text-xs text-text-muted">Required for assignment history and auditing.</p>
+                </div>
                 <Button
                   type="submit"
-                  disabled={savingSupervisor || !selectedSupervisorId || selectedSupervisorId === team.supervisor?.id}
+                  disabled={
+                    savingSupervisor ||
+                    !selectedSupervisorId ||
+                    supervisorReason.trim().length < 5 ||
+                    (selectedSupervisorId === '__UNASSIGNED__'
+                      ? team.supervisor === null
+                      : selectedSupervisorId === team.supervisor?.id)
+                  }
                 >
                   {savingSupervisor ? (
                     <>
@@ -1075,7 +1156,7 @@ export default function AdminTeamDetailPage() {
                   ) : (
                     <>
                       <ShieldCheck className="mr-2 h-4 w-4" />
-                      Save supervisor
+                      {selectedSupervisorId === '__UNASSIGNED__' ? 'Temporarily unassign' : 'Save supervisor'}
                     </>
                   )}
                 </Button>
@@ -1084,20 +1165,62 @@ export default function AdminTeamDetailPage() {
             </CardContent>
           </Card>
 
-          <Card variant="subtle">
+          <Card variant={deletionEligibility?.canDelete ? 'default' : 'subtle'}>
             <CardHeader>
-              <CardTitle>More Actions</CardTitle>
-              <CardDescription>Additional team actions are not available on this page.</CardDescription>
+              <CardTitle>{deletionEligibility?.canDelete ? 'Delete test team' : 'Competition history protection'}</CardTitle>
+              <CardDescription>
+                {deletionEligibility?.canDelete
+                  ? 'This clean team has no competition records and is eligible for permanent deletion.'
+                  : 'History-bearing teams cannot be permanently deleted. Archive them instead.'}
+              </CardDescription>
             </CardHeader>
-            <CardContent>
-              <p className="text-sm text-text-secondary">
-                Use the controls above to manage the roster, supervisor, and team settings.
-              </p>
+            <CardContent className="space-y-3">
+              {deletionEligibility?.blockers.map((blocker) => (
+                <div key={blocker.code} className="rounded-lg border border-border bg-surface-secondary p-3 text-sm text-text-secondary">
+                  {blocker.message}
+                </div>
+              ))}
+              {isAdmin && deletionEligibility?.canDelete ? (
+                <Button variant="danger" onClick={() => setDeleteDialogOpen(true)}>
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete test team
+                </Button>
+              ) : null}
+              {deletionEligibility ? (
+                <p className="text-xs text-text-muted">Student accounts are preserved; this team currently has {deletionEligibility.memberAccountsPreserved} member account(s).</p>
+              ) : null}
             </CardContent>
           </Card>
         </div>
 
         <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2"><History className="h-5 w-5" /> Assignment History</CardTitle>
+              <CardDescription>Effective-dated advisor ownership for access and reporting.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {assignmentHistory.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-border p-4 text-sm text-text-secondary">No supervisor has been assigned yet.</div>
+              ) : assignmentHistory.map((assignment) => (
+                <div key={assignment.id} className="rounded-xl border border-border bg-surface-secondary p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <p className="font-medium text-foreground">{getPersonLabel(assignment.supervisor)}</p>
+                      <p className="text-xs text-text-muted">{assignment.supervisor.email}</p>
+                    </div>
+                    <Badge variant={assignment.endedAt ? 'neutral' : 'success'}>{assignment.endedAt ? 'Historical' : 'Current'}</Badge>
+                  </div>
+                  <p className="mt-3 text-sm text-text-secondary">
+                    {new Date(assignment.startedAt).toLocaleString()} — {assignment.endedAt ? new Date(assignment.endedAt).toLocaleString() : 'Present'}
+                  </p>
+                  {assignment.isApproximate ? <p className="mt-1 text-xs text-warning">Start date is approximate from legacy data.</p> : null}
+                  {assignment.endReason || assignment.reason ? <p className="mt-1 text-xs text-text-muted">{assignment.endReason ?? assignment.reason}</p> : null}
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle>Activity Log</CardTitle>
@@ -1335,6 +1458,37 @@ export default function AdminTeamDetailPage() {
                   Confirm move
                 </>
               )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete clean test team</DialogTitle>
+            <DialogDescription>
+              This permanently removes the team and memberships. Student user accounts are preserved. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <AlertBanner variant="warning" title="Destructive action">
+              Enter <span className="font-mono font-semibold">{team.displayId}</span> and provide a reason to continue.
+            </AlertBanner>
+            <div className="space-y-2">
+              <Label htmlFor="delete-display-id">Team display ID</Label>
+              <Input id="delete-display-id" value={deleteDisplayId} onChange={(event) => setDeleteDisplayId(event.target.value)} autoComplete="off" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="delete-team-reason">Reason</Label>
+              <Input id="delete-team-reason" value={deleteReason} onChange={(event) => setDeleteReason(event.target.value)} maxLength={500} placeholder="Example: Mistaken test import" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)} disabled={deletingTeam}>Cancel</Button>
+            <Button variant="danger" onClick={() => void handleDeleteTeam()} disabled={deletingTeam || deleteDisplayId !== team.displayId || deleteReason.trim().length < 5}>
+              {deletingTeam ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+              Permanently delete team
             </Button>
           </DialogFooter>
         </DialogContent>

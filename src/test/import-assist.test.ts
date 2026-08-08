@@ -19,17 +19,31 @@ describe('Bedrock import assist boundary', () => {
     expect(send).toHaveBeenCalledTimes(1)
   })
 
-  it('discards malformed output after one retry', async () => {
+  it('rejects malformed structured output without retrying', async () => {
     send.mockResolvedValue({ output: { message: { content: [{ text: '{"wrong":true}' }] } } })
     const { invokeImportAssist } = await import('@/server/import-assist')
-    await expect(invokeImportAssist({ system: 'test', input: {}, schema: z.object({ value: z.string() }), jsonSchema: outputSchema, schemaName: 'test_output' })).resolves.toBeNull()
+    await expect(invokeImportAssist({ system: 'test', input: {}, schema: z.object({ value: z.string() }), jsonSchema: outputSchema, schemaName: 'test_output' })).resolves.toMatchObject({ unavailableCategory: 'SCHEMA_REJECTED', retryable: false })
     expect(send).toHaveBeenCalledTimes(1)
   })
 
   it('does not invoke Bedrock while the flag is off', async () => {
     vi.stubEnv('BEDROCK_IMPORT_ASSIST', 'false')
     const { invokeImportAssist } = await import('@/server/import-assist')
-    await expect(invokeImportAssist({ system: 'test', input: {}, schema: z.object({ value: z.string() }), jsonSchema: outputSchema, schemaName: 'test_output' })).resolves.toBeNull()
+    await expect(invokeImportAssist({ system: 'test', input: {}, schema: z.object({ value: z.string() }), jsonSchema: outputSchema, schemaName: 'test_output' })).resolves.toMatchObject({ unavailableCategory: 'MODEL_UNAVAILABLE', retryable: false })
     expect(send).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['CredentialsProviderError', 'Could not load credentials from any providers', 'CREDENTIALS_MISSING', 1],
+    ['AccessDeniedException', 'User is not authorized to perform bedrock:InvokeModel', 'ACCESS_DENIED', 1],
+    ['ValidationException', 'The requested inference profile is not available', 'MODEL_UNAVAILABLE', 1],
+    ['ThrottlingException', 'Too many requests', 'THROTTLED', 2],
+    ['ServiceUnavailableException', 'Service temporarily unavailable', 'SERVICE_UNAVAILABLE', 2],
+  ])('classifies %s without exposing infrastructure details', async (name, message, category, calls) => {
+    const error = Object.assign(new Error(message), { name })
+    send.mockRejectedValue(error)
+    const { invokeImportAssist } = await import('@/server/import-assist')
+    await expect(invokeImportAssist({ system: 'test', input: {}, schema: z.object({ value: z.string() }), jsonSchema: outputSchema, schemaName: 'test_output' })).resolves.toMatchObject({ unavailableCategory: category })
+    expect(send).toHaveBeenCalledTimes(calls)
   })
 })

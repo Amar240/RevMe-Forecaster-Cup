@@ -4,7 +4,7 @@ import { hashPassword } from '@/lib/auth'
 import { sendEmailVerificationEmail } from '@/lib/email'
 import { jsonOk, jsonError, parseJson, ApiError } from '@/server/http'
 import { issueEmailVerificationCode, normalizeVerificationEmail } from '@/server/email-verification'
-import { resolveOrReusePendingUniversity } from '@/server/universities'
+import { findSimilarListedUniversities, resolveOrReusePendingUniversity } from '@/server/universities'
 import { registerSchema } from '@/server/registration-schema'
 
 export const dynamic = 'force-dynamic'
@@ -20,6 +20,18 @@ export async function POST(request: NextRequest) {
 
     if (existingUser) {
       throw new ApiError('Email already registered', 409, 'CONFLICT')
+    }
+
+    if (data.universitySelectionMode === 'OTHER' && !data.confirmedNoMatchingUniversity) {
+      const similarUniversities = await findSimilarListedUniversities(data.universityName!, data.country)
+      if (similarUniversities.length > 0) {
+        throw new ApiError(
+          'We found similar universities. Select the correct university or confirm that none match.',
+          409,
+          'CONFLICT',
+          { similarUniversities }
+        )
+      }
     }
 
     const university = data.universitySelectionMode === 'EXISTING'
