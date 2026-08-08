@@ -8,7 +8,12 @@ async function main() {
     invokeImportAssist({ system: 'Explain this synthetic validation diagnostic concisely.', input: { diagnostics: [{ code: 'PERSON_EMAIL_MALFORMED', severity: 'ERROR', scope: 'PERSON' }] }, schema: explanationOutputSchema, jsonSchema: importAssistStructuredSchemas.explanation, schemaName: 'roster_issue_explanation' }),
     invokeImportAssist({ system: 'Return conservative repairs for supplied fields.', input: { fields: [] }, schema: repairOutputSchema, jsonSchema: importAssistStructuredSchemas.repair, schemaName: 'roster_field_repairs' }),
   ])
-  if (results.some((result) => result === null)) throw new Error('One or more import-assist schemas could not be prewarmed')
+  const unavailableCategories = Array.from(new Set(
+    results.flatMap((result) => 'unavailableCategory' in result ? [result.unavailableCategory] : []),
+  ))
+  if (unavailableCategories.length > 0) {
+    throw new Error(`Import-assist prewarm failed: ${unavailableCategories.join(', ')}`)
+  }
   console.log('Import-assist structured-output schemas are ready.')
 }
 
