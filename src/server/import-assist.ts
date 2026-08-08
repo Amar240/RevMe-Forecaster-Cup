@@ -34,7 +34,7 @@ function classifyUnavailable(error: unknown): ImportAssistUnavailableCategory {
   const status = error instanceof Error ? (error as Error & { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode : undefined
   if (/CredentialsProviderError|could not load credentials|credential/i.test(value)) return 'CREDENTIALS_MISSING'
   if (status === 401 || status === 403 || /AccessDenied|Unauthorized/i.test(value)) return 'ACCESS_DENIED'
-  if (/schema validation|structured JSON|json.schema/i.test(value)) return 'SCHEMA_REJECTED'
+  if (/schema|structured (JSON|output)|outputConfig|textFormat/i.test(value)) return 'SCHEMA_REJECTED'
   if (/Throttl|TooManyRequests/i.test(value) || status === 429) return 'THROTTLED'
   if (/AbortError|Timeout|timed out/i.test(value)) return 'TIMEOUT'
   if (/ValidationException|ResourceNotFound|model.*not.*available|inference profile/i.test(value)) return 'MODEL_UNAVAILABLE'

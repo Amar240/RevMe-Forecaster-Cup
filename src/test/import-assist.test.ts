@@ -46,4 +46,30 @@ describe('Bedrock import assist boundary', () => {
     await expect(invokeImportAssist({ system: 'test', input: {}, schema: z.object({ value: z.string() }), jsonSchema: outputSchema, schemaName: 'test_output' })).resolves.toMatchObject({ unavailableCategory: category })
     expect(send).toHaveBeenCalledTimes(calls)
   })
+
+  it('classifies Bedrock output schema validation failures accurately', async () => {
+    const error = Object.assign(new Error('The outputConfig JSON schema contains unsupported keyword minLength'), { name: 'ValidationException' })
+    send.mockRejectedValue(error)
+    const { invokeImportAssist } = await import('@/server/import-assist')
+    await expect(invokeImportAssist({ system: 'test', input: {}, schema: z.object({ value: z.string() }), jsonSchema: outputSchema, schemaName: 'test_output' })).resolves.toMatchObject({ unavailableCategory: 'SCHEMA_REJECTED' })
+    expect(send).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps Bedrock-facing schemas within the supported structured-output subset', async () => {
+    const { importAssistStructuredSchemas } = await import('@/server/roster-import-assist')
+    const unsupported = new Set(['minimum', 'maximum', 'multipleOf', 'minLength', 'maxLength', 'maxItems'])
+    const found: string[] = []
+    const minItems: number[] = []
+    const visit = (value: unknown) => {
+      if (!value || typeof value !== 'object') return
+      for (const [key, child] of Object.entries(value)) {
+        if (unsupported.has(key)) found.push(key)
+        if (key === 'minItems' && typeof child === 'number') minItems.push(child)
+        visit(child)
+      }
+    }
+    visit(importAssistStructuredSchemas)
+    expect(found).toEqual([])
+    expect(minItems.every((value) => value === 0 || value === 1)).toBe(true)
+  })
 })
