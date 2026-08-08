@@ -28,6 +28,12 @@ COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/scripts ./scripts
+# The import-assist prewarm task runs through tsx and imports the canonical
+# schemas from src. Keep those server-only sources and path aliases available
+# in the production image so the deployment-time task uses the exact schemas
+# exercised by the application.
+COPY --from=builder /app/src ./src
+COPY --from=builder /app/tsconfig.json ./tsconfig.json
 RUN chmod +x /app/scripts/wait-for-db.sh
 
 EXPOSE 5000
