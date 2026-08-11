@@ -97,6 +97,25 @@ enum ImportAssistMode {
   ON_DEMAND
 }
 
+enum RoundAutomationMode {
+  AUTOMATIC
+  MANUAL
+}
+
+enum RoundTransitionTrigger {
+  SCHEDULED
+  ADMIN
+  MODE_CHANGE
+  RECOVERY
+}
+
+enum RoundTransitionOutcome {
+  APPLIED
+  NO_CHANGE
+  SKIPPED
+  FAILED
+}
+
 enum TeamSupervisorAssignmentSource {
   INITIAL
   REASSIGNMENT
@@ -324,6 +343,10 @@ model Season {
   status           SeasonStatus @default(DRAFT)
   registrationOpen Boolean      @default(false)
   importAssistMode ImportAssistMode @default(DISABLED)
+  roundAutomationMode RoundAutomationMode @default(AUTOMATIC)
+  roundAutomationGeneration Int @default(1)
+  roundAutomationLastSyncedAt DateTime?
+  roundAutomationScheduleError String?
   startDate        DateTime
   endDate          DateTime
   createdAt        DateTime     @default(now())
@@ -340,6 +363,28 @@ model Season {
   marketRoundUpdates MarketRoundUpdate[]
   archives           SeasonArchive[]
   importBatches       ImportBatch[]
+  roundTransitionRuns RoundTransitionRun[]
+}
+
+model RoundTransitionRun {
+  id             String                 @id @default(cuid())
+  seasonId       String
+  season         Season                 @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  idempotencyKey String                 @unique
+  trigger        RoundTransitionTrigger
+  outcome        RoundTransitionOutcome
+  generation     Int
+  scheduledFor   DateTime?
+  requestedAt    DateTime               @default(now())
+  processedAt    DateTime               @default(now())
+  actorId        String?
+  openedRoundId  String?
+  closedRoundIds Json?
+  details        Json?
+  errorMessage   String?
+
+  @@index([seasonId, processedAt])
+  @@index([outcome, processedAt])
 }
 
 model ImportBatch {

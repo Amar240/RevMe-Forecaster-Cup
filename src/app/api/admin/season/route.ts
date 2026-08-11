@@ -2,6 +2,8 @@ import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireAdminOrResponse, jsonOk, jsonError, ApiError } from '@/server/http'
 import { z, ZodError } from 'zod'
+import { processRoundTransitions } from '@/lib/round-scheduler'
+import { logger } from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,6 +20,14 @@ export async function GET() {
   try {
     const { response } = await requireAdminOrResponse()
     if (response) return response
+
+    try {
+      await processRoundTransitions({ trigger: 'RECOVERY', dueOnly: true })
+    } catch (error) {
+      logger.error('Round transition recovery failed while loading season administration', {
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
 
     const season = await prisma.season.findFirst({
       where: { status: { in: ['DRAFT', 'ACTIVE', 'PAUSED'] } },

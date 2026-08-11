@@ -519,6 +519,24 @@ describe('Submission flow', () => {
 
   it('accepts 6 stored values for a final round submission', async () => {
     const finalRound = rounds[rounds.length - 1]
+    const now = new Date()
+
+    await prisma.season.update({
+      where: { id: season.id },
+      data: { roundAutomationMode: 'MANUAL' },
+    })
+    await prisma.round.update({
+      where: { id: rounds[0].id },
+      data: { status: 'CLOSED' },
+    })
+    await prisma.round.update({
+      where: { id: finalRound.id },
+      data: {
+        status: 'OPEN',
+        opensAt: new Date(now.getTime() - 60_000),
+        closesAt: new Date(now.getTime() + 60_000),
+      },
+    })
 
     await loginAs(student.id)
     const res = await submitHandler(

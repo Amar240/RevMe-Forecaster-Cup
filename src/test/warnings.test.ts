@@ -25,8 +25,17 @@ describe('Warnings and disqualification', () => {
 
     const past = new Date(Date.now() - 24 * 60 * 60 * 1000)
     for (const r of rounds.slice(0, 3)) {
-      await prisma.round.update({ where: { id: r.id }, data: { closesAt: past } })
+      await prisma.round.update({ where: { id: r.id }, data: { status: 'CLOSED', closesAt: past } })
     }
+
+    await prisma.round.update({
+      where: { id: rounds[3].id },
+      data: {
+        status: 'OPEN',
+        opensAt: new Date(Date.now() - 60 * 1000),
+        closesAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      },
+    })
 
     await loginAs(admin.id)
     const res = await runWarnings()

@@ -1,6 +1,6 @@
 import { csrfFetch } from '@/lib/csrf'
 import type { CreateSeasonInput } from '@/features/season/schema'
-import type { SeasonOverviewResponse } from '@/features/season/types'
+import type { RoundAutomationMode, RoundAutomationStatus, SeasonOverviewResponse } from '@/features/season/types'
 
 async function parseJson<T>(res: Response): Promise<T> {
   const data = await res.json()
@@ -55,6 +55,26 @@ export async function updateRoundStatus(input: {
     }),
   })
   return parseJson<{ message: string }>(res)
+}
+
+export async function getRoundAutomationStatus(seasonId: string) {
+  return parseJson<RoundAutomationStatus>(
+    await csrfFetch(`/api/admin/seasons/${seasonId}/round-automation`)
+  )
+}
+
+export async function updateRoundAutomationMode(input: {
+  seasonId: string
+  mode: RoundAutomationMode
+  reason: string
+}) {
+  return parseJson<RoundAutomationStatus>(
+    await csrfFetch(`/api/admin/seasons/${input.seasonId}/round-automation`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: input.mode, reason: input.reason }),
+    })
+  )
 }
 
 export type ImportAssistStatus = { seasonId: string; infrastructureAvailable: boolean; mode: 'DISABLED' | 'ON_DEMAND'; effective: boolean; model: string; usage: { calls: number; inputTokens: number; outputTokens: number; accepted: number; rejected: number; failedRevalidation: number } }

@@ -1,0 +1,183 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: RevME exact-boundary round transition wake-up infrastructure
+
+Parameters:
+  AppBaseUrl:
+    Type: String
+    Description: Public HTTPS URL for RevME, without a trailing slash
+    Default: https://rev-me.org
+  CronSecretArn:
+    Type: String
+    Description: Secrets Manager ARN containing CRON_SECRET (raw string or JSON key)
+  ScheduleGroupName:
+    Type: String
+    Default: revme-round-transitions
+  AppInstanceRoleName:
+    Type: String
+    Description: Name of the existing EC2 instance role used by the RevME application
+  AlarmTopicArn:
+    Type: String
+    Default: ''
+    Description: Optional SNS topic ARN for dead-letter queue alarms
+
+Conditions:
+  HasAlarmTopic: !Not [!Equals [!Ref AlarmTopicArn, '']]
+
+Resources:
+  TransitionScheduleGroup:
+    Type: AWS::Scheduler::ScheduleGroup
+    Properties:
+      Name: !Ref ScheduleGroupName
+
+  TransitionDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+
+  TransitionLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: ReadRoundCronSecret
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource: !Ref CronSecretArn
+
+  TransitionLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Runtime: python3.13
+      Handler: index.handler
+      Role: !GetAtt TransitionLambdaRole.Arn
+      Timeout: 20
+      MemorySize: 128
+      Environment:
+        Variables:
+          APP_BASE_URL: !Ref AppBaseUrl
+          CRON_SECRET_ARN: !Ref CronSecretArn
+      Code:
+        ZipFile: |
+          import boto3
+          import json
+          import os
+          import urllib.request
+
+          secrets = boto3.client("secretsmanager")
+
+          def read_secret():
+              response = secrets.get_secret_value(SecretId=os.environ["CRON_SECRET_ARN"])
+              value = response.get("SecretString", "")
+              try:
+                  parsed = json.loads(value)
+                  return parsed.get("CRON_SECRET", value)
+              except json.JSONDecodeError:
+                  return value
+
+          def handler(event, context):
+              payload = json.dumps(event).encode("utf-8")
+              request = urllib.request.Request(
+                  os.environ["APP_BASE_URL"].rstrip("/") + "/api/cron/process-rounds",
+                  data=payload,
+                  method="POST",
+                  headers={
+                      "Authorization": "Bearer " + read_secret(),
+                      "Content-Type": "application/json",
+                  },
+              )
+              with urllib.request.urlopen(request, timeout=15) as response:
+                  body = response.read().decode("utf-8")
+                  if response.status < 200 or response.status >= 300:
+                      raise RuntimeError("RevME transition endpoint returned " + str(response.status))
+                  return {"statusCode": response.status, "body": body}
+
+  SchedulerTargetRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: scheduler.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: InvokeTransitionTarget
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource: !GetAtt TransitionLambda.Arn
+              - Effect: Allow
+                Action: sqs:SendMessage
+                Resource: !GetAtt TransitionDeadLetterQueue.Arn
+
+  AppSchedulerPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: RevMERoundScheduleManagement
+      Roles:
+        - !Ref AppInstanceRoleName
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: ManageOnlyRevMESchedules
+            Effect: Allow
+            Action:
+              - scheduler:CreateSchedule
+              - scheduler:DeleteSchedule
+              - scheduler:GetSchedule
+              - scheduler:UpdateSchedule
+            Resource: !Sub arn:${AWS::Partition}:scheduler:${AWS::Region}:${AWS::AccountId}:schedule/${ScheduleGroupName}/revme-*
+          - Sid: PassOnlySchedulerTargetRole
+            Effect: Allow
+            Action: iam:PassRole
+            Resource: !GetAtt SchedulerTargetRole.Arn
+            Condition:
+              StringEquals:
+                iam:PassedToService: scheduler.amazonaws.com
+
+  DeadLetterAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: RevME round transition events reached the dead-letter queue
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt TransitionDeadLetterQueue.QueueName
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: !If
+        - HasAlarmTopic
+        - [!Ref AlarmTopicArn]
+        - !Ref AWS::NoValue
+
+Outputs:
+  ScheduleGroupName:
+    Value: !Ref TransitionScheduleGroup
+  TransitionLambdaArn:
+    Value: !GetAtt TransitionLambda.Arn
+  SchedulerTargetRoleArn:
+    Value: !GetAtt SchedulerTargetRole.Arn
+  DeadLetterQueueArn:
+    Value: !GetAtt TransitionDeadLetterQueue.Arn
+  DeadLetterAlarmName:
+    Value: !Ref DeadLetterAlarm

@@ -17,6 +17,7 @@ import { PageLoader } from '@/components/ui/page-loader'
 import { csrfFetch } from '@/lib/csrf'
 import { toast } from 'sonner'
 import { ImportAssistControl } from '@/components/admin/import-assist-control'
+import { RoundAutomationControl } from '@/components/admin/round-automation-control'
 
 interface MarketOption {
   id: string
@@ -384,6 +385,7 @@ export default function AdminSeasonPage() {
 
       {season ? (
         <div className="space-y-6">
+          <RoundAutomationControl seasonId={season.id} onChanged={fetchSeason} />
           <ImportAssistControl seasonId={season.id} />
           <Card>
             <CardHeader>
@@ -589,14 +591,16 @@ export default function AdminSeasonPage() {
                             </>
                           ) : (
                             <>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-8 px-2"
-                                onClick={() => startEditingRound(round)}
-                              >
-                                <Edit2 className="h-3 w-3" />
-                              </Button>
+                              {season.roundAutomationMode === 'MANUAL' && (
+                                <>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-8 px-2"
+                                    onClick={() => startEditingRound(round)}
+                                  >
+                                    <Edit2 className="h-3 w-3" />
+                                  </Button>
 
                               {round.status === 'UPCOMING' && (
                                 <Button
@@ -672,6 +676,8 @@ export default function AdminSeasonPage() {
                                   <RotateCcw className="h-3 w-3 mr-1" />
                                   Reopen
                                 </Button>
+                              )}
+                                </>
                               )}
 
                               <Button
