@@ -136,9 +136,9 @@ describe('Season and round flow', () => {
     const data = await res.json()
 
     expect(res.status).toBe(200)
-    expect(data.currentRound.id).toBe(rounds[0].id)
+    expect(data.currentRound.id).toBe(rounds[1].id)
     expect(data.canSubmit).toBe(false)
-    expect(data.lockReason).toBe('DEADLINE_PASSED') // BUG: round status is not auto-transitioned to CLOSED
+    expect(data.lockReason).toBe('ROUND_NOT_OPEN')
   })
 
   it('returns an empty leaderboard when no submissions have been scored', async () => {

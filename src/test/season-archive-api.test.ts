@@ -117,7 +117,7 @@ async function createCompletedArchiveScenario(): Promise<ArchiveScenario> {
             opensAt: addDays(startDate, i - 1),
             closesAt: addDays(startDate, i),
             isFinal: i === 7,
-            status: 'OPEN',
+            status: 'CLOSED',
           },
         })
       )

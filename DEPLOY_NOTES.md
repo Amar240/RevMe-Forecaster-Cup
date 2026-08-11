@@ -53,6 +53,46 @@ AWS SDK shared-config loader. Production continues to use the EC2 instance role.
 - Alarm names:
 - Notification channel:
 
+## Exact round-transition scheduling
+
+RevME does not poll the database every minute. When automatic mode is enabled,
+the app creates one-time EventBridge Scheduler events at the known round open and
+close boundaries. Scheduler invokes a small Lambda, and Lambda asks RevME to
+reconcile the season. RevME—not the event payload—decides the authoritative state.
+
+1. Store the same long random `CRON_SECRET` used by the app in Secrets Manager.
+2. Deploy the included stack:
+
+```bash
+aws cloudformation deploy \
+  --region us-east-2 \
+  --stack-name revme-round-transitions \
+  --template-file aws/round-transition-scheduler/template.yaml \
+  --capabilities CAPABILITY_NAMED_IAM \
+  --parameter-overrides \
+    AppBaseUrl=https://rev-me.org \
+    CronSecretArn=<secret-arn> \
+    AppInstanceRoleName=revme-staging-ec2-role \
+    AlarmTopicArn=<optional-sns-topic-arn>
+```
+
+3. Copy the stack outputs into `/root/revme-prod.env` as:
+   `ROUND_AUTOMATION_LAMBDA_ARN`, `ROUND_AUTOMATION_SCHEDULER_ROLE_ARN`,
+   `ROUND_AUTOMATION_DLQ_ARN`, and `ROUND_AUTOMATION_SCHEDULE_GROUP`.
+4. The stack attaches a least-privilege inline policy to the named EC2 instance
+   role: schedule management is limited to `revme-*` schedules in this group,
+   and `iam:PassRole` is limited to the emitted Scheduler target role. The target
+   role itself can invoke only the emitted Lambda and write only to the emitted
+   DLQ.
+5. Restart the app container, open Admin → Season, switch to **Automatic**, and
+   verify that the UI reports a synchronized next boundary.
+
+One-time schedules use `FlexibleTimeWindow=OFF`, retry up to five times for one
+hour, delete themselves after completion, and send exhausted events to the DLQ.
+Changing to manual mode increments the season generation, so already-created
+events are harmlessly recorded as stale and skipped. Submission deadlines remain
+server-enforced even if AWS delivery is delayed.
+
 ## Rollback
 - Previous release tag:
 - Rollback command:

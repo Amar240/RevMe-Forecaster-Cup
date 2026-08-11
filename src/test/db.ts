@@ -20,6 +20,67 @@ export async function ensureTestSchema() {
     await prisma.$executeRawUnsafe('ALTER TABLE "Season" ADD COLUMN "importAssistMode" "ImportAssistMode" NOT NULL DEFAULT \'DISABLED\'')
   }
 
+  await prisma.$executeRawUnsafe(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'RoundAutomationMode') THEN
+        CREATE TYPE "RoundAutomationMode" AS ENUM ('AUTOMATIC', 'MANUAL');
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'RoundTransitionTrigger') THEN
+        CREATE TYPE "RoundTransitionTrigger" AS ENUM ('SCHEDULED', 'ADMIN', 'MODE_CHANGE', 'RECOVERY');
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'RoundTransitionOutcome') THEN
+        CREATE TYPE "RoundTransitionOutcome" AS ENUM ('APPLIED', 'NO_CHANGE', 'SKIPPED', 'FAILED');
+      END IF;
+    END
+    $$;
+  `)
+  if (!seasonColumns.some((column) => column.column_name === 'roundAutomationMode')) {
+    await prisma.$executeRawUnsafe('ALTER TABLE "Season" ADD COLUMN "roundAutomationMode" "RoundAutomationMode" NOT NULL DEFAULT \'AUTOMATIC\'')
+  }
+  if (!seasonColumns.some((column) => column.column_name === 'roundAutomationGeneration')) {
+    await prisma.$executeRawUnsafe('ALTER TABLE "Season" ADD COLUMN "roundAutomationGeneration" INTEGER NOT NULL DEFAULT 1')
+  }
+  if (!seasonColumns.some((column) => column.column_name === 'roundAutomationLastSyncedAt')) {
+    await prisma.$executeRawUnsafe('ALTER TABLE "Season" ADD COLUMN "roundAutomationLastSyncedAt" TIMESTAMP(3)')
+  }
+  if (!seasonColumns.some((column) => column.column_name === 'roundAutomationScheduleError')) {
+    await prisma.$executeRawUnsafe('ALTER TABLE "Season" ADD COLUMN "roundAutomationScheduleError" TEXT')
+  }
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "RoundTransitionRun" (
+      "id" TEXT NOT NULL,
+      "seasonId" TEXT NOT NULL,
+      "idempotencyKey" TEXT NOT NULL,
+      "trigger" "RoundTransitionTrigger" NOT NULL,
+      "outcome" "RoundTransitionOutcome" NOT NULL,
+      "generation" INTEGER NOT NULL,
+      "scheduledFor" TIMESTAMP(3),
+      "requestedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "processedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "actorId" TEXT,
+      "openedRoundId" TEXT,
+      "closedRoundIds" JSONB,
+      "details" JSONB,
+      "errorMessage" TEXT,
+      CONSTRAINT "RoundTransitionRun_pkey" PRIMARY KEY ("id"),
+      CONSTRAINT "RoundTransitionRun_seasonId_fkey" FOREIGN KEY ("seasonId") REFERENCES "Season"("id") ON DELETE CASCADE ON UPDATE CASCADE
+    )
+  `)
+  await prisma.$executeRawUnsafe('CREATE UNIQUE INDEX IF NOT EXISTS "RoundTransitionRun_idempotencyKey_key" ON "RoundTransitionRun"("idempotencyKey")')
+  await prisma.$executeRawUnsafe('CREATE INDEX IF NOT EXISTS "RoundTransitionRun_seasonId_processedAt_idx" ON "RoundTransitionRun"("seasonId", "processedAt")')
+  await prisma.$executeRawUnsafe('CREATE INDEX IF NOT EXISTS "RoundTransitionRun_outcome_processedAt_idx" ON "RoundTransitionRun"("outcome", "processedAt")')
+  await prisma.$executeRawUnsafe(`
+    WITH ranked_open_rounds AS (
+      SELECT "id", ROW_NUMBER() OVER (PARTITION BY "seasonId" ORDER BY "opensAt" DESC, "number" DESC) AS row_number
+      FROM "Round" WHERE "status" = 'OPEN'
+    )
+    UPDATE "Round" AS round SET "status" = 'UPCOMING'
+    FROM ranked_open_rounds AS ranked
+    WHERE round."id" = ranked."id" AND ranked.row_number > 1
+  `)
+  await prisma.$executeRawUnsafe('CREATE UNIQUE INDEX IF NOT EXISTS "Round_one_open_per_season" ON "Round"("seasonId") WHERE "status" = \'OPEN\'')
+
   const columns = await prisma.$queryRaw<{ column_name: string }[]>`
     SELECT column_name
     FROM information_schema.columns

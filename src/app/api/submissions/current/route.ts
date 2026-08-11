@@ -4,6 +4,7 @@ import { logger } from '@/server/logger'
 import { requireUserOrResponse, jsonError } from '@/server/http'
 import { getCurrentOperationalSeason } from '@/server/season'
 import { getSeasonScopedTeamMemberWhere } from '@/server/team-membership'
+import { processRoundTransitions } from '@/lib/round-scheduler'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,6 +14,18 @@ export async function GET() {
     const { user, response } = await requireUserOrResponse()
     if (response) return response
     const authUser = user!
+
+    // Boundary self-healing: if an exact AWS event was delayed, the first
+    // relevant application request reconciles only when a transition is due.
+    try {
+      await processRoundTransitions({ trigger: 'RECOVERY', dueOnly: true })
+    } catch (error) {
+      // The submission endpoint still enforces opensAt/closesAt directly, so
+      // a delayed recovery write must not make the workspace unavailable.
+      logger.error('Round transition recovery failed while loading the submission workspace', {
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
 
     const activeSeason = await getCurrentOperationalSeason({
       include: {

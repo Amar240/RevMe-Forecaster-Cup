@@ -5,10 +5,14 @@ export const dynamic = 'force-dynamic'
 
 export async function POST() {
   try {
-    const { response } = await requireAdminOrResponse()
+    const { user, response } = await requireAdminOrResponse()
     if (response) return response
 
-    const result = await processRoundTransitions()
+    const result = await processRoundTransitions({
+      trigger: 'ADMIN',
+      actorId: user?.id,
+      force: true,
+    })
     return jsonOk(result)
   } catch (error) {
     return jsonError(error, 'Failed to process round transitions')

@@ -100,7 +100,7 @@ export async function createSeasonWithRounds(params?: {
           opensAt,
           closesAt,
           isFinal: i === 7,
-          status: 'OPEN',
+          status: i === 1 ? 'OPEN' : 'UPCOMING',
         },
       })
     )
