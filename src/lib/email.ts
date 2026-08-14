@@ -66,10 +66,25 @@ const emailHeader = `
 </head>
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; background: #f8fafc;">
   <div style="background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
-    <div style="background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%); padding: 24px; text-align: center;">
-      <h1 style="color: white; margin: 0; font-size: 24px;">RevME Forecaster Cup</h1>
+    <div style="background-color: #2563eb; background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%); padding: 24px; text-align: center;">
+      <h1 style="color: #ffffff; margin: 0; font-size: 24px;">RevME Forecaster Cup</h1>
     </div>
     <div style="padding: 32px;">
+`
+
+// Outlook (Word rendering engine) drops CSS-styled anchor buttons, padding, border-radius and
+// gradients. Render the CTA as a table-based "bulletproof" button with a solid background-color
+// fallback so the label stays visible everywhere.
+const emailButton = (url: string, label: string) => `
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin: 32px auto;">
+          <tr>
+            <td align="center" bgcolor="#2563eb" style="background-color: #2563eb; background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%); border-radius: 8px;">
+              <a href="${url}" style="display: inline-block; padding: 14px 32px; color: #ffffff; font-weight: 600; text-decoration: none; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                ${label}
+              </a>
+            </td>
+          </tr>
+        </table>
 `
 
 const emailFooter = `
@@ -126,11 +141,7 @@ The RevME Team
           <p style="margin: 8px 0 0 0; color: #475569;">Click the button below to activate your account and set your password. This link expires in <strong>72 hours</strong>.</p>
         </div>
 
-        <div style="text-align: center; margin: 32px 0;">
-          <a href="${activationUrl}" style="background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%); color: white; padding: 14px 32px; text-decoration: none; border-radius: 8px; display: inline-block; font-weight: 600;">
-            Set My Password
-          </a>
-        </div>
+        ${emailButton(activationUrl, 'Set My Password')}
 
         <p style="color: #64748b; font-size: 14px;">If the button doesn't work, copy and paste this link into your browser:</p>
         <p style="color: #2563eb; font-size: 13px; word-break: break-all;">${activationUrl}</p>
@@ -184,13 +195,11 @@ The RevME Team
       html: `${emailHeader}
         <h2 style="margin-top: 0; color: #1e293b;">Reset Your Password</h2>
         <p>You requested to reset your password. Click the button below to set a new password:</p>
-        
-        <div style="text-align: center; margin: 32px 0;">
-          <a href="${resetUrl}" style="background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%); color: white; padding: 14px 32px; text-decoration: none; border-radius: 8px; display: inline-block; font-weight: 600;">
-            Reset Password
-          </a>
-        </div>
-        
+
+        ${emailButton(resetUrl, 'Reset Password')}
+
+        <p style="color: #64748b; font-size: 14px;">If the button doesn't work, copy and paste this link into your browser:</p>
+        <p style="color: #2563eb; font-size: 13px; word-break: break-all;">${resetUrl}</p>
         <p style="color: #64748b; font-size: 14px;">This link will expire in 24 hours.</p>
         <p style="color: #64748b; font-size: 14px;">If you didn't request this, you can safely ignore this email.</p>
       ${emailFooter}`,
@@ -256,11 +265,7 @@ The RevME Team
 
         <p style="color: #475569;">Enter the 6-digit code on the verification page to continue.</p>
 
-        <div style="text-align: center; margin: 32px 0;">
-          <a href="${verifyUrl}" style="background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%); color: white; padding: 14px 32px; text-decoration: none; border-radius: 8px; display: inline-block; font-weight: 600;">
-            Verify My Email
-          </a>
-        </div>
+        ${emailButton(verifyUrl, 'Verify My Email')}
 
         <p style="color: #64748b; font-size: 14px;">If you did not create this account, you can safely ignore this email.</p>
       ${emailFooter}`,
@@ -317,7 +322,7 @@ Round ${roundNumber} is now open for submissions!
 Team: ${teamName}
 Deadline: ${deadlineStr}
 
-Submit your forecasts for all 3 markets (Nashville CBD, Dubai, Hamburg) before the deadline.
+Submit your forecasts for all 3 markets (Nashville CBD, BUR Dubai, Hamburg Center) before the deadline.
 
 Submit now: ${submitUrl}
 
@@ -335,16 +340,12 @@ The RevME Team
         <p>Submit your forecasts for all 3 markets before the deadline:</p>
         <ul style="color: #475569;">
           <li>Nashville CBD</li>
-          <li>Dubai</li>
-          <li>Hamburg</li>
+          <li>BUR Dubai</li>
+          <li>Hamburg Center</li>
         </ul>
-        
-        <div style="text-align: center; margin: 32px 0;">
-          <a href="${submitUrl}" style="background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%); color: white; padding: 14px 32px; text-decoration: none; border-radius: 8px; display: inline-block; font-weight: 600;">
-            Submit Forecast
-          </a>
-        </div>
-        
+
+        ${emailButton(submitUrl, 'Submit Forecast')}
+
         <p style="color: #64748b; font-size: 14px;">Remember: Once submitted, your forecast is locked and cannot be edited.</p>
       ${emailFooter}`,
     })
@@ -430,11 +431,7 @@ The RevME Team
           <p style="margin: 0;"><strong>Submitted:</strong> ${submittedAtStr}</p>
         </div>
 
-        <div style="text-align: center; margin: 32px 0;">
-          <a href="${submitUrl}" style="background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%); color: white; padding: 14px 32px; text-decoration: none; border-radius: 8px; display: inline-block; font-weight: 600;">
-            View Submission
-          </a>
-        </div>
+        ${emailButton(submitUrl, 'View Submission')}
 
         <p style="color: #64748b; font-size: 14px;">Submissions are locked immediately after submit and cannot be edited.</p>
       ${emailFooter}`,
@@ -541,11 +538,7 @@ The RevME Team
             </p>
           </div>
           
-          <div style="text-align: center; margin: 32px 0;">
-            <a href="${dashboardUrl}" style="background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%); color: white; padding: 14px 32px; text-decoration: none; border-radius: 8px; display: inline-block; font-weight: 600;">
-              View Dashboard
-            </a>
-          </div>
+          ${emailButton(dashboardUrl, 'View Dashboard')}
         `}
       ${emailFooter}`,
     })
@@ -643,11 +636,7 @@ The RevME Team
           </ul>
         `}
         
-        <div style="text-align: center; margin: 32px 0;">
-          <a href="${loginUrl}" style="background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%); color: white; padding: 14px 32px; text-decoration: none; border-radius: 8px; display: inline-block; font-weight: 600;">
-            Go to Dashboard
-          </a>
-        </div>
+        ${emailButton(loginUrl, 'Go to Dashboard')}
       ${emailFooter}`,
     })
 

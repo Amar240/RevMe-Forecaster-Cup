@@ -149,7 +149,7 @@ export function SupervisorReportsClient({ teams }: Props) {
                     <p className="text-2xl font-semibold text-foreground">{team.scoredCount}</p>
                   </div>
                   <div className="rounded-lg border border-accent/20 bg-accent-soft p-4">
-                    <p className="text-sm text-accent">Final Score</p>
+                    <p className="text-sm text-accent">Cumulative Score</p>
                     <p className="text-2xl font-semibold text-accent">
                       {(((team.occMAPE + team.adrMAPE) / 2) * 100).toFixed(2)}%
                     </p>

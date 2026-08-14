@@ -56,7 +56,7 @@ const studentNav: NavItem[] = [
   { name: 'Debriefs', href: '/debrief', icon: BookOpen },
   { name: 'Leaderboards', href: '/leaderboards', icon: Trophy },
   { name: 'Market Info', href: '/market-info', icon: MapPin },
-  { name: 'Guidelines + Help', href: '/rules', icon: BookOpen },
+  { name: 'Guidelines & Help', href: '/rules', icon: BookOpen },
   { name: 'Support', href: '/support', icon: HelpCircle },
   { name: 'Settings', href: '/settings', icon: Settings },
 ]

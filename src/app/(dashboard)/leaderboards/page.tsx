@@ -224,7 +224,7 @@ export default function LeaderboardsPage() {
 
           <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as typeof activeTab)}><TabsList>
             {[
-              { key: 'final', label: 'Final Score', activeClass: 'border-accent text-accent' },
+              { key: 'final', label: 'Cumulative Score', activeClass: 'border-accent text-accent' },
               { key: 'occupancy', label: 'Occupancy', activeClass: 'border-primary text-primary' },
               { key: 'adr', label: 'ADR', activeClass: 'border-success text-success' },
             ].map((tab) => (
@@ -273,7 +273,7 @@ export default function LeaderboardsPage() {
                     ))}
                     {canSeeLeaderboardValues && (
                       <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                        {activeTab === 'final' ? 'Final Score' : activeTab === 'occupancy' ? 'Occupancy MAPE' : 'ADR MAPE'}
+                        {activeTab === 'final' ? 'Cumulative Score' : activeTab === 'occupancy' ? 'Occupancy MAPE' : 'ADR MAPE'}
                       </th>
                     )}
                   </tr>

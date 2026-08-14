@@ -258,20 +258,22 @@ export default function ScoresPage() {
       <div className="grid md:grid-cols-4 gap-6">
         <Card className="bg-gradient-to-br from-surface-secondary to-card">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-text-secondary">Total Submissions</CardTitle>
+            <CardTitle className="text-sm font-medium text-text-secondary">Total Predictions</CardTitle>
             <div className="rounded-lg bg-surface-secondary p-2">
               <FileText className="h-5 w-5 text-text-secondary" />
             </div>
           </CardHeader>
           <CardContent>
-            <p className="text-4xl font-bold text-foreground">{submissions.length}</p>
-            <p className="text-sm text-text-secondary">{scoredCount} scored</p>
+            {/* Each entry is a market-week pair carrying both an Occupancy and an ADR prediction,
+                so the prediction count is pairs x 2 (12 per fully-submitted round). */}
+            <p className="text-4xl font-bold text-foreground">{submissions.length * 2}</p>
+            <p className="text-sm text-text-secondary">{scoredCount * 2} scored</p>
           </CardContent>
         </Card>
 
         <Card className="border-accent/30 bg-gradient-to-br from-accent-soft to-card">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-text-secondary">Final Score</CardTitle>
+            <CardTitle className="text-sm font-medium text-text-secondary">Cumulative Score</CardTitle>
             <div className="rounded-lg bg-accent-soft p-2">
               <Trophy className="h-5 w-5 text-accent" />
             </div>

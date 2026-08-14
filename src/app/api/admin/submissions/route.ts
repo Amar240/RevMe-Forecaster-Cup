@@ -41,26 +41,26 @@ export async function GET() {
     const uniqueTeamsCount = new Set(submissions.map((s) => s.teamId)).size
 
     const formattedSubmissions = submissions.flatMap((sub) => {
-      const valuesByMarketWeek = new Map<string, { marketName: string; occupancy?: number; adr?: number; occAE?: number; adrAE?: number }>()
+      // Carry marketId/weekOffset as fields on the map value rather than parsing them back
+      // out of the composite key: market IDs can contain '-' (the standard markets are seeded
+      // with gen_random_uuid()), so key.split('-') does not reliably recover the week offset.
+      const valuesByMarketWeek = new Map<string, { marketId: string; weekOffset: number; marketName: string; occupancy?: number; adr?: number; occAE?: number; adrAE?: number }>()
       for (const val of sub.values) {
         const key = `${val.marketId}-${val.weekOffset}`
-        const existing = valuesByMarketWeek.get(key) || { marketName: val.market.name }
+        const existing = valuesByMarketWeek.get(key) || { marketId: val.marketId, weekOffset: val.weekOffset, marketName: val.market.name }
         const absError = errorMap.get(`${sub.teamId}-${sub.roundId}-${val.marketId}-${val.metric}-${val.weekOffset}`)
         if (val.metric === 'OCCUPANCY') { existing.occupancy = val.value; existing.occAE = absError }
         else { existing.adr = val.value; existing.adrAE = absError }
         valuesByMarketWeek.set(key, existing)
       }
-      return Array.from(valuesByMarketWeek.entries()).map(([key, values]) => {
-        const [, weekOffsetStr] = key.split('-')
-        return {
-          id: `${sub.id}-${key}`, teamName: sub.team.name, teamDisplayId: sub.team.displayId,
-          roundNumber: sub.round.number, marketName: values.marketName, weekOffset: parseInt(weekOffsetStr),
-          occupancy: values.occupancy ?? null, adr: values.adr ?? null,
-          submittedAt: sub.submittedAt.toISOString(),
-          submitterName: `${sub.submittedBy.firstName} ${sub.submittedBy.lastName}`, submitterEmail: sub.submittedBy.email,
-          hasScore: values.occAE !== undefined || values.adrAE !== undefined, occupancyAE: values.occAE, adrAE: values.adrAE,
-        }
-      })
+      return Array.from(valuesByMarketWeek.entries()).map(([key, values]) => ({
+        id: `${sub.id}-${key}`, teamName: sub.team.name, teamDisplayId: sub.team.displayId,
+        roundNumber: sub.round.number, marketName: values.marketName, weekOffset: values.weekOffset,
+        occupancy: values.occupancy ?? null, adr: values.adr ?? null,
+        submittedAt: sub.submittedAt.toISOString(),
+        submitterName: `${sub.submittedBy.firstName} ${sub.submittedBy.lastName}`, submitterEmail: sub.submittedBy.email,
+        hasScore: values.occAE !== undefined || values.adrAE !== undefined, occupancyAE: values.occAE, adrAE: values.adrAE,
+      }))
     })
 
     return jsonOk({ submissions: formattedSubmissions, totalSubmissions: submissions.length, scoredSubmissionsCount, uniqueTeamsCount })

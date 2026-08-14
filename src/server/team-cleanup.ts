@@ -97,25 +97,24 @@ async function getEligibility(teamId: string, db: DbClient) {
     })
   }
 
-  const activity: Array<[string, number, string]> = [
-    ['SUBMISSIONS', team._count.submissions, 'forecast submissions'],
-    ['PREDICTION_ERRORS', team._count.predictionErrors, 'prediction-error records'],
-    ['SCORE_AGGREGATES', team._count.scoreAggregates, 'score records'],
-    ['WARNINGS', team._count.warnings, 'competition warnings'],
-    ['SUPPORT_TICKETS', team._count.supportTickets, 'support tickets'],
-    ['JOIN_REQUESTS', joinRequests, 'join requests'],
-    ['EMAIL_DISPATCHES', emailDispatches, 'team email dispatches'],
-    ['SCORING_RUNS', scoringRuns, 'team-scoped scoring runs'],
-  ]
-  for (const [code, count, label] of activity) {
-    if (count > 0) {
-      blockers.push({
-        code,
-        count,
-        message: `This team has ${count} ${label} and must be archived instead of deleted.`,
-        action: 'REVIEW_RECORDS',
-      })
-    }
+  // Collapse the per-record-type breakdown into a single, plain-language blocker. The individual
+  // counts remain summed for context, but non-technical admins only need one clear message.
+  const historyRecordCount =
+    team._count.submissions
+    + team._count.predictionErrors
+    + team._count.scoreAggregates
+    + team._count.warnings
+    + team._count.supportTickets
+    + joinRequests
+    + emailDispatches
+    + scoringRuns
+  if (historyRecordCount > 0) {
+    blockers.push({
+      code: 'COMPETITION_HISTORY',
+      count: historyRecordCount,
+      message: 'This team has competition history and must be archived instead of deleted.',
+      action: 'ARCHIVE',
+    })
   }
 
   return {

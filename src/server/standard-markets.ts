@@ -1,6 +1,6 @@
 import type { Market, Prisma } from '@prisma/client'
 
-export const STANDARD_MARKET_NAMES = ['Nashville CBD', 'Dubai', 'Hamburg'] as const
+export const STANDARD_MARKET_NAMES = ['Nashville CBD', 'BUR Dubai', 'Hamburg Center'] as const
 
 type MarketStore = {
   market: {

@@ -8,11 +8,11 @@ import { getCurrentSubmission, submitForecast } from '@/features/submissions/api
 import type { ExistingSubmission, LockReason, MarketInfo, RoundInfo } from '@/features/submissions/types'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { AlertBanner } from '@/components/ui/alert-banner'
-import { parseSubmissionMetricInput } from '@/lib/submission-values'
+import { getSubmissionMetricError, parseSubmissionMetricInput } from '@/lib/submission-values'
+import { predictionsRequired } from '@/lib/competition-config'
+import { ValidatedNumberField } from '@/components/ui/validated-number-field'
 import { contextualWarning, draftKey, draftSavedAt, parseDraft, serializeDraft } from '@/lib/submission-workspace'
 import { Sparkline } from '@/components/ui/sparkline'
 import { Tooltip } from '@/components/ui/tooltip'
@@ -265,13 +265,19 @@ export default function SubmitPage() {
   const isFormComplete = () =>
     getSubmissionValidationError(predictions) === null
 
+  // Count only values that are genuinely VALID numbers — not merely non-empty. Previously a field
+  // containing "abc" counted as filled, so the progress read "12 of 12" while Review stayed disabled
+  // (the confusing behavior from the issues log).
   const getFilledCount = () =>
-    Object.values(predictions).filter((prediction) => prediction.occupancy !== '' && prediction.adr !== '').length * 2
+    Object.values(predictions).reduce(
+      (count, prediction) =>
+        count
+        + (parseSubmissionMetricInput('OCCUPANCY', prediction.occupancy) !== null ? 1 : 0)
+        + (parseSubmissionMetricInput('ADR', prediction.adr) !== null ? 1 : 0),
+      0
+    )
 
-  const getTotalRequired = () => {
-    const weeks = currentRound?.isFinal ? 1 : 2
-    return markets.length * weeks * 2
-  }
+  const getTotalRequired = () => predictionsRequired(markets.length, Boolean(currentRound?.isFinal))
 
   const contextualWarnings = Object.entries(predictions).flatMap(([key, prediction]) => {
     const lastDash = key.lastIndexOf('-')
@@ -552,7 +558,7 @@ export default function SubmitPage() {
                 <span className="font-semibold text-foreground">
                   {getFilledCount()} / {getTotalRequired()}
                 </span>
-                <span className="text-sm text-muted-foreground">values entered</span>
+                <span className="text-sm text-muted-foreground">values ready</span>
               </div>
               <div className="h-2 w-48 rounded-full bg-surface-secondary">
                 <div
@@ -609,50 +615,44 @@ export default function SubmitPage() {
                         <span>Week +{week}</span>
                       </h4>
                       <div className="space-y-4">
-                        <div className="space-y-2">
-                          <Label htmlFor={`${key}-occupancy`}>Occupancy</Label>
-                          <Input
+                        <div className="space-y-1.5">
+                          <ValidatedNumberField
                             id={`${key}-occupancy`}
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            max="100"
-                            placeholder="e.g., 72.5"
-                            value={predictions[key]?.occupancy || ''}
-                            onChange={(event) =>
+                            label="Occupancy"
+                            value={predictions[key]?.occupancy ?? ''}
+                            onChange={(next) =>
                               setPredictions({
                                 ...predictions,
-                                [key]: { ...predictions[key], occupancy: event.target.value },
+                                [key]: { ...predictions[key], occupancy: next },
                               })
                             }
+                            validate={(raw) => getSubmissionMetricError('OCCUPANCY', raw)}
                             disabled={hasExisting}
+                            placeholder="e.g., 72.5"
                           />
                           {!hasExisting && predictions[key]?.occupancy && contextualWarning(Number(predictions[key].occupancy), evidenceByMarket[market.id]?.lastActual.occupancy ?? null, 'OCCUPANCY') && <p className="rounded-md bg-warning-background px-2 py-1 text-xs text-warning">⚠ {contextualWarning(Number(predictions[key].occupancy), evidenceByMarket[market.id]?.lastActual.occupancy ?? null, 'OCCUPANCY')}</p>}
                         </div>
-                        <div className="space-y-2">
-                          <Label htmlFor={`${key}-adr`} className="flex items-center space-x-2">
-                            <DollarSign className="h-4 w-4 text-success" />
-                            <span>ADR ($)</span>
-                          </Label>
-                          <div className="relative">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted">$</span>
-                            <Input
-                              id={`${key}-adr`}
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              placeholder="e.g., 145.00"
-                              value={predictions[key]?.adr || ''}
-                              onChange={(event) =>
-                                setPredictions({
-                                  ...predictions,
-                                  [key]: { ...predictions[key], adr: event.target.value },
-                                })
-                              }
-                              disabled={hasExisting}
-                              className="pl-7"
-                            />
-                          </div>
+                        <div className="space-y-1.5">
+                          <ValidatedNumberField
+                            id={`${key}-adr`}
+                            label={<><DollarSign className="h-4 w-4 text-success" /><span>ADR ($)</span></>}
+                            labelClassName="flex items-center space-x-2"
+                            value={predictions[key]?.adr ?? ''}
+                            onChange={(next) =>
+                              setPredictions({
+                                ...predictions,
+                                [key]: { ...predictions[key], adr: next },
+                              })
+                            }
+                            validate={(raw) => getSubmissionMetricError('ADR', raw)}
+                            disabled={hasExisting}
+                            placeholder="e.g., 145.00"
+                            prefix="$"
+                            formatOnBlur={(raw) => {
+                              const parsed = parseSubmissionMetricInput('ADR', raw)
+                              return parsed === null ? raw : parsed.toFixed(2)
+                            }}
+                          />
                           {!hasExisting && predictions[key]?.adr && contextualWarning(Number(predictions[key].adr), evidenceByMarket[market.id]?.lastActual.adr ?? null, 'ADR') && <p className="rounded-md bg-warning-background px-2 py-1 text-xs text-warning">⚠ {contextualWarning(Number(predictions[key].adr), evidenceByMarket[market.id]?.lastActual.adr ?? null, 'ADR')}</p>}
                         </div>
                       </div>
@@ -676,7 +676,7 @@ export default function SubmitPage() {
 
       {!hasExisting && (
         <div className="sticky bottom-0 z-10 flex items-center justify-between gap-4 border-t border-border bg-background/95 py-4 backdrop-blur">
-          <p className="text-sm text-text-secondary">{getFilledCount()} of {getTotalRequired()} values entered</p>
+          <p className="text-sm text-text-secondary">{getFilledCount()} of {getTotalRequired()} values ready</p>
           <Tooltip label={isFormComplete() ? 'All required values are ready for review.' : `${Math.max(0, getTotalRequired() - getFilledCount())} required values are missing or invalid.`}><Button size="lg" onClick={() => setShowReview(true)} disabled={!isFormComplete()} className="min-w-[200px]">
             Review Submission
             <ChevronRight className="ml-2 h-4 w-4" />

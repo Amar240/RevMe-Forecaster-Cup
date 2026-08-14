@@ -1,7 +1,6 @@
-import { prisma } from '@/lib/db'
 import { requireAdminOrResponse, jsonOk, jsonError } from '@/server/http'
 import { logAuditAction } from '@/lib/audit'
-import { closeOpenSupervisorAssignment } from '@/server/team-supervisor-assignment'
+import { assignMissedSubmissionWarnings } from '@/server/missed-submission-warnings'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,106 +9,22 @@ export async function POST() {
     const { user, response } = await requireAdminOrResponse()
     if (response) return response
 
-    const now = new Date()
-
-    const closedRounds = await prisma.round.findMany({
-      where: { closesAt: { lt: now } },
-      select: { id: true, number: true },
+    // Delegates to the shared assignment logic (same path used automatically on round close), which is
+    // idempotent and now also sends the N/3 warning email.
+    const { warningsCreated, teamsDisqualified } = await assignMissedSubmissionWarnings({
+      sendEmail: true,
+      actorId: user!.id,
     })
-
-    if (closedRounds.length === 0) {
-      return jsonOk({ message: 'No closed rounds to check', warningsCreated: 0, teamsDisqualified: 0 })
-    }
-
-    const activeTeams = await prisma.team.findMany({
-      where: { status: 'ACTIVE' },
-      select: { id: true },
-    })
-
-    if (activeTeams.length === 0) {
-      return jsonOk({ message: 'No active teams', warningsCreated: 0, teamsDisqualified: 0 })
-    }
-
-    const roundIds = closedRounds.map((r) => r.id)
-    const teamIds = activeTeams.map((t) => t.id)
-
-    const [existingSubmissions, existingWarnings] = await Promise.all([
-      prisma.submission.findMany({
-        where: { roundId: { in: roundIds }, teamId: { in: teamIds } },
-        select: { teamId: true, roundId: true },
-      }),
-      prisma.warning.findMany({
-        where: {
-          roundId: { in: roundIds },
-          teamId: { in: teamIds },
-          type: 'MISSED_SUBMISSION',
-        },
-        select: { teamId: true, roundId: true },
-      }),
-    ])
-
-    const submissionSet = new Set(existingSubmissions.map((s) => `${s.teamId}:${s.roundId}`))
-    const warningSet = new Set(existingWarnings.map((w) => `${w.teamId}:${w.roundId}`))
-
-    const roundNumberMap = new Map(closedRounds.map((r) => [r.id, r.number]))
-
-    const warningsToCreate: { teamId: string; roundId: string; type: 'MISSED_SUBMISSION'; message: string }[] = []
-
-    for (const teamId of teamIds) {
-      for (const roundId of roundIds) {
-        const key = `${teamId}:${roundId}`
-        if (!submissionSet.has(key) && !warningSet.has(key)) {
-          warningsToCreate.push({
-            teamId,
-            roundId,
-            type: 'MISSED_SUBMISSION',
-            message: `Missed submission for Round ${roundNumberMap.get(roundId)}`,
-          })
-        }
-      }
-    }
-
-    if (warningsToCreate.length > 0) {
-      await prisma.warning.createMany({ data: warningsToCreate })
-    }
-
-    const teamsToDisqualify = await prisma.team.findMany({
-      where: {
-        status: 'ACTIVE',
-        warnings: { some: {} },
-      },
-      include: { _count: { select: { warnings: true } } },
-    })
-
-    let disqualified = 0
-    const disqualifiedTeams = teamsToDisqualify.filter((t) => t._count.warnings >= 3)
-
-    if (disqualifiedTeams.length > 0) {
-      await prisma.$transaction(async (tx) => {
-        for (const team of disqualifiedTeams) {
-          await tx.team.update({
-            where: { id: team.id },
-            data: {
-              status: 'DISQUALIFIED',
-              disqualifiedAt: new Date(),
-              disqualifiedReason: 'Three missed submissions',
-            },
-          })
-          await closeOpenSupervisorAssignment({ teamId: team.id, endedById: user!.id, reason: 'Team disqualified after three missed submissions', db: tx })
-        }
-      })
-      disqualified = disqualifiedTeams.length
-    }
 
     await logAuditAction(user!.id, 'RUN_WARNINGS', 'System', null, {
-      warningsCreated: warningsToCreate.length,
-      teamsDisqualified: disqualified,
+      warningsCreated,
+      teamsDisqualified,
     })
 
     return jsonOk({
-      message: 'Warnings check complete',
-      warningsCreated: warningsToCreate.length,
-      teamsDisqualified: disqualified,
+      message: warningsCreated > 0 ? 'Warnings check complete' : 'No new warnings to issue',
+      warningsCreated,
+      teamsDisqualified,
     })
   } catch (error) {
     return jsonError(error, 'Warnings check failed')

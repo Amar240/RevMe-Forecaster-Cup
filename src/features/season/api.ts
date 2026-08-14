@@ -1,13 +1,21 @@
 import { csrfFetch } from '@/lib/csrf'
 import type { CreateSeasonInput } from '@/features/season/schema'
-import type { RoundAutomationMode, RoundAutomationStatus, SeasonOverviewResponse } from '@/features/season/types'
+import type {
+  RoundAutomationMode,
+  RoundAutomationResumePreview,
+  RoundAutomationStatus,
+  SeasonOverviewResponse,
+} from '@/features/season/types'
 
 async function parseJson<T>(res: Response): Promise<T> {
   const data = await res.json()
   if (!res.ok) {
     const message = (data && (data.message || data.error)) || 'Request failed'
     const error = new Error(message)
-    ;(error as Error & { status?: number }).status = res.status
+    ;(error as Error & { status?: number; code?: string; details?: unknown; preview?: unknown }).status = res.status
+    ;(error as Error & { status?: number; code?: string; details?: unknown; preview?: unknown }).code = data?.code
+    ;(error as Error & { status?: number; code?: string; details?: unknown; preview?: unknown }).details = data?.details
+    ;(error as Error & { status?: number; code?: string; details?: unknown; preview?: unknown }).preview = data?.preview
     throw error
   }
   return data as T
@@ -44,6 +52,7 @@ export async function updateRoundStatus(input: {
   status: 'UPCOMING' | 'OPEN' | 'PAUSED' | 'CLOSED'
   opensAt?: string
   closesAt?: string
+  reason?: string
 }): Promise<{ message: string }> {
   const res = await csrfFetch(`/api/admin/rounds/${input.roundId}/status`, {
     method: 'PATCH',
@@ -52,6 +61,7 @@ export async function updateRoundStatus(input: {
       status: input.status,
       opensAt: input.opensAt,
       closesAt: input.closesAt,
+      reason: input.reason,
     }),
   })
   return parseJson<{ message: string }>(res)
@@ -67,12 +77,60 @@ export async function updateRoundAutomationMode(input: {
   seasonId: string
   mode: RoundAutomationMode
   reason: string
+  expectedEndAt?: string
+  acknowledgeConsequences?: boolean
+  fingerprint?: string
 }) {
   return parseJson<RoundAutomationStatus>(
     await csrfFetch(`/api/admin/seasons/${input.seasonId}/round-automation`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode: input.mode, reason: input.reason }),
+      body: JSON.stringify({
+        mode: input.mode,
+        reason: input.reason,
+        expectedEndAt: input.expectedEndAt,
+        acknowledgeConsequences: input.acknowledgeConsequences,
+        fingerprint: input.fingerprint,
+      }),
+    })
+  )
+}
+
+export async function startRoundAutomationEmergency(input: {
+  seasonId: string
+  reason: string
+  expectedEndAt: string
+  acknowledgeConsequences: true
+}) {
+  return parseJson<RoundAutomationStatus>(
+    await csrfFetch(`/api/admin/seasons/${input.seasonId}/round-automation/emergency`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        reason: input.reason,
+        expectedEndAt: input.expectedEndAt,
+        acknowledgeConsequences: input.acknowledgeConsequences,
+      }),
+    })
+  )
+}
+
+export async function getRoundAutomationResumePreview(seasonId: string) {
+  return parseJson<{ preview: RoundAutomationResumePreview }>(
+    await csrfFetch(`/api/admin/seasons/${seasonId}/round-automation/resume-preview`)
+  )
+}
+
+export async function resumeRoundAutomation(input: {
+  seasonId: string
+  fingerprint: string
+  reason: string
+}) {
+  return parseJson<RoundAutomationStatus>(
+    await csrfFetch(`/api/admin/seasons/${input.seasonId}/round-automation/resume`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fingerprint: input.fingerprint, reason: input.reason }),
     })
   )
 }

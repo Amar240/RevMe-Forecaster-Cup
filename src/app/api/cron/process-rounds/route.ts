@@ -2,6 +2,8 @@ import { NextRequest } from 'next/server'
 import { z } from 'zod'
 
 import { processRoundTransitions, reconcileSeasonRoundState } from '@/lib/round-scheduler'
+import { assignMissedSubmissionWarnings } from '@/server/missed-submission-warnings'
+import { processRoundAutomationOverrideReminder } from '@/server/round-automation-emergency'
 import { ApiError, jsonError, jsonOk } from '@/server/http'
 import { logger } from '@/server/logger'
 import { processDeadlineReminders } from '@/server/round-reminders'
@@ -9,10 +11,16 @@ import { processDeadlineReminders } from '@/server/round-reminders'
 export const dynamic = 'force-dynamic'
 
 const scheduledTransitionSchema = z.object({
+  eventType: z.enum([
+    'ROUND_BOUNDARY',
+    'EMERGENCY_OVERRIDE_DUE',
+    'EMERGENCY_OVERRIDE_ESCALATION',
+  ]).default('ROUND_BOUNDARY'),
   seasonId: z.string().min(1).max(100),
-  generation: z.number().int().positive(),
-  idempotencyKey: z.string().min(10).max(500),
-  scheduledFor: z.string().datetime(),
+  generation: z.number().int().positive().optional(),
+  idempotencyKey: z.string().min(10).max(500).optional(),
+  scheduledFor: z.string().datetime().optional(),
+  overrideId: z.string().min(1).max(100).optional(),
 })
 
 function authorize(request: NextRequest) {
@@ -48,6 +56,22 @@ export async function POST(request: NextRequest) {
     const parsed = scheduledTransitionSchema.safeParse(await request.json().catch(() => null))
     if (!parsed.success) throw parsed.error
 
+    if (parsed.data.eventType === 'EMERGENCY_OVERRIDE_DUE' || parsed.data.eventType === 'EMERGENCY_OVERRIDE_ESCALATION') {
+      if (!parsed.data.overrideId) {
+        throw new ApiError('Emergency override ID is required', 400, 'INVALID_INPUT')
+      }
+      const result = await processRoundAutomationOverrideReminder({
+        seasonId: parsed.data.seasonId,
+        overrideId: parsed.data.overrideId,
+        eventType: parsed.data.eventType,
+      })
+      return jsonOk(result)
+    }
+
+    if (!parsed.data.generation || !parsed.data.idempotencyKey || !parsed.data.scheduledFor) {
+      throw new ApiError('Scheduled round boundary payload is incomplete', 400, 'INVALID_INPUT')
+    }
+
     const result = await reconcileSeasonRoundState({
       seasonId: parsed.data.seasonId,
       trigger: 'SCHEDULED',
@@ -55,6 +79,19 @@ export async function POST(request: NextRequest) {
       idempotencyKey: parsed.data.idempotencyKey,
       scheduledFor: new Date(parsed.data.scheduledFor),
     })
+
+    // Assign missed-submission warnings + emails for any round this boundary just closed. Non-fatal.
+    if (result.closedRoundIds.length > 0) {
+      try {
+        await assignMissedSubmissionWarnings({ roundIds: result.closedRoundIds, sendEmail: true, actorId: null })
+      } catch (error) {
+        logger.error('Missed-submission warning assignment failed after scheduled close', {
+          closedRoundIds: result.closedRoundIds,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
+    }
+
     return jsonOk({ ok: true, ...result })
   } catch (error) {
     return jsonError(error, 'Failed to process scheduled round transition')

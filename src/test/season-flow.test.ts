@@ -42,6 +42,24 @@ function buildSubmissionEntries(markets: Array<{ id: string }>, weekOffsets: num
   )
 }
 
+async function enableEmergencyRoundControl(seasonId: string, adminId: string) {
+  await prisma.season.update({
+    where: { id: seasonId },
+    data: {
+      roundAutomationMode: 'MANUAL',
+      roundAutomationGeneration: { increment: 1 },
+    },
+  })
+  await prisma.roundAutomationOverride.create({
+    data: {
+      seasonId,
+      reason: 'Need emergency control while validating manual round behavior.',
+      expectedEndAt: new Date(Date.now() + 60 * 60 * 1000),
+      activatedById: adminId,
+    },
+  })
+}
+
 describe('Season and round flow', () => {
   let admin: Awaited<ReturnType<typeof createUser>>
   let university: Awaited<ReturnType<typeof createUniversity>>
@@ -101,6 +119,7 @@ describe('Season and round flow', () => {
   })
 
   it('cannot open a round when another round is already open', async () => {
+    await enableEmergencyRoundControl(season.id, admin.id)
     await prisma.round.update({
       where: { id: rounds[0].id },
       data: { status: 'OPEN' },
@@ -185,6 +204,7 @@ describe('Season and round flow', () => {
   })
 
   it('does not allow opening rounds for a completed season', async () => {
+    await enableEmergencyRoundControl(season.id, admin.id)
     await prisma.season.update({
       where: { id: season.id },
       data: { status: 'COMPLETED' },

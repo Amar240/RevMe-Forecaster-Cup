@@ -12,6 +12,7 @@ import { StatCard } from '@/components/ui/stat-card'
 import { DualTimezoneDeadline } from '@/components/dual-timezone-deadline'
 import { MotionReveal } from '@/components/ui/motion-reveal'
 import { getSupervisorCoaching } from '@/server/supervisor-coaching'
+import { predictionsBreakdownLabel } from '@/lib/competition-config'
 
 export default async function DashboardPage() {
   const user = await getSession()
@@ -298,7 +299,7 @@ export default async function DashboardPage() {
               <div className="flex items-center justify-between gap-4">
                 <div>
                   <p className="font-semibold text-foreground">Ready to submit your forecast?</p>
-                  <p className="text-sm text-text-secondary">You need to submit 12 predictions (3 markets x 2 weeks x 2 metrics)</p>
+                  <p className="text-sm text-text-secondary">You need to submit {predictionsBreakdownLabel(operationalSeason?.markets.length ?? 0, currentRound.isFinal)}</p>
                 </div>
                 <div className="flex flex-col items-end gap-2"><Link href="/submit">
                   <Button size="lg" className="bg-primary hover:bg-primary-hover">

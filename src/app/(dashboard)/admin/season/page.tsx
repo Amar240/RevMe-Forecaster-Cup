@@ -56,6 +56,7 @@ export default function AdminSeasonPage() {
   const [success, setSuccess] = useState('')
   const [editingRound, setEditingRound] = useState<string | null>(null)
   const [editDates, setEditDates] = useState({ opensAt: '', closesAt: '' })
+  const [editReason, setEditReason] = useState('')
   const [availableMarkets, setAvailableMarkets] = useState<MarketOption[]>([])
   const [formData, setFormData] = useState({
     name: '',
@@ -67,6 +68,7 @@ export default function AdminSeasonPage() {
   })
 
   const [confirmComplete, setConfirmComplete] = useState(false)
+  const [confirmPause, setConfirmPause] = useState(false)
   const [confirmCloseRound, setConfirmCloseRound] = useState<string | null>(null)
   const [wipeDialogSeason, setWipeDialogSeason] = useState<SeasonSummary | null>(null)
   const [wipeConfirmName, setWipeConfirmName] = useState('')
@@ -214,7 +216,12 @@ export default function AdminSeasonPage() {
     }
   }
 
-  const handleRoundStatusChange = async (roundId: string, newStatus: 'UPCOMING' | 'OPEN' | 'PAUSED' | 'CLOSED', dates?: { opensAt?: string; closesAt?: string }) => {
+  const handleRoundStatusChange = async (
+    roundId: string,
+    newStatus: 'UPCOMING' | 'OPEN' | 'PAUSED' | 'CLOSED',
+    dates?: { opensAt?: string; closesAt?: string },
+    reason?: string
+  ) => {
     setActionLoading(roundId)
     setError('')
     setSuccess('')
@@ -225,12 +232,19 @@ export default function AdminSeasonPage() {
         status: newStatus,
         opensAt: dates?.opensAt,
         closesAt: dates?.closesAt,
+        reason,
       })
       setSuccess(data.message)
       setEditingRound(null)
+      setEditReason('')
       await fetchSeason()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred')
+      const errorCode = (err as Error & { code?: string })?.code
+      setError(
+        errorCode === 'ROUND_EMERGENCY_CONTROL_REQUIRED'
+          ? 'Start emergency round control before manually opening, closing, pausing, or reopening a round.'
+          : err instanceof Error ? err.message : 'An error occurred'
+      )
     } finally {
       setActionLoading(null)
     }
@@ -337,10 +351,16 @@ export default function AdminSeasonPage() {
       opensAt: new Date(round.opensAt).toISOString().slice(0, 16),
       closesAt: new Date(round.closesAt).toISOString().slice(0, 16),
     })
+    setEditReason('')
   }
 
   const saveRoundDates = async (roundId: string, currentStatus: string) => {
-    await handleRoundStatusChange(roundId, currentStatus as 'UPCOMING' | 'OPEN' | 'PAUSED' | 'CLOSED', editDates)
+    await handleRoundStatusChange(
+      roundId,
+      currentStatus as 'UPCOMING' | 'OPEN' | 'PAUSED' | 'CLOSED',
+      editDates,
+      editReason
+    )
   }
 
   const getStatusColor = (status: string) => {
@@ -416,7 +436,7 @@ export default function AdminSeasonPage() {
                     <>
                       <Button 
                         variant="outline"
-                        onClick={() => handleSeasonAction('pause')}
+                        onClick={() => setConfirmPause(true)}
                         disabled={actionLoading === 'pause'}
                         className="border-warning/30 text-warning hover:bg-warning-background"
                       >
@@ -538,7 +558,7 @@ export default function AdminSeasonPage() {
                           </div>
 
                           {isEditing ? (
-                            <div className="mt-3 grid grid-cols-2 gap-3">
+                            <div className="mt-3 grid gap-3 sm:grid-cols-2">
                               <div>
                                 <Label className="text-xs">Opens At</Label>
                                 <Input
@@ -556,6 +576,19 @@ export default function AdminSeasonPage() {
                                   onChange={(e) => setEditDates({ ...editDates, closesAt: e.target.value })}
                                   className="h-8 text-sm"
                                 />
+                              </div>
+                              <div className="sm:col-span-2">
+                                <Label className="text-xs">Reason for schedule change</Label>
+                                <Input
+                                  value={editReason}
+                                  onChange={(e) => setEditReason(e.target.value)}
+                                  maxLength={500}
+                                  placeholder="Briefly explain why this round time is changing."
+                                  className="h-8 text-sm"
+                                />
+                                <p className="mt-1 text-xs text-text-muted">
+                                  Schedule-time changes refresh future automatic actions and are saved in the audit log.
+                                </p>
                               </div>
                             </div>
                           ) : (
@@ -575,14 +608,17 @@ export default function AdminSeasonPage() {
                                 size="sm"
                                 variant="outline"
                                 className="h-8"
-                                onClick={() => setEditingRound(null)}
+                                onClick={() => {
+                                  setEditingRound(null)
+                                  setEditReason('')
+                                }}
                               >
                                 <X className="h-3 w-3" />
                               </Button>
                               <Button
                                 size="sm"
                                 className="h-8"
-                                disabled={isLoading}
+                                disabled={isLoading || editReason.trim().length < 10}
                                 onClick={() => saveRoundDates(round.id, round.status)}
                               >
                                 <Check className="h-3 w-3 mr-1" />
@@ -591,92 +627,92 @@ export default function AdminSeasonPage() {
                             </>
                           ) : (
                             <>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-8 px-2"
+                                title="Edit scheduled round times"
+                                onClick={() => startEditingRound(round)}
+                              >
+                                <Edit2 className="h-3 w-3" />
+                              </Button>
                               {season.roundAutomationMode === 'MANUAL' && (
                                 <>
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    className="h-8 px-2"
-                                    onClick={() => startEditingRound(round)}
-                                  >
-                                    <Edit2 className="h-3 w-3" />
-                                  </Button>
+                                  {round.status === 'UPCOMING' && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-8 text-success border-success/30 hover:bg-success-background"
+                                      disabled={isLoading}
+                                      onClick={() => handleRoundStatusChange(round.id, 'OPEN')}
+                                    >
+                                      <Play className="h-3 w-3 mr-1" />
+                                      Open
+                                    </Button>
+                                  )}
 
-                              {round.status === 'UPCOMING' && (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-8 text-success border-success/30 hover:bg-success-background"
-                                  disabled={isLoading}
-                                  onClick={() => handleRoundStatusChange(round.id, 'OPEN')}
-                                >
-                                  <Play className="h-3 w-3 mr-1" />
-                                  Open
-                                </Button>
-                              )}
+                                  {round.status === 'OPEN' && (
+                                    <>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-8 text-warning border-warning/30 hover:bg-warning-background"
+                                        disabled={isLoading}
+                                        onClick={() => handleRoundStatusChange(round.id, 'PAUSED')}
+                                      >
+                                        <Pause className="h-3 w-3 mr-1" />
+                                        Pause
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-8 text-error border-error/30 hover:bg-error-background"
+                                        disabled={isLoading}
+                                        onClick={() => setConfirmCloseRound(round.id)}
+                                      >
+                                        <Square className="h-3 w-3 mr-1" />
+                                        Close
+                                      </Button>
+                                    </>
+                                  )}
 
-                              {round.status === 'OPEN' && (
-                                <>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="h-8 text-warning border-warning/30 hover:bg-warning-background"
-                                    disabled={isLoading}
-                                    onClick={() => handleRoundStatusChange(round.id, 'PAUSED')}
-                                  >
-                                    <Pause className="h-3 w-3 mr-1" />
-                                    Pause
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="h-8 text-error border-error/30 hover:bg-error-background"
-                                    disabled={isLoading}
-                                    onClick={() => setConfirmCloseRound(round.id)}
-                                  >
-                                    <Square className="h-3 w-3 mr-1" />
-                                    Close
-                                  </Button>
-                                </>
-                              )}
+                                  {round.status === 'PAUSED' && (
+                                    <>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-8 text-success border-success/30 hover:bg-success-background"
+                                        disabled={isLoading}
+                                        onClick={() => handleRoundStatusChange(round.id, 'OPEN')}
+                                      >
+                                        <RotateCcw className="h-3 w-3 mr-1" />
+                                        Resume
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-8 text-error border-error/30 hover:bg-error-background"
+                                        disabled={isLoading}
+                                        onClick={() => setConfirmCloseRound(round.id)}
+                                      >
+                                        <Square className="h-3 w-3 mr-1" />
+                                        Close
+                                      </Button>
+                                    </>
+                                  )}
 
-                              {round.status === 'PAUSED' && (
-                                <>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="h-8 text-success border-success/30 hover:bg-success-background"
-                                    disabled={isLoading}
-                                    onClick={() => handleRoundStatusChange(round.id, 'OPEN')}
-                                  >
-                                    <RotateCcw className="h-3 w-3 mr-1" />
-                                    Resume
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="h-8 text-error border-error/30 hover:bg-error-background"
-                                    disabled={isLoading}
-                                    onClick={() => setConfirmCloseRound(round.id)}
-                                  >
-                                    <Square className="h-3 w-3 mr-1" />
-                                    Close
-                                  </Button>
-                                </>
-                              )}
-
-                              {round.status === 'CLOSED' && (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-8 text-success border-success/30 hover:bg-success-background"
-                                  disabled={isLoading}
-                                  onClick={() => handleRoundStatusChange(round.id, 'OPEN')}
-                                >
-                                  <RotateCcw className="h-3 w-3 mr-1" />
-                                  Reopen
-                                </Button>
-                              )}
+                                  {round.status === 'CLOSED' && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-8 text-success border-success/30 hover:bg-success-background"
+                                      disabled={isLoading}
+                                      onClick={() => handleRoundStatusChange(round.id, 'OPEN')}
+                                    >
+                                      <RotateCcw className="h-3 w-3 mr-1" />
+                                      Reopen
+                                    </Button>
+                                  )}
                                 </>
                               )}
 
@@ -1011,6 +1047,20 @@ export default function AdminSeasonPage() {
         onConfirm={async () => {
           await handleSeasonAction('complete')
           setConfirmComplete(false)
+        }}
+      />
+
+      <ConfirmDialog
+        open={confirmPause}
+        onOpenChange={setConfirmPause}
+        title="Pause the entire season?"
+        description="This stops the competition for everyone and blocks all participant submissions until the season is resumed. Use Emergency controls instead if only round scheduling needs manual attention."
+        confirmLabel="Pause Season"
+        variant="destructive"
+        loading={actionLoading === 'pause'}
+        onConfirm={async () => {
+          await handleSeasonAction('pause')
+          setConfirmPause(false)
         }}
       />
 

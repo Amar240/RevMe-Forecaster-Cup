@@ -123,7 +123,7 @@ async function createCompletedArchiveScenario(): Promise<ArchiveScenario> {
       )
     }
 
-    const marketNames = ['Nashville CBD', 'Dubai', 'Hamburg'] as const
+    const marketNames = ['Nashville CBD', 'BUR Dubai', 'Hamburg Center'] as const
     const markets = await Promise.all(
       marketNames.map((name) =>
         tx.market.upsert({

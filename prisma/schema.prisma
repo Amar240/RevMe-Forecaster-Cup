@@ -116,6 +116,11 @@ enum RoundTransitionOutcome {
   FAILED
 }
 
+enum RoundAutomationOverrideStatus {
+  ACTIVE
+  RESOLVED
+}
+
 enum TeamSupervisorAssignmentSource {
   INITIAL
   REASSIGNMENT
@@ -213,6 +218,9 @@ model User {
   teamSupervisorAssignments TeamSupervisorAssignment[] @relation("AssignmentSupervisor")
   teamAssignmentsStarted    TeamSupervisorAssignment[] @relation("AssignmentStartedBy")
   teamAssignmentsEnded      TeamSupervisorAssignment[] @relation("AssignmentEndedBy")
+  roundAutomationOverridesActivated RoundAutomationOverride[] @relation("RoundAutomationOverrideActivatedBy")
+  roundAutomationOverridesExtended  RoundAutomationOverride[] @relation("RoundAutomationOverrideExtendedBy")
+  roundAutomationOverridesResolved  RoundAutomationOverride[] @relation("RoundAutomationOverrideResolvedBy")
 
   @@index([email])
   @@index([role])
@@ -364,6 +372,7 @@ model Season {
   archives           SeasonArchive[]
   importBatches       ImportBatch[]
   roundTransitionRuns RoundTransitionRun[]
+  roundAutomationOverrides RoundAutomationOverride[]
 }
 
 model RoundTransitionRun {
@@ -385,6 +394,35 @@ model RoundTransitionRun {
 
   @@index([seasonId, processedAt])
   @@index([outcome, processedAt])
+}
+
+model RoundAutomationOverride {
+  id                       String                         @id @default(cuid())
+  seasonId                 String
+  season                   Season                         @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  status                   RoundAutomationOverrideStatus  @default(ACTIVE)
+  reason                   String
+  expectedEndAt            DateTime?
+  activatedAt              DateTime                       @default(now())
+  activatedById            String?
+  activatedBy              User?                          @relation("RoundAutomationOverrideActivatedBy", fields: [activatedById], references: [id], onDelete: SetNull)
+  extendedAt               DateTime?
+  extendedById             String?
+  extendedBy               User?                          @relation("RoundAutomationOverrideExtendedBy", fields: [extendedById], references: [id], onDelete: SetNull)
+  extensionReason          String?
+  dueReminderSentAt        DateTime?
+  escalationReminderSentAt DateTime?
+  resolvedAt               DateTime?
+  resolvedById             String?
+  resolvedBy               User?                          @relation("RoundAutomationOverrideResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
+  resolutionReason         String?
+  createdAt                DateTime                       @default(now())
+  updatedAt                DateTime                       @updatedAt
+
+  @@index([seasonId, status])
+  @@index([expectedEndAt])
+  @@index([activatedById])
+  @@index([resolvedById])
 }
 
 model ImportBatch {

@@ -5,6 +5,15 @@ import { getActiveTeamWhere } from '@/server/team-scope'
 
 export const dynamic = 'force-dynamic'
 
+type TeamRow = {
+  id: string
+  name: string
+  displayId: string
+  university: string
+  supervisor: string
+  supervisorEmail: string | null
+}
+
 export async function GET() {
   try {
     const { response } = await requireAdminOrResponse()
@@ -17,14 +26,16 @@ export async function GET() {
       },
     })
 
-    if (!operationalSeason) return jsonOk({ teams: [], round: null, markets: [] })
+    if (!operationalSeason) {
+      return jsonOk({ openRound: null, openTeams: [], openSummary: { total: 0, submitted: 0, pending: 0 }, missedRound: null, missedTeams: [], markets: [] })
+    }
 
     const now = new Date()
-    const currentRound = operationalSeason.rounds.find(r => 
-      new Date(r.closesAt) > now && new Date(r.opensAt) <= now
-    ) || operationalSeason.rounds.filter(r => new Date(r.closesAt) <= now).pop()
+    const markets = operationalSeason.markets.map((m) => ({ id: m.market.id, name: m.market.name }))
 
-    if (!currentRound) return jsonOk({ teams: [], round: null, markets: operationalSeason.markets.map(m => m.market) })
+    // The round currently accepting submissions (still open) vs the most recently CLOSED round.
+    const openRound = operationalSeason.rounds.find((r) => new Date(r.opensAt) <= now && new Date(r.closesAt) > now) ?? null
+    const missedRound = operationalSeason.rounds.filter((r) => new Date(r.closesAt) <= now).pop() ?? null
 
     const teams = await prisma.team.findMany({
       where: getActiveTeamWhere(operationalSeason.id),
@@ -35,38 +46,55 @@ export async function GET() {
       orderBy: { name: 'asc' },
     })
 
-    const submissions = await prisma.submission.findMany({
-      where: { roundId: currentRound.id },
-      select: { teamId: true, submittedAt: true, locked: true },
-    })
-
-    const submittedTeamIds = new Set(submissions.map(s => s.teamId))
-
-    const teamData = teams.map(team => ({
+    const toRow = (team: (typeof teams)[number]): TeamRow => ({
       id: team.id,
       name: team.name,
       displayId: team.displayId,
       university: team.university?.name || 'Unknown',
-      supervisor: team.supervisor ? `${team.supervisor.firstName} ${team.supervisor.lastName}` : 'None',
+      supervisor: team.supervisor ? `${team.supervisor.firstName} ${team.supervisor.lastName}`.trim() : 'None',
       supervisorEmail: team.supervisor?.email || null,
-      hasSubmitted: submittedTeamIds.has(team.id),
-      submittedAt: submissions.find(s => s.teamId === team.id)?.submittedAt?.toISOString() || null,
-    }))
+    })
+
+    // Current open round: who has / hasn't submitted yet (pending is NOT a miss while time remains).
+    let openTeams: (TeamRow & { hasSubmitted: boolean; submittedAt: string | null })[] = []
+    let openSummary = { total: 0, submitted: 0, pending: 0 }
+    if (openRound) {
+      const submissions = await prisma.submission.findMany({
+        where: { roundId: openRound.id },
+        select: { teamId: true, submittedAt: true },
+      })
+      const submittedById = new Map(submissions.map((s) => [s.teamId, s.submittedAt]))
+      openTeams = teams.map((team) => ({
+        ...toRow(team),
+        hasSubmitted: submittedById.has(team.id),
+        submittedAt: submittedById.get(team.id)?.toISOString() ?? null,
+      }))
+      const submitted = openTeams.filter((t) => t.hasSubmitted).length
+      openSummary = { total: teams.length, submitted, pending: teams.length - submitted }
+    }
+
+    // Latest closed round: teams that genuinely missed it (no submission) — these are the real misses.
+    let missedTeams: TeamRow[] = []
+    if (missedRound) {
+      const closedSubmissions = await prisma.submission.findMany({
+        where: { roundId: missedRound.id },
+        select: { teamId: true },
+      })
+      const submittedSet = new Set(closedSubmissions.map((s) => s.teamId))
+      missedTeams = teams.filter((team) => !submittedSet.has(team.id)).map(toRow)
+    }
 
     return jsonOk({
-      round: {
-        id: currentRound.id,
-        number: currentRound.number,
-        opensAt: currentRound.opensAt.toISOString(),
-        closesAt: currentRound.closesAt.toISOString(),
-      },
-      markets: operationalSeason.markets.map(m => ({ id: m.market.id, name: m.market.name })),
-      teams: teamData,
-      summary: {
-        total: teams.length,
-        submitted: submittedTeamIds.size,
-        missing: teams.length - submittedTeamIds.size,
-      },
+      openRound: openRound
+        ? { id: openRound.id, number: openRound.number, opensAt: openRound.opensAt.toISOString(), closesAt: openRound.closesAt.toISOString() }
+        : null,
+      openTeams,
+      openSummary,
+      missedRound: missedRound
+        ? { id: missedRound.id, number: missedRound.number, closesAt: missedRound.closesAt.toISOString() }
+        : null,
+      missedTeams,
+      markets,
     })
   } catch (error) {
     return jsonError(error, 'Failed to load submission tracker')

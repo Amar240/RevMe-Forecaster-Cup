@@ -37,7 +37,7 @@ import { POST as postSubmission } from '@/app/api/submissions/route'
 import { makeRequest } from './http'
 
 async function attachStandardMarkets(seasonId: string) {
-  const marketNames = ['Nashville CBD', 'Dubai', 'Hamburg']
+  const marketNames = ['Nashville CBD', 'BUR Dubai', 'Hamburg Center']
   const markets = await Promise.all(
     marketNames.map((name) =>
       prisma.market.upsert({
@@ -491,12 +491,15 @@ describe('current operational season scoping', () => {
     expect(commandCenterData.submissionProgress.total).toBe(1)
     expect(commandCenterData.submissionProgress.pending).toBe(1)
 
-    expect(trackerData.round.id).toBe(rounds[0].id)
-    expect(trackerData.summary.total).toBe(1)
-    expect(trackerData.summary.submitted).toBe(0)
-    expect(trackerData.summary.missing).toBe(1)
-    expect(trackerData.teams).toHaveLength(1)
-    expect(trackerData.teams[0].id).toBe(activePausedTeam.id)
+    expect(trackerData.openRound.id).toBe(rounds[0].id)
+    expect(trackerData.openSummary.total).toBe(1)
+    expect(trackerData.openSummary.submitted).toBe(0)
+    expect(trackerData.openSummary.pending).toBe(1)
+    expect(trackerData.openTeams).toHaveLength(1)
+    expect(trackerData.openTeams[0].id).toBe(activePausedTeam.id)
+    // Round 1 is still open, so there are no real misses yet.
+    expect(trackerData.missedRound).toBeNull()
+    expect(trackerData.missedTeams).toHaveLength(0)
   })
 
   it('keeps ACTIVE precedence over a newer PAUSED season for operational reads', async () => {

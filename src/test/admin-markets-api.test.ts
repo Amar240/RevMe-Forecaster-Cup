@@ -157,10 +157,14 @@ describe('admin markets API', () => {
     const res = await getAdminMarkets()
     const data = await res.json()
 
+    // GET bootstraps the standard markets (Nashville CBD, BUR Dubai, Hamburg Center) alongside
+    // the three created above, sorted by name.
     expect(res.status).toBe(200)
     expect(data.markets.map((market: { name: string }) => market.name)).toEqual([
+      'BUR Dubai',
       'Dubai',
       'Hamburg',
+      'Hamburg Center',
       'Nashville CBD',
       'Zurich',
     ])

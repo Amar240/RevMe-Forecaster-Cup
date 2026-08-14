@@ -220,6 +220,17 @@ describe('Leaderboard behavior', () => {
     expect(data.leaderboard.every((entry: { mape: number | null }) => entry.mape === null)).toBe(true)
   })
 
+  it('assigns distinct sorted ranks when MAPE is masked from non-admin viewers', async () => {
+    logout()
+    const res = await leaderboardHandler(makeRequest(`${BASE}/api/leaderboards?metric=COMBINED`))
+    const data = await res.json()
+
+    // Regression: masked (null) MAPE previously collapsed every rank to #1 because
+    // `null === entry.mape` matched the first row. Ranks must follow the sorted order.
+    expect(res.status).toBe(200)
+    expect(data.leaderboard.map((entry: { rank: number }) => entry.rank)).toEqual([1, 2, 3])
+  })
+
   it('shows published leaderboard values and progression to students', async () => {
     await prisma.round.update({
       where: { id: rounds[0].id },
