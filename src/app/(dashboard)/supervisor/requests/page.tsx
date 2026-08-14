@@ -7,6 +7,7 @@ import { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/components/ui/page-header'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -140,10 +141,8 @@ export default function SupervisorRequestsPage() {
 
       {requests.length === 0 ? (
         <Card>
-          <CardContent className="py-12 text-center">
-            <UserPlus className="mx-auto mb-4 h-12 w-12 text-text-muted" />
-            <h3 className="mb-2 text-lg font-medium text-foreground">No Pending Requests</h3>
-            <p className="text-text-secondary">Students will appear here when they request to join your teams</p>
+          <CardContent className="p-0">
+            <EmptyState icon={<UserPlus className="h-7 w-7" />} title="No Pending Requests" description="Students will appear here when they request to join your teams" />
           </CardContent>
         </Card>
       ) : (

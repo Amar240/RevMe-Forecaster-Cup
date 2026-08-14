@@ -7,6 +7,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/components/ui/page-header'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { DataTable } from '@/components/ui/data-table'
@@ -498,10 +499,8 @@ export default function AdminSupervisorsPage() {
 
       {supervisors.length === 0 ? (
         <Card>
-          <CardContent className="py-12 text-center">
-            <UserCog className="mx-auto mb-4 h-12 w-12 text-text-muted" />
-            <h3 className="mb-2 text-lg font-medium text-foreground">No Supervisors Yet</h3>
-            <p className="text-text-secondary">Add supervisors to assign them to teams.</p>
+          <CardContent className="p-0">
+            <EmptyState icon={<UserCog className="h-7 w-7" />} title="No Supervisors Yet" description="Add supervisors to assign them to teams." />
           </CardContent>
         </Card>
       ) : (

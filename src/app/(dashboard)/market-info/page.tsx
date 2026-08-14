@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/components/ui/page-header'
+import { EmptyState } from '@/components/ui/empty-state'
 import {
   Loader2,
   MapPin,
@@ -175,10 +176,8 @@ export default function MarketInfoPage() {
       <div className="space-y-6">
         <PageHeader title="Market Information" description="Context and insights about the markets you are forecasting" />
         <Card>
-          <CardContent className="py-12 text-center">
-            <MapPin className="mx-auto mb-4 h-12 w-12 text-text-muted" />
-            <h3 className="mb-2 text-lg font-medium text-foreground">No Markets Available</h3>
-            <p className="text-text-secondary">Market information will be available when a season is active.</p>
+          <CardContent className="p-0">
+            <EmptyState icon={<MapPin className="h-7 w-7" />} title="No Markets Available" description="Market information will be available when a season is active." />
           </CardContent>
         </Card>
       </div>

@@ -85,4 +85,26 @@ function DashboardSkeleton() {
   )
 }
 
-export { Skeleton, CardSkeleton, TableRowSkeleton, TableSkeleton, ChartSkeleton, DashboardSkeleton }
+/** Standard loading shape for a list/CRUD page: header line, optional stat row, then a table. */
+function ListPageSkeleton({ withStats = false, columns = 5, rows = 6 }: { withStats?: boolean; columns?: number; rows?: number }) {
+  return (
+    <div className="space-y-6">
+      <div className="space-y-2">
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-4 w-64" />
+      </div>
+      {withStats ? (
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+          <CardSkeleton />
+          <CardSkeleton />
+          <CardSkeleton />
+        </div>
+      ) : null}
+      <div className="rounded-xl border border-border p-4">
+        <TableSkeleton rows={rows} columns={columns} />
+      </div>
+    </div>
+  )
+}
+
+export { Skeleton, CardSkeleton, TableRowSkeleton, TableSkeleton, ChartSkeleton, DashboardSkeleton, ListPageSkeleton }

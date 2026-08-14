@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { ChevronDown, ChevronUp, Download, FileText } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 
@@ -99,10 +100,8 @@ export function SupervisorReportsClient({ teams }: Props) {
           <p className="text-text-secondary">Team performance summaries</p>
         </div>
         <Card>
-          <CardContent className="py-12 text-center">
-            <FileText className="mx-auto mb-4 h-12 w-12 text-text-muted" />
-            <h3 className="mb-2 text-lg font-medium text-foreground">No Teams</h3>
-            <p className="text-muted-foreground">No teams to report on.</p>
+          <CardContent className="p-0">
+            <EmptyState icon={<FileText className="h-7 w-7" />} title="No Teams" description="No teams to report on." />
           </CardContent>
         </Card>
       </div>
