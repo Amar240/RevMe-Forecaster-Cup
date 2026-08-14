@@ -4,6 +4,7 @@ import { getTeamsForUser } from '@/features/teams/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/components/ui/page-header'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 import { Users, AlertTriangle, Check } from 'lucide-react'
@@ -37,19 +38,19 @@ export default async function TeamsPage() {
 
       {teams.length === 0 ? (
         <Card variant="default">
-          <CardContent className="py-12 text-center">
-            <Users className="mb-4 h-12 w-12 text-text-muted mx-auto" />
-            <h3 className="mb-2 text-lg font-medium text-foreground">No teams yet</h3>
-            <p className="mb-4 text-text-secondary">
-              {user.role === 'SUPERVISOR' && !hasOperationalSeason
+          <CardContent className="p-0">
+            <EmptyState
+              icon={<Users className="h-7 w-7" />}
+              title="No teams yet"
+              description={user.role === 'SUPERVISOR' && !hasOperationalSeason
                 ? 'An admin needs to create, activate, or resume a season before you can create teams.'
                 : 'Create your first team to start managing students.'}
-            </p>
-            {!(user.role === 'SUPERVISOR' && !hasOperationalSeason) && (
-              <Link href="/teams/new">
-                <Button>Create Team</Button>
-              </Link>
-            )}
+              action={!(user.role === 'SUPERVISOR' && !hasOperationalSeason) ? (
+                <Link href="/teams/new">
+                  <Button>Create Team</Button>
+                </Link>
+              ) : undefined}
+            />
           </CardContent>
         </Card>
       ) : (

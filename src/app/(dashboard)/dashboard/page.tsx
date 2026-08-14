@@ -13,6 +13,8 @@ import { DualTimezoneDeadline } from '@/components/dual-timezone-deadline'
 import { MotionReveal } from '@/components/ui/motion-reveal'
 import { getSupervisorCoaching } from '@/server/supervisor-coaching'
 import { predictionsBreakdownLabel } from '@/lib/competition-config'
+import { PageHeader } from '@/components/ui/page-header'
+import { EmptyState } from '@/components/ui/empty-state'
 
 export default async function DashboardPage() {
   const user = await getSession()
@@ -50,86 +52,54 @@ export default async function DashboardPage() {
 
     return (
       <MotionReveal className="space-y-8">
-        <div>
-          <h1 className="text-3xl font-semibold text-foreground">Supervisor Dashboard</h1>
-          <p className="mt-1 text-text-secondary">Manage your teams and monitor submissions</p>
-        </div>
+        <PageHeader
+          title="Supervisor Dashboard"
+          description="Manage your teams and monitor submissions"
+          actions={
+            operationalSeason ? (
+              <Link href="/teams/new"><Button>Create Team</Button></Link>
+            ) : (
+              <Button disabled>Create Team</Button>
+            )
+          }
+        />
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Card variant="metric" className="border-primary/10 bg-gradient-to-br from-primary-soft via-card to-card">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-text-secondary">My Teams</CardTitle>
-              <div className="rounded-lg bg-primary-soft p-2">
-                <Users className="h-5 w-5 text-primary" />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <p className="text-4xl font-semibold text-foreground">{supervisorTeams.length}</p>
-              <p className="text-sm text-text-secondary">of 10 max</p>
-            </CardContent>
-          </Card>
-
-          <Card variant="metric" className="border-success/15 bg-gradient-to-br from-success-background via-card to-card">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-text-secondary">Total Students</CardTitle>
-              <div className="rounded-lg bg-success-background p-2">
-                <Users className="h-5 w-5 text-success" />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <p className="text-4xl font-semibold text-foreground">
-                {supervisorTeams.reduce((sum, t) => sum + t.members.length, 0)}
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card variant="metric" className="border-warning/15 bg-gradient-to-br from-warning-background via-card to-card">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-text-secondary">Warnings</CardTitle>
-              <div className="rounded-lg bg-warning-background p-2">
-                <AlertTriangle className="h-5 w-5 text-warning" />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <p className="text-4xl font-semibold text-foreground">
-                {supervisorTeams.reduce((sum, t) => sum + t._count.warnings, 0)}
-              </p>
-            </CardContent>
-          </Card>
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+          <StatCard
+            title="Teams"
+            value={supervisorTeams.length}
+            description="of 10 max"
+            icon={<div className="rounded-lg bg-primary-soft p-2"><Users className="h-5 w-5 text-primary" /></div>}
+          />
+          <StatCard
+            title="Students"
+            value={supervisorTeams.reduce((sum, t) => sum + t.members.length, 0)}
+            description="across your teams"
+            icon={<div className="rounded-lg bg-success-background p-2"><Users className="h-5 w-5 text-success" /></div>}
+          />
+          <StatCard
+            title="Warnings"
+            value={supervisorTeams.reduce((sum, t) => sum + t._count.warnings, 0)}
+            description="issued to your teams"
+            icon={<div className="rounded-lg bg-warning-background p-2"><AlertTriangle className="h-5 w-5 text-warning" /></div>}
+          />
         </div>
 
         <Card>
           <CardHeader>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <CardTitle>My Teams</CardTitle>
-                <CardDescription>Teams you supervise</CardDescription>
-              </div>
-              {operationalSeason ? (
-                <Link href="/teams/new">
-                  <Button>Create Team</Button>
-                </Link>
-              ) : (
-                <Button disabled>Create Team</Button>
-              )}
-            </div>
+            <CardTitle>Your teams</CardTitle>
+            <CardDescription>Teams you supervise</CardDescription>
           </CardHeader>
           <CardContent>
             {supervisorTeams.length === 0 ? (
-              <div className="py-8 text-center">
-                <p className="text-text-secondary">
-                  {operationalSeason
-                    ? 'You haven\'t created any teams yet. Create your first team to get started.'
-                    : 'An admin needs to create, activate, or resume a season before you can create teams.'}
-                </p>
-                {operationalSeason && (
-                  <div className="mt-4">
-                    <Link href="/teams/new">
-                      <Button>Create Team</Button>
-                    </Link>
-                  </div>
-                )}
-              </div>
+              <EmptyState
+                icon={<Users className="h-7 w-7" />}
+                title="No teams yet"
+                description={operationalSeason
+                  ? 'Create your first team to get started.'
+                  : 'An admin needs to create, activate, or resume a season before you can create teams.'}
+                action={operationalSeason ? <Link href="/teams/new"><Button>Create Team</Button></Link> : undefined}
+              />
             ) : (
               <div className="space-y-3">
                 {supervisorTeams.map((team) => (
@@ -140,7 +110,7 @@ export default async function DashboardPage() {
                     <div>
                       <p className="font-semibold text-foreground">{team.name}</p>
                       <p className="text-sm text-text-secondary">
-                        {team.members.length} members | {team._count.submissions} submissions
+                        {team.members.length} members · {team._count.submissions} submissions
                       </p>
                     </div>
                     <Link href={`/teams/${team.id}`}>
@@ -155,7 +125,90 @@ export default async function DashboardPage() {
             )}
           </CardContent>
         </Card>
-        {coaching?.round && <><Card><CardHeader><div className="flex flex-wrap items-center justify-between gap-3"><div><CardTitle>Team health · Round {coaching.round.number}</CardTitle><CardDescription>Submission, time remaining, score trend, bias, and warnings for your teams</CardDescription></div>{coaching.round.leaderboardVisible && <Link href={`/supervisor/debriefs/${coaching.round.id}`}><Button variant="outline">Project round debrief</Button></Link>}</div></CardHeader><CardContent><div className="hidden overflow-x-auto lg:block"><table className="w-full text-sm"><caption className="sr-only">Supervisor team health for round {coaching.round.number}</caption><thead><tr className="border-b text-left text-text-muted"><th className="py-3">Team</th><th>Members</th><th>Submitted</th><th>Hours left</th><th>MAPE</th><th>Trend</th><th>Pattern</th><th>Warnings</th></tr></thead><tbody>{coaching.teams.map((team) => <tr key={team.id} className="border-b border-border"><td className="py-3 font-medium">{team.name}</td><td className="max-w-48 text-xs text-text-secondary">{team.members.join(', ') || '—'}</td><td>{team.submitted ? '✓ Submitted' : '○ Pending'}</td><td className="tabular-nums">{team.submitted ? '—' : team.hoursRemaining.toFixed(1)}</td><td className="font-mono tabular-nums">{formatMape(team.score)}</td><td>{team.trend == null ? '—' : team.trend > 0 ? '▲ Improving' : team.trend < 0 ? '▼ Worsening' : '— Steady'}</td><td>{team.bias ? `${team.bias.direction === 'OVER' ? '↑' : '↓'} ${team.bias.marketName} ${team.bias.metric === 'ADR' ? 'ADR' : 'Occ'}` : '—'}</td><td className="tabular-nums">{team.warnings}</td></tr>)}</tbody></table></div><div className="space-y-3 lg:hidden">{coaching.teams.map((team) => <div key={team.id} className="rounded-xl border border-border p-4"><div className="flex justify-between"><strong>{team.name}</strong><span>{team.submitted ? '✓ Submitted' : '○ Pending'}</span></div><p className="mt-1 text-xs text-text-muted">{team.members.join(', ') || 'No members'}</p><p className="mt-2 text-sm text-text-secondary">{team.submitted ? 'Forecast locked' : `${team.hoursRemaining.toFixed(1)} hours remaining`} · MAPE {formatMape(team.score)} · {team.warnings} warnings</p>{team.bias && <p className="text-sm">Pattern: {team.bias.direction.toLowerCase()} {team.bias.marketName} {team.bias.metric}</p>}</div>)}</div></CardContent></Card>{coaching.insights?.common && <Card className="border-accent/30"><CardHeader><CardTitle>Class insight</CardTitle></CardHeader><CardContent><p>{coaching.insights.common.teamCount} of {coaching.insights.common.totalTeams} teams {coaching.insights.common.direction.toLowerCase()}-forecast {coaching.insights.common.marketName} {coaching.insights.common.metric === 'ADR' ? 'ADR' : 'occupancy'}.</p>{coaching.insights.bestCall && <p className="mt-2 text-sm text-text-secondary">Best call: {coaching.insights.bestCall.teamName} · {coaching.insights.bestCall.marketName} {coaching.insights.bestCall.metric} · {formatMape(coaching.insights.bestCall.apeError)}</p>}</CardContent></Card>}</>}
+        {coaching?.round && (
+          <>
+            <Card>
+              <CardHeader>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <CardTitle>Team health · Round {coaching.round.number}</CardTitle>
+                    <CardDescription>Submission, time remaining, score trend, bias, and warnings for your teams</CardDescription>
+                  </div>
+                  {coaching.round.leaderboardVisible && (
+                    <Link href={`/supervisor/debriefs/${coaching.round.id}`}>
+                      <Button variant="outline">Project round debrief</Button>
+                    </Link>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="hidden overflow-x-auto lg:block">
+                  <table className="w-full text-sm">
+                    <caption className="sr-only">Supervisor team health for round {coaching.round.number}</caption>
+                    <thead>
+                      <tr className="border-b border-border text-left text-text-muted">
+                        <th className="py-3 font-medium">Team</th>
+                        <th className="font-medium">Members</th>
+                        <th className="font-medium">Status</th>
+                        <th className="font-medium">Hours left</th>
+                        <th className="font-medium">MAPE</th>
+                        <th className="font-medium">Trend</th>
+                        <th className="font-medium">Pattern</th>
+                        <th className="font-medium">Warnings</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {coaching.teams.map((team) => (
+                        <tr key={team.id} className="border-b border-border">
+                          <td className="py-3 font-medium text-foreground">{team.name}</td>
+                          <td className="max-w-48 text-xs text-text-secondary">{team.members.join(', ') || '—'}</td>
+                          <td>
+                            {team.submitted ? (
+                              <span className="inline-flex items-center gap-1 text-success"><CheckCircle aria-hidden className="h-3.5 w-3.5" />Submitted</span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-text-muted"><Clock aria-hidden className="h-3.5 w-3.5" />Pending</span>
+                            )}
+                          </td>
+                          <td className="tabular-nums">{team.submitted ? '—' : team.hoursRemaining.toFixed(1)}</td>
+                          <td className="font-mono tabular-nums">{formatMape(team.score)}</td>
+                          <td>{team.trend == null ? '—' : team.trend > 0 ? <span className="text-success">Improving</span> : team.trend < 0 ? <span className="text-warning">Worsening</span> : <span className="text-text-muted">Steady</span>}</td>
+                          <td className="text-text-secondary">{team.bias ? `${team.bias.direction === 'OVER' ? 'Over' : 'Under'} · ${team.bias.marketName} ${team.bias.metric === 'ADR' ? 'ADR' : 'Occ'}` : '—'}</td>
+                          <td className="tabular-nums">{team.warnings}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="space-y-3 lg:hidden">
+                  {coaching.teams.map((team) => (
+                    <div key={team.id} className="rounded-xl border border-border p-4">
+                      <div className="flex items-center justify-between">
+                        <strong className="text-foreground">{team.name}</strong>
+                        {team.submitted ? (
+                          <span className="inline-flex items-center gap-1 text-sm text-success"><CheckCircle aria-hidden className="h-3.5 w-3.5" />Submitted</span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-sm text-text-muted"><Clock aria-hidden className="h-3.5 w-3.5" />Pending</span>
+                        )}
+                      </div>
+                      <p className="mt-1 text-xs text-text-muted">{team.members.join(', ') || 'No members'}</p>
+                      <p className="mt-2 text-sm text-text-secondary">{team.submitted ? 'Forecast locked' : `${team.hoursRemaining.toFixed(1)} hours remaining`} · MAPE {formatMape(team.score)} · {team.warnings} warnings</p>
+                      {team.bias && <p className="text-sm text-text-secondary">Pattern: {team.bias.direction.toLowerCase()} {team.bias.marketName} {team.bias.metric}</p>}
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+            {coaching.insights?.common && (
+              <Card className="border-accent/30">
+                <CardHeader><CardTitle>Class insight</CardTitle></CardHeader>
+                <CardContent>
+                  <p>{coaching.insights.common.teamCount} of {coaching.insights.common.totalTeams} teams {coaching.insights.common.direction.toLowerCase()}-forecast {coaching.insights.common.marketName} {coaching.insights.common.metric === 'ADR' ? 'ADR' : 'occupancy'}.</p>
+                  {coaching.insights.bestCall && <p className="mt-2 text-sm text-text-secondary">Best call: {coaching.insights.bestCall.teamName} · {coaching.insights.bestCall.marketName} {coaching.insights.bestCall.metric} · {formatMape(coaching.insights.bestCall.apeError)}</p>}
+                </CardContent>
+              </Card>
+            )}
+          </>
+        )}
       </MotionReveal>
     )
   }

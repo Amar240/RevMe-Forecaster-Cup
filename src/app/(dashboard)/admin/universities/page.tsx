@@ -14,7 +14,7 @@ import { AlertBanner } from '@/components/ui/alert-banner'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Building2, Edit, Plus, Trash2 } from 'lucide-react'
-import { PageLoader } from '@/components/ui/page-loader'
+import { ListPageSkeleton } from '@/components/ui/skeleton'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { DataTable } from '@/components/ui/data-table'
 import { Badge } from '@/components/ui/badge'
@@ -193,7 +193,7 @@ export default function AdminUniversitiesPage() {
   const listedUniversities = universities.filter((university) => university.isListed)
 
   if (loading) {
-    return <PageLoader message="Loading universities..." />
+    return <ListPageSkeleton withStats columns={3} />
   }
 
   return (

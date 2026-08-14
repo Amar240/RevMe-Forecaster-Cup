@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/components/ui/page-header'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -501,14 +502,14 @@ export default function AdminEscalationsPage() {
 
       {tickets.length === 0 ? (
         <Card>
-          <CardContent className="py-12 text-center">
-            <MessageSquare className="mx-auto mb-4 h-12 w-12 text-text-muted" />
-            <h3 className="mb-2 text-lg font-medium text-foreground">No Escalations</h3>
-            <p className="text-text-secondary">
-              {statusFilter !== 'all' || categoryFilter !== 'all'
+          <CardContent className="p-0">
+            <EmptyState
+              icon={<MessageSquare className="h-7 w-7" />}
+              title="No Escalations"
+              description={statusFilter !== 'all' || categoryFilter !== 'all'
                 ? 'No tickets match your current filters'
                 : 'No escalated support tickets requiring your attention'}
-            </p>
+            />
           </CardContent>
         </Card>
       ) : (
