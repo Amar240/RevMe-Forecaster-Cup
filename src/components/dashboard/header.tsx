@@ -43,7 +43,7 @@ export function Header({ user, onToggleSidebar }: HeaderProps) {
       <div className="flex h-16 items-center justify-between px-4 lg:px-8">
         <div className="flex items-center gap-3">
           {onToggleSidebar && (
-            <Button variant="ghost" size="icon" className="lg:hidden" onClick={onToggleSidebar}>
+            <Button variant="ghost" size="icon" className="lg:hidden" onClick={onToggleSidebar} aria-label="Toggle navigation menu">
               <Menu className="h-5 w-5" />
             </Button>
           )}

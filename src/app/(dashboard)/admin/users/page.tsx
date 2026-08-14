@@ -652,9 +652,9 @@ export default function AdminUsersPage() {
             {bulkResults && (
               <div className="rounded-lg border border-border p-3 text-sm space-y-1">
                 <p className="font-medium">Import Results</p>
-                <p className="text-success">✓ {bulkResults.created} users created</p>
-                <p className="text-text-secondary">→ {bulkResults.skipped} skipped (already exist)</p>
-                {bulkResults.errors > 0 && <p className="text-error">✗ {bulkResults.errors} errors</p>}
+                <p className="text-success"><span aria-hidden>✓</span> {bulkResults.created} users created</p>
+                <p className="text-text-secondary"><span aria-hidden>→</span> {bulkResults.skipped} skipped (already exist)</p>
+                {bulkResults.errors > 0 && <p className="text-error"><span aria-hidden>✗</span> {bulkResults.errors} errors</p>}
               </div>
             )}
           </div>

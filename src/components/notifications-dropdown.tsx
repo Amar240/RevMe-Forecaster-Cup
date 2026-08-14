@@ -85,6 +85,8 @@ export function NotificationsDropdown() {
     <div className="relative">
       <button
         onClick={() => setOpen(!open)}
+        aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : 'Notifications'}
+        aria-expanded={open}
         className="relative rounded-md p-2 text-text-secondary transition-colors hover:bg-muted hover:text-foreground"
       >
         <Bell className="h-5 w-5" />
@@ -116,7 +118,7 @@ export function NotificationsDropdown() {
                     Mark all read
                   </Button>
                 )}
-                <button onClick={() => setOpen(false)} className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+                <button onClick={() => setOpen(false)} aria-label="Close notifications" className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
                   <X className="h-4 w-4" />
                 </button>
               </div>
