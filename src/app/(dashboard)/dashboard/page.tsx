@@ -358,7 +358,7 @@ export default async function DashboardPage() {
       </div>}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card className="hover:shadow-md transition-shadow">
+        <Card variant="metric">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-text-secondary">Team Status</CardTitle>
             <div className={`rounded-lg p-2 ${studentTeam?.team.status === 'ACTIVE' ? 'bg-success-background' : 'bg-error-background'}`}>
@@ -375,38 +375,19 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
 
-        <Card className="hover:shadow-md transition-shadow">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-text-secondary">Submissions</CardTitle>
-            <div className="rounded-lg bg-primary-soft p-2">
-              <Send className="h-5 w-5 text-primary" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <p className="text-4xl font-semibold text-foreground">
-              {studentTeam?.team.submissions.length || 0}
-            </p>
-            <p className="text-sm text-text-secondary">total forecasts</p>
-          </CardContent>
-        </Card>
+        <StatCard
+          title="Submissions"
+          value={studentTeam?.team.submissions.length || 0}
+          description="total forecasts"
+          icon={<div className="rounded-lg bg-primary-soft p-2"><Send className="h-5 w-5 text-primary" /></div>}
+        />
 
-        <Card className="hover:shadow-md transition-shadow">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-text-secondary">Warnings</CardTitle>
-            <div className={`rounded-lg p-2 ${(studentTeam?.team.warnings.length || 0) >= 2 ? 'bg-error-background' : 'bg-warning-background'}`}>
-              <AlertTriangle className={`h-5 w-5 ${(studentTeam?.team.warnings.length || 0) >= 2 ? 'text-error' : 'text-warning'}`} />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-baseline space-x-1">
-              <p className="text-4xl font-semibold text-foreground">
-                {studentTeam?.team.warnings.length || 0}
-              </p>
-              <p className="text-lg text-muted-foreground">/ 3</p>
-            </div>
-            <p className="text-sm text-text-secondary">before disqualification</p>
-          </CardContent>
-        </Card>
+        <StatCard
+          title="Warnings"
+          value={<>{studentTeam?.team.warnings.length || 0}<span className="ml-1 text-lg font-normal text-muted-foreground">/ 3</span></>}
+          description="before disqualification"
+          icon={<div className={`rounded-lg p-2 ${(studentTeam?.team.warnings.length || 0) >= 2 ? 'bg-error-background' : 'bg-warning-background'}`}><AlertTriangle className={`h-5 w-5 ${(studentTeam?.team.warnings.length || 0) >= 2 ? 'text-error' : 'text-warning'}`} /></div>}
+        />
       </div>
 
       {!studentTeam && (
