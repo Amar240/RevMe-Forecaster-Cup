@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge'
 import { AlertBanner } from '@/components/ui/alert-banner'
 import { getSubmissionMetricError, parseSubmissionMetricInput } from '@/lib/submission-values'
 import { predictionsRequired } from '@/lib/competition-config'
+import { formatForecastWeekLabel, forecastWeeksSummary } from '@/lib/forecast-weeks'
 import { ValidatedNumberField } from '@/components/ui/validated-number-field'
 import { contextualWarning, draftKey, draftSavedAt, parseDraft, serializeDraft } from '@/lib/submission-workspace'
 import { Sparkline } from '@/components/ui/sparkline'
@@ -362,7 +363,10 @@ export default function SubmitPage() {
       <div className="mx-auto max-w-2xl space-y-6">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight text-foreground">Round {currentRound.number} Submission</h1>
-          <p className="text-text-secondary">Deadline: <DualTimezoneDeadline date={currentRound.closesAt} /></p>
+          <p className="text-text-secondary">
+            Forecasting {forecastWeeksSummary(currentRound.closesAt, currentRound.isFinal ? [1] : [1, 2])}
+          </p>
+          <p className="text-sm text-text-muted">Deadline: <DualTimezoneDeadline date={currentRound.closesAt} /></p>
         </div>
 
         <Card className="border-warning/20 bg-warning-background">
@@ -393,7 +397,7 @@ export default function SubmitPage() {
                   <div className="grid grid-cols-2 gap-4">
                     {(currentRound.isFinal ? [1] : [1, 2]).map((week) => (
                       <div key={week} className="rounded-lg border border-border bg-card p-3">
-                        <p className="mb-2 text-sm text-muted-foreground">Week +{week}</p>
+                        <p className="mb-2 text-sm text-muted-foreground">{formatForecastWeekLabel(currentRound.closesAt, week)}</p>
                         <div className="space-y-2">
                           <div className="flex items-center justify-between text-sm">
                             <span className="text-text-muted">Occupancy</span>
@@ -463,7 +467,7 @@ export default function SubmitPage() {
                     const key = `${market.id}-${week}`
                     return (
                       <div key={week} className="rounded-lg border border-border bg-surface-secondary p-4">
-                        <h4 className="mb-3 font-medium text-foreground">Week +{week}</h4>
+                        <h4 className="mb-3 font-medium text-foreground">{formatForecastWeekLabel(currentRound.closesAt, week)}</h4>
                         <div className="grid grid-cols-2 gap-4">
                           <div>
                             <p className="text-sm text-muted-foreground">Occupancy</p>
@@ -519,7 +523,10 @@ export default function SubmitPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight text-foreground">Round {currentRound.number} Submission</h1>
-          <p className="text-text-secondary">Deadline: <DualTimezoneDeadline date={currentRound.closesAt} /></p>
+          <p className="text-text-secondary">
+            Forecasting {forecastWeeksSummary(currentRound.closesAt, currentRound.isFinal ? [1] : [1, 2])}
+          </p>
+          <p className="text-sm text-text-muted">Deadline: <DualTimezoneDeadline date={currentRound.closesAt} /></p>
         </div>
         <div className="flex items-center space-x-2">
           <Clock className="h-4 w-4 text-warning" />
@@ -548,28 +555,6 @@ export default function SubmitPage() {
       {draftRestored && !hasExisting && <AlertBanner variant="info">Your browser-saved draft was restored.</AlertBanner>}
 
       {draftSavedTime && !hasExisting && <p role="status" className="text-right text-xs text-text-muted">Draft saved in this browser at {new Date(draftSavedTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</p>}
-
-      {!hasExisting && (
-        <Card>
-          <CardContent className="py-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <span className="text-sm text-muted-foreground">Progress:</span>
-                <span className="font-semibold text-foreground">
-                  {getFilledCount()} / {getTotalRequired()}
-                </span>
-                <span className="text-sm text-muted-foreground">values ready</span>
-              </div>
-              <div className="h-2 w-48 rounded-full bg-surface-secondary">
-                <div
-                  className="h-2 rounded-full bg-primary transition-all duration-300"
-                  style={{ width: `${(getFilledCount() / getTotalRequired()) * 100}%` }}
-                />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       <div className="flex space-x-2 overflow-x-auto border-b border-border">
         {markets.map((market) => (
@@ -608,11 +593,11 @@ export default function SubmitPage() {
                   const key = `${market.id}-${week}`
                   return (
                     <div key={week} className="rounded-xl border border-border bg-surface-secondary p-6">
-                      <h4 className="mb-4 flex items-center space-x-2 font-semibold text-foreground">
-                        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-soft text-sm font-bold text-primary">
+                      <h4 className="mb-4 flex items-center gap-2 font-semibold text-foreground">
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-soft text-sm font-bold text-primary">
                           +{week}
                         </span>
-                        <span>Week +{week}</span>
+                        <span>{formatForecastWeekLabel(currentRound.closesAt, week)}</span>
                       </h4>
                       <div className="space-y-4">
                         <div className="space-y-1.5">
@@ -676,7 +661,12 @@ export default function SubmitPage() {
 
       {!hasExisting && (
         <div className="sticky bottom-0 z-10 flex items-center justify-between gap-4 border-t border-border bg-background/95 py-4 backdrop-blur">
-          <p className="text-sm text-text-secondary">{getFilledCount()} of {getTotalRequired()} values ready</p>
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <div className="hidden h-2 w-40 shrink-0 overflow-hidden rounded-full bg-surface-secondary sm:block">
+              <div className="h-full rounded-full bg-primary transition-all duration-300" style={{ width: `${(getFilledCount() / getTotalRequired()) * 100}%` }} />
+            </div>
+            <p className="text-sm text-text-secondary">{getFilledCount()} of {getTotalRequired()} values ready</p>
+          </div>
           <Tooltip label={isFormComplete() ? 'All required values are ready for review.' : `${Math.max(0, getTotalRequired() - getFilledCount())} required values are missing or invalid.`}><Button size="lg" onClick={() => setShowReview(true)} disabled={!isFormComplete()} className="min-w-[200px]">
             Review Submission
             <ChevronRight className="ml-2 h-4 w-4" />

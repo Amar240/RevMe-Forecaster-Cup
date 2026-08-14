@@ -290,7 +290,7 @@ export async function GET(request: NextRequest) {
           return a.team.name.localeCompare(b.team.name)
         })
 
-      if (isStudent && visibleRoundIds.length > 0) {
+      if (!isAdmin) {
         const visibleRoundAggregates = await prisma.scoreAggregate.findMany({
           where: {
             seasonId: operationalSeason.id,
@@ -405,7 +405,7 @@ export async function GET(request: NextRequest) {
           return a.team.name.localeCompare(b.team.name)
         })
 
-      if (isStudent && visibleRoundIds.length > 0) {
+      if (!isAdmin) {
         const publishedEntries = roundIdParam
           ? filteredAggregates.map((aggregate) => ({
               teamId: aggregate.teamId,

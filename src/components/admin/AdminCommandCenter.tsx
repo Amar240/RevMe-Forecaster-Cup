@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { RefreshCw } from 'lucide-react'
+import { AlertTriangle, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 import { csrfFetch } from '@/lib/csrf'
 import { clientLogger } from '@/lib/client-logger'
@@ -22,6 +22,7 @@ export function AdminCommandCenter() {
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [secondsSince, setSecondsSince] = useState(0)
+  const [refreshFailed, setRefreshFailed] = useState(false)
 
   const fetchData = useCallback(async () => {
     try {
@@ -31,10 +32,15 @@ export function AdminCommandCenter() {
         setData(result)
         setLastUpdated(new Date())
         setSecondsSince(0)
+        setRefreshFailed(false)
+      } else {
+        // Keep the last-known data on screen, but flag that it is no longer live. No toast — the 60s
+        // poll would spam it; the header shows an inline warning instead.
+        setRefreshFailed(true)
       }
     } catch (error) {
       clientLogger.error('Failed to fetch command center data:', error)
-      toast.error('Failed to load dashboard data')
+      setRefreshFailed(true)
     } finally {
       setLoading(false)
     }
@@ -62,7 +68,8 @@ export function AdminCommandCenter() {
     setActionLoading(action)
     try {
       const res = await csrfFetch(endpoint, { method: 'POST' })
-      const result = await res.json()
+      // Guard against non-JSON error responses (e.g. a 500 returning an HTML page).
+      const result = await res.json().catch(() => ({} as { message?: string }))
       if (res.ok) {
         toast.success(result.message || 'Action completed')
         void fetchData()
@@ -152,7 +159,12 @@ export function AdminCommandCenter() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          {lastUpdated ? (
+          {refreshFailed ? (
+            <span className="flex items-center gap-1.5 text-xs font-medium text-warning">
+              <AlertTriangle className="h-3.5 w-3.5" />
+              Couldn&apos;t refresh{lastUpdated ? ` — showing data from ${secondsSince}s ago` : ''}
+            </span>
+          ) : lastUpdated ? (
             <span className="text-xs font-medium text-text-muted">
               Refreshed {secondsSince}s ago
             </span>

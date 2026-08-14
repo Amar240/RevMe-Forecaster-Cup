@@ -18,6 +18,12 @@ export default async function DashboardPage() {
   const user = await getSession()
   if (!user) return null
 
+  // Admins/sub-admins get the command center, which loads its own data — return before running any of
+  // the supervisor/student-only queries below.
+  if (user.role === 'ADMIN' || user.role === 'SUB_ADMIN') {
+    return <AdminCommandCenter />
+  }
+
   const operationalSeason = await getCurrentOperationalSeason({
     include: {
       rounds: { orderBy: { number: 'asc' } },
@@ -25,29 +31,10 @@ export default async function DashboardPage() {
     },
   })
 
-  const currentRound = operationalSeason?.rounds.find(
-    (r) => {
-      const now = new Date()
-      const isTimeOpen = new Date(r.closesAt) > now && new Date(r.opensAt) <= now
-      const hasStatus = 'status' in r
-      const isStatusOpen = !hasStatus || r.status === 'OPEN'
-      return isTimeOpen && isStatusOpen
-    }
-  )
-
-  const stats = {
-    totalTeams: operationalSeason
-      ? await prisma.team.count({ where: { status: 'ACTIVE', seasonId: operationalSeason.id } })
-      : 0,
-    totalSubmissions: currentRound
-      ? await prisma.submission.count({ where: { roundId: currentRound.id } })
-      : 0,
-    totalWarnings: await prisma.warning.count(),
-  }
-
-  if (user.role === 'ADMIN' || user.role === 'SUB_ADMIN') {
-    return <AdminCommandCenter />
-  }
+  const currentRound = operationalSeason?.rounds.find((r) => {
+    const now = new Date()
+    return new Date(r.closesAt) > now && new Date(r.opensAt) <= now && r.status === 'OPEN'
+  })
 
   if (user.role === 'SUPERVISOR') {
     const coaching = await getSupervisorCoaching(user.id)
@@ -199,11 +186,6 @@ export default async function DashboardPage() {
       }) > 0
     : false
 
-  const rulesAcknowledged = await prisma.user.findUnique({
-    where: { id: user.id },
-    select: { rulesAcknowledgedAt: true },
-  })
-
   let publishedPosition: { score: number; rank: number; percentile: number; latestRoundId: string | null } | null = null
   if (studentTeam && operationalSeason) {
     const visibleRounds = operationalSeason.rounds.filter((round) => round.leaderboardVisible)
@@ -217,7 +199,7 @@ export default async function DashboardPage() {
 
   return (
     <MotionReveal className="space-y-8">
-      {!rulesAcknowledged?.rulesAcknowledgedAt && (
+      {!user.rulesAcknowledgedAt && (
         <Card className="border-warning/20 bg-gradient-to-r from-warning-background via-card to-card">
           <CardContent className="py-4">
             <div className="flex items-center justify-between">
@@ -456,7 +438,7 @@ export default async function DashboardPage() {
                   <div key={member.id} className="flex items-center justify-between rounded-lg border border-border bg-surface-secondary p-3">
                     <div className="flex items-center space-x-3">
                       <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground font-semibold">
-                        {member.user.firstName[0]}{member.user.lastName[0]}
+                        {(member.user.firstName?.[0] ?? '')}{(member.user.lastName?.[0] ?? '')}
                       </div>
                       <div>
                         <p className="font-medium text-foreground">

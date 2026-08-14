@@ -20,6 +20,7 @@ describe('Leaderboard behavior', () => {
   let disqualifiedTeam: Awaited<ReturnType<typeof createTeam>>
   let pendingTeam: Awaited<ReturnType<typeof createTeam>>
   let student: Awaited<ReturnType<typeof createUser>>
+  let supervisorA: Awaited<ReturnType<typeof createUser>>
 
   beforeEach(async () => {
     universityA = await createUniversity('Leaderboard University A')
@@ -31,7 +32,7 @@ describe('Leaderboard behavior', () => {
     season = bundle.season
     rounds = bundle.rounds
 
-    const supervisorA = await createUser({
+    supervisorA = await createUser({
       email: 'supervisor-a@leaderboard.test',
       role: 'SUPERVISOR',
       universityId: universityA.id,
@@ -210,25 +211,31 @@ describe('Leaderboard behavior', () => {
     expect(data.leaderboard[1].teamId).toBe(alphaTeam.id)
   })
 
-  it('allows unauthenticated users to view the public leaderboard payload', async () => {
+  it('hides the leaderboard from unauthenticated users until a round is published', async () => {
     logout()
     const res = await leaderboardHandler(makeRequest(`${BASE}/api/leaderboards?metric=COMBINED`))
     const data = await res.json()
 
     expect(res.status).toBe(200)
-    expect(data.leaderboard).toHaveLength(3)
-    expect(data.leaderboard.every((entry: { mape: number | null }) => entry.mape === null)).toBe(true)
+    expect(data.leaderboard).toHaveLength(0)
   })
 
-  it('assigns distinct sorted ranks when MAPE is masked from non-admin viewers', async () => {
-    logout()
+  it('hides the leaderboard from students until a round is published', async () => {
+    await loginAs(student.id)
     const res = await leaderboardHandler(makeRequest(`${BASE}/api/leaderboards?metric=COMBINED`))
     const data = await res.json()
 
-    // Regression: masked (null) MAPE previously collapsed every rank to #1 because
-    // `null === entry.mape` matched the first row. Ranks must follow the sorted order.
     expect(res.status).toBe(200)
-    expect(data.leaderboard.map((entry: { rank: number }) => entry.rank)).toEqual([1, 2, 3])
+    expect(data.leaderboard).toHaveLength(0)
+  })
+
+  it('hides the leaderboard from supervisors until a round is published', async () => {
+    await loginAs(supervisorA.id)
+    const res = await leaderboardHandler(makeRequest(`${BASE}/api/leaderboards?metric=COMBINED`))
+    const data = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(data.leaderboard).toHaveLength(0)
   })
 
   it('shows published leaderboard values and progression to students', async () => {
@@ -250,6 +257,8 @@ describe('Leaderboard behavior', () => {
     expect(alphaEntry.mape).toBeCloseTo(0.08, 5)
     expect(alphaEntry.roundScores[rounds[0].id]).toBeCloseTo(0.1, 5)
     expect(alphaEntry.cumulativeScores[rounds[1].id]).toBeCloseTo(0.08, 5)
+    // Regression: distinct sorted ranks (a null-MAPE bug once collapsed every rank to #1).
+    expect(data.leaderboard.map((entry: { rank: number }) => entry.rank)).toEqual([1, 2, 3])
   })
 
   it('keeps unpublished round contributions hidden from students', async () => {

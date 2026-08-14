@@ -147,7 +147,7 @@ describe('Scoring correctness and leaderboards', () => {
     const studentRes = await getLeaderboards(studentReq)
     const studentJson = await studentRes.json()
 
-    expect(studentJson.leaderboard[0].mape).toBeNull()
-    expect(studentJson.leaderboard[0].nErrors).toBeNull()
+    // Full gating: with no round published, a student sees an empty leaderboard.
+    expect(studentJson.leaderboard).toHaveLength(0)
   })
 })
