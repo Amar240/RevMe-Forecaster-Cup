@@ -190,7 +190,7 @@ export const markets = [
     insight: 'Learn to read event calendars and price around demand spikes that move week to week.',
   },
   {
-    name: 'Dubai',
+    name: 'BUR Dubai',
     country: 'United Arab Emirates',
     desc: 'Tourism cycles and global events drive sharp seasonal peaks.',
     signal: 'Demand cliffs, Ramadan sensitivity',
@@ -198,7 +198,7 @@ export const markets = [
       'Master forecasting in a tourism-heavy market shaped by global events and extreme seasonality.',
   },
   {
-    name: 'Hamburg',
+    name: 'Hamburg Center',
     country: 'Germany',
     desc: 'Business and port-driven demand on a stable baseline.',
     signal: 'Corporate transient base, MICE pickup',

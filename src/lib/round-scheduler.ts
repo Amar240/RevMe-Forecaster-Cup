@@ -8,6 +8,7 @@ import {
 import { buildAuditLogData } from '@/lib/audit'
 import { prisma } from '@/lib/db'
 import { logger } from '@/lib/logger'
+import { assignMissedSubmissionWarnings } from '@/server/missed-submission-warnings'
 
 const MAX_SERIALIZATION_ATTEMPTS = 3
 
@@ -263,7 +264,7 @@ export async function processRoundTransitions(options?: {
   seasonId?: string
   force?: boolean
   dueOnly?: boolean
-}): Promise<{ opened: number; closed: number }> {
+}): Promise<{ opened: number; closed: number; closedRoundIds: string[] }> {
   const evaluatedAt = options?.now ?? new Date()
   const seasons = await prisma.season.findMany({
     where: {
@@ -292,6 +293,7 @@ export async function processRoundTransitions(options?: {
 
   let opened = 0
   let closed = 0
+  const closedRoundIds: string[] = []
   for (const season of seasons) {
     const result = await reconcileSeasonRoundState({
       seasonId: season.id,
@@ -302,6 +304,7 @@ export async function processRoundTransitions(options?: {
     })
     opened += result.opened
     closed += result.closed
+    closedRoundIds.push(...result.closedRoundIds)
   }
 
   logger.info('Round lifecycle reconciliation completed', {
@@ -311,5 +314,22 @@ export async function processRoundTransitions(options?: {
     evaluatedAt: evaluatedAt.toISOString(),
   })
 
-  return { opened, closed }
+  // Any round that just closed may leave teams with a missed submission. Assign warnings + emails
+  // idempotently so this is guaranteed regardless of which close path ran. Non-fatal.
+  if (closedRoundIds.length > 0) {
+    try {
+      await assignMissedSubmissionWarnings({
+        roundIds: closedRoundIds,
+        sendEmail: true,
+        actorId: options?.actorId ?? null,
+      })
+    } catch (error) {
+      logger.error('Missed-submission warning assignment failed after round close', {
+        closedRoundIds,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }
+
+  return { opened, closed, closedRoundIds }
 }

@@ -132,7 +132,12 @@ export function middleware(request: NextRequest) {
     }
   }
 
-  const response = NextResponse.next()
+  // Forward the current path on the REQUEST headers so Server Components can read it via headers().
+  // Setting it only on the response header (as before) never reaches the layout's headers() call.
+  const requestHeaders = new Headers(request.headers)
+  requestHeaders.set('x-pathname', request.nextUrl.pathname)
+
+  const response = NextResponse.next({ request: { headers: requestHeaders } })
   const csrfCookie = request.cookies.get(CSRF_COOKIE)?.value
   if (!csrfCookie) {
     response.cookies.set(CSRF_COOKIE, crypto.randomUUID(), {

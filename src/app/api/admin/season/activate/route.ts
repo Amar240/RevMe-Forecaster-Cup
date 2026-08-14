@@ -5,7 +5,7 @@ import { requireAdminOrResponse, jsonOk, jsonError } from '@/server/http'
 import { closeSeasonSupervisorAssignments } from '@/server/team-supervisor-assignment'
 import { reconcileSeasonRoundState } from '@/lib/round-scheduler'
 import { syncSeasonRoundSchedules } from '@/server/round-automation-schedules'
-import { logger } from '@/lib/logger'
+import { getActiveRoundAutomationOverride } from '@/server/round-automation-emergency'
 
 export const dynamic = 'force-dynamic'
 
@@ -51,14 +51,32 @@ async function initializeRoundLifecycle(seasonId: string, actorId: string) {
     actorId,
     generation: season.roundAutomationGeneration,
   })
-  try {
-    await syncSeasonRoundSchedules(seasonId)
-  } catch (error) {
-    logger.error('Season activated but exact round schedules could not be synchronized', {
-      seasonId,
-      error: error instanceof Error ? error.message : String(error),
-    })
-  }
+}
+
+async function prepareAutomaticSchedulesBeforeActivation(seasonId: string) {
+  const season = await prisma.season.findUnique({
+    where: { id: seasonId },
+    select: { roundAutomationMode: true },
+  })
+  if (!season || season.roundAutomationMode !== 'AUTOMATIC') return
+  await syncSeasonRoundSchedules(seasonId)
+}
+
+async function resyncAutomaticSchedulesAfterResume(seasonId: string) {
+  const season = await prisma.season.findUnique({
+    where: { id: seasonId },
+    select: { roundAutomationMode: true },
+  })
+  if (!season || season.roundAutomationMode !== 'AUTOMATIC') return
+  const activeOverride = await getActiveRoundAutomationOverride(seasonId)
+  if (activeOverride) return
+  await reconcileSeasonRoundState({
+    seasonId,
+    trigger: 'RECOVERY',
+    generation: undefined,
+    force: true,
+  })
+  await syncSeasonRoundSchedules(seasonId)
 }
 
 export async function POST(request: NextRequest) {
@@ -86,6 +104,8 @@ export async function POST(request: NextRequest) {
           422
         )
       }
+
+      await prepareAutomaticSchedulesBeforeActivation(season.id)
 
       const activeSeasons = await prisma.season.findMany({ where: { status: 'ACTIVE' }, select: { id: true } })
       await prisma.$transaction(async (tx) => {
@@ -136,6 +156,7 @@ export async function POST(request: NextRequest) {
             422
           )
         }
+        await prepareAutomaticSchedulesBeforeActivation(season.id)
         {
           const activeSeasons = await prisma.season.findMany({ where: { status: 'ACTIVE' }, select: { id: true } })
           await prisma.$transaction(async (tx) => {
@@ -183,20 +204,13 @@ export async function POST(request: NextRequest) {
         })
       : await prisma.season.update({
           where: { id: season.id },
-          data: {
-            status: newStatus,
-            ...(action === 'pause' && season.roundAutomationMode === 'AUTOMATIC'
-              ? {
-                  roundAutomationMode: 'MANUAL' as const,
-                  roundAutomationGeneration: { increment: 1 },
-                  roundAutomationScheduleError: null,
-                }
-              : {}),
-          },
+          data: { status: newStatus },
         })
 
     if (action === 'start') {
       await initializeRoundLifecycle(season.id, user!.id)
+    } else if (action === 'resume') {
+      await resyncAutomaticSchedulesAfterResume(season.id)
     }
 
     await logAuditAction(user!.id, `SEASON_${action.toUpperCase()}`, 'Season', season.id, {

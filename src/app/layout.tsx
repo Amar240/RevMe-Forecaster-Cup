@@ -40,7 +40,7 @@ export default function RootLayout({
       <body className={`${body.variable} ${display.variable} ${mono.variable} font-body bg-background text-foreground antialiased`}>
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
           {children}
-          <Toaster richColors position="top-right" />
+          <Toaster richColors closeButton position="top-right" />
         </ThemeProvider>
       </body>
     </html>

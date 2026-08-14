@@ -1,7 +1,7 @@
 export const MARKET_COLORS: Record<string, { bg: string; text: string; border: string }> = {
   'Nashville CBD': { bg: 'bg-primary-soft', text: 'text-primary', border: 'border-primary/20' },
-  'Dubai': { bg: 'bg-accent-soft', text: 'text-accent', border: 'border-accent/20' },
-  'Hamburg': { bg: 'bg-info-background', text: 'text-info', border: 'border-info/20' },
+  'BUR Dubai': { bg: 'bg-accent-soft', text: 'text-accent', border: 'border-accent/20' },
+  'Hamburg Center': { bg: 'bg-info-background', text: 'text-info', border: 'border-info/20' },
 }
 
 export function MarketChip({ name }: { name: string }) {

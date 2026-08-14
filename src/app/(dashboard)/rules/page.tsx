@@ -50,12 +50,16 @@ export default function RulesPage() {
       const res = await csrfFetch('/api/users/me')
       if (res.ok) {
         const data = await res.json()
-        setAcknowledged(!!data.user.rulesAcknowledgedAt)
+        setAcknowledged(!!data?.user?.rulesAcknowledgedAt)
+        return
       }
     } catch (error) {
       clientLogger.error('Failed to fetch:', error)
-      toast.error('Failed to load rules')
     }
+    // Never leave the page pinned on the loading skeleton (the "freeze" the admin saw right after
+    // login, before the session cookie was readable). Fall back to rendering the guidelines with the
+    // acknowledge action; a fresh reload / the layout guard reconciles the real state.
+    setAcknowledged(false)
   }
 
   const handleAcknowledge = async () => {
@@ -109,8 +113,7 @@ export default function RulesPage() {
       )}
 
       <div className="mb-8 text-center">
-        <h1 className="text-3xl font-bold text-foreground">Guidelines + Help</h1>
-        <p className="mt-2 text-text-secondary">RevME Forecaster Cup - everything you need to know</p>
+        <h1 className="text-3xl font-bold text-foreground">Guidelines &amp; Help</h1>
       </div>
 
       {acknowledged === false && (
@@ -147,10 +150,10 @@ export default function RulesPage() {
           <CardContent className="space-y-3 text-sm text-text-secondary">
             <p>The RevME Forecaster Cup is a hospitality revenue forecasting competition where teams predict hotel performance metrics.</p>
             <ul className="list-inside list-disc space-y-2">
-              <li><strong>8 rounds</strong> of weekly forecasting</li>
+              <li><strong>7 rounds</strong> of weekly forecasting</li>
               <li>Predict a <strong>2-week ahead</strong> horizon (Week+1 and Week+2)</li>
               <li>Two metrics: <strong>Occupancy</strong> and <strong>ADR ($)</strong></li>
-              <li>Three markets: <strong>Nashville CBD, Dubai, Hamburg</strong></li>
+              <li>Three markets: <strong>Nashville CBD, BUR Dubai, Hamburg Center</strong></li>
             </ul>
           </CardContent>
         </Card>
@@ -168,7 +171,6 @@ export default function RulesPage() {
               <li>Teams are created by <strong>supervisors only</strong></li>
               <li>Each team has <strong>1 designated submitter</strong></li>
               <li>Each supervisor can manage <strong>up to 10 teams</strong></li>
-              <li>Students <strong>cannot create teams</strong> themselves</li>
             </ul>
           </CardContent>
         </Card>
@@ -177,7 +179,7 @@ export default function RulesPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Clock className="h-5 w-5 text-primary" />
-              Submissions + Deadlines
+              Submissions &amp; Deadlines
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm text-text-secondary">
@@ -201,7 +203,7 @@ export default function RulesPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-warning">
               <AlertTriangle className="h-5 w-5" />
-              Warnings + Disqualification
+              Warnings &amp; Disqualification
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm text-text-secondary">
@@ -220,7 +222,7 @@ export default function RulesPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Trophy className="h-5 w-5 text-accent" />
-            Scoring + Leaderboards
+            Scoring &amp; Leaderboards
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4 text-sm text-text-secondary">
@@ -228,14 +230,14 @@ export default function RulesPage() {
           <div className="grid gap-4 md:grid-cols-3">
             <div className="rounded-lg border border-info/20 bg-info-background/55 p-4">
               <h4 className="font-semibold text-info">Occupancy MAPE</h4>
-              <p className="mt-1 text-xs text-text-secondary">|Predicted - Actual| / Actual x 100%</p>
+              <p className="mt-1 text-xs text-text-secondary">|(Predicted - Actual) / Actual| x 100%</p>
             </div>
             <div className="rounded-lg border border-success/20 bg-success-background/55 p-4">
               <h4 className="font-semibold text-success">ADR MAPE</h4>
-              <p className="mt-1 text-xs text-text-secondary">|Predicted - Actual| / Actual x 100%</p>
+              <p className="mt-1 text-xs text-text-secondary">|(Predicted - Actual) / Actual| x 100%</p>
             </div>
             <div className="rounded-lg border border-accent/20 bg-accent-soft/60 p-4">
-              <h4 className="font-semibold text-accent">Final Score</h4>
+              <h4 className="font-semibold text-accent">Cumulative Score</h4>
               <p className="mt-1 text-xs text-text-secondary">Average of Occupancy and ADR MAPE</p>
             </div>
           </div>
@@ -259,12 +261,12 @@ export default function RulesPage() {
         {sectionIsOpen('scoring') && (
           <CardContent className="space-y-4 text-sm text-text-secondary">
             <div id="first-forecast" className="rounded-lg border border-primary/20 bg-primary-soft p-4 scroll-mt-24">
-              <h4 className="mb-2 font-semibold text-foreground">Your five-minute first forecast</h4>
+              <h4 className="mb-2 font-semibold text-foreground">Some suggestions for better forecasting</h4>
               <ol className="list-inside list-decimal space-y-2">
-                <li>Read each market brief and name the one demand signal you expect to matter most.</li>
-                <li>Use the recent actuals as your baseline; do not start from a blank number.</li>
+                <li>Read each market brief and identify the demand signals you expect to matter the most.</li>
+                <li>Use the recent actuals as your baseline.</li>
                 <li>Adjust occupancy first, then decide whether the same signal should move ADR.</li>
-                <li>Make week +2 changes more cautiously because uncertainty grows with the horizon.</li>
+                <li>Make the 2nd week predictions more cautiously because uncertainty tend to increase with the forecasting horizon.</li>
                 <li>Write down one assumption to check when the round debrief is published.</li>
               </ol>
             </div>
@@ -272,7 +274,7 @@ export default function RulesPage() {
               <h4 className="mb-2 font-semibold text-foreground">Mean Absolute Percentage Error (MAPE)</h4>
               <p className="mb-3">Your score is based on the percentage error between your predictions and actual values. Lower is better.</p>
               <div className="rounded-lg border border-border bg-surface-secondary p-3 text-center font-mono text-sm">
-                MAPE = Average of (|Predicted - Actual| / Actual) x 100%
+                MAPE = Average of |(Predicted - Actual) / Actual| x 100%
               </div>
             </div>
             <div className="grid gap-4 md:grid-cols-2">
@@ -314,7 +316,7 @@ export default function RulesPage() {
               <p>Only the <strong>designated submitter</strong> on your team can submit. If you are not the submitter, your teammate will submit on behalf of the team. You can view your team&apos;s submitted forecasts under <strong>My Scores</strong> after submission.</p>
             </div>
             <div className="rounded-lg border border-border bg-card p-4">
-              <h4 className="mb-2 font-semibold text-foreground">Step-by-Step Guide</h4>
+              <h4 className="mb-2 font-semibold text-foreground">Step by step guide for the designated submitter</h4>
               <ol className="list-inside list-decimal space-y-2">
                 <li><strong>Go to Submit Forecast</strong> from your dashboard</li>
                 <li><strong>Select the current round</strong> if multiple are available</li>
@@ -322,7 +324,7 @@ export default function RulesPage() {
                   <strong>Enter predictions</strong> for each market and metric:
                   <ul className="ml-6 mt-1 list-disc">
                     <li>Occupancy (value, e.g. 75.5)</li>
-                    <li>ADR (as dollar amount, e.g. 189.50)</li>
+                    <li>ADR (as currency amount, e.g. 189.50)</li>
                   </ul>
                 </li>
                 <li><strong>Review all values</strong> carefully before submitting</li>
@@ -334,7 +336,7 @@ export default function RulesPage() {
                 <li>Only the designated submitter can submit forecasts</li>
                 <li>Submissions are locked immediately after submitting</li>
                 <li>You cannot edit or delete a submitted forecast</li>
-                <li>Submit before the deadline shown on your dashboard</li>
+                <li>Submit as early as possible - do not wait for last minute. Technical and communication issues often delay submission and you might miss the deadline.</li>
               </ul>
             </AlertBanner>
           </CardContent>
@@ -382,7 +384,6 @@ export default function RulesPage() {
               <ul className="space-y-1 text-text-secondary">
                 <li>Cannot submit? Check if you are the designated submitter.</li>
                 <li>Missing team? Contact your supervisor to be added.</li>
-                <li>Deadline passed? Contact admin for assistance.</li>
               </ul>
             </div>
           </CardContent>

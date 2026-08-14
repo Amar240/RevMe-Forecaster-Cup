@@ -70,6 +70,48 @@ export async function ensureTestSchema() {
   await prisma.$executeRawUnsafe('CREATE UNIQUE INDEX IF NOT EXISTS "RoundTransitionRun_idempotencyKey_key" ON "RoundTransitionRun"("idempotencyKey")')
   await prisma.$executeRawUnsafe('CREATE INDEX IF NOT EXISTS "RoundTransitionRun_seasonId_processedAt_idx" ON "RoundTransitionRun"("seasonId", "processedAt")')
   await prisma.$executeRawUnsafe('CREATE INDEX IF NOT EXISTS "RoundTransitionRun_outcome_processedAt_idx" ON "RoundTransitionRun"("outcome", "processedAt")')
+
+  await prisma.$executeRawUnsafe(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'RoundAutomationOverrideStatus') THEN
+        CREATE TYPE "RoundAutomationOverrideStatus" AS ENUM ('ACTIVE', 'RESOLVED');
+      END IF;
+    END
+    $$;
+  `)
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "RoundAutomationOverride" (
+      "id" TEXT NOT NULL,
+      "seasonId" TEXT NOT NULL,
+      "status" "RoundAutomationOverrideStatus" NOT NULL DEFAULT 'ACTIVE',
+      "reason" TEXT NOT NULL,
+      "expectedEndAt" TIMESTAMP(3),
+      "activatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "activatedById" TEXT,
+      "extendedAt" TIMESTAMP(3),
+      "extendedById" TEXT,
+      "extensionReason" TEXT,
+      "dueReminderSentAt" TIMESTAMP(3),
+      "escalationReminderSentAt" TIMESTAMP(3),
+      "resolvedAt" TIMESTAMP(3),
+      "resolvedById" TEXT,
+      "resolutionReason" TEXT,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "RoundAutomationOverride_pkey" PRIMARY KEY ("id"),
+      CONSTRAINT "RoundAutomationOverride_seasonId_fkey" FOREIGN KEY ("seasonId") REFERENCES "Season"("id") ON DELETE CASCADE ON UPDATE CASCADE,
+      CONSTRAINT "RoundAutomationOverride_activatedById_fkey" FOREIGN KEY ("activatedById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE,
+      CONSTRAINT "RoundAutomationOverride_extendedById_fkey" FOREIGN KEY ("extendedById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE,
+      CONSTRAINT "RoundAutomationOverride_resolvedById_fkey" FOREIGN KEY ("resolvedById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE
+    )
+  `)
+  await prisma.$executeRawUnsafe('CREATE INDEX IF NOT EXISTS "RoundAutomationOverride_seasonId_status_idx" ON "RoundAutomationOverride"("seasonId", "status")')
+  await prisma.$executeRawUnsafe('CREATE INDEX IF NOT EXISTS "RoundAutomationOverride_expectedEndAt_idx" ON "RoundAutomationOverride"("expectedEndAt")')
+  await prisma.$executeRawUnsafe('CREATE INDEX IF NOT EXISTS "RoundAutomationOverride_activatedById_idx" ON "RoundAutomationOverride"("activatedById")')
+  await prisma.$executeRawUnsafe('CREATE INDEX IF NOT EXISTS "RoundAutomationOverride_resolvedById_idx" ON "RoundAutomationOverride"("resolvedById")')
+  await prisma.$executeRawUnsafe('CREATE UNIQUE INDEX IF NOT EXISTS "RoundAutomationOverride_one_active_per_season" ON "RoundAutomationOverride"("seasonId") WHERE "status" = \'ACTIVE\'')
+
   await prisma.$executeRawUnsafe(`
     WITH ranked_open_rounds AS (
       SELECT "id", ROW_NUMBER() OVER (PARTITION BY "seasonId" ORDER BY "opensAt" DESC, "number" DESC) AS row_number

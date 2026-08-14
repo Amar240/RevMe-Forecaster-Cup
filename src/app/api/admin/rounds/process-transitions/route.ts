@@ -11,7 +11,7 @@ export async function POST() {
     const result = await processRoundTransitions({
       trigger: 'ADMIN',
       actorId: user?.id,
-      force: true,
+      force: false,
     })
     return jsonOk(result)
   } catch (error) {

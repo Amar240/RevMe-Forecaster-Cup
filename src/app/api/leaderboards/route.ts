@@ -447,9 +447,15 @@ export async function GET(request: NextRequest) {
       ? await getExpectedRoundErrors(roundIdParam)
       : 78
 
+    // Entries arrive already sorted ascending by real MAPE. Collapse ties (competition ranking)
+    // only when the score is visible; when MAPE is masked to null (non-admin viewers), every
+    // `null === null` comparison would match the first row and make every rank #1 — fall back to
+    // the sorted position instead.
     leaderboard = leaderboard.map((entry, index, entries) => ({
       ...entry,
-      rank: entries.findIndex((candidate) => candidate.mape === entry.mape) + 1,
+      rank: entry.mape === null
+        ? index + 1
+        : entries.findIndex((candidate) => candidate.mape === entry.mape) + 1,
     }))
     const myEntry = leaderboard.find((entry) => entry.teamId === myTeamId)
     let myPosition: { rank: number; percentile: number; gapToNext: number | null; rankMovement: number | null } | null = null

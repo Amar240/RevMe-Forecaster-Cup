@@ -6,10 +6,12 @@ import { prisma } from '@/server/db'
 export const ARCHIVE_FILES = ['participants.csv', 'results.csv'] as const
 export type ArchiveFileName = (typeof ARCHIVE_FILES)[number]
 
+// `key` drives the CSV column names and must stay stable across the market rename;
+// only `name` (the DB lookup) tracks the renamed markets.
 const TRACKED_ARCHIVE_MARKETS = [
   { name: 'Nashville CBD', key: 'nashville' },
-  { name: 'Dubai', key: 'dubai' },
-  { name: 'Hamburg', key: 'hamburg' },
+  { name: 'BUR Dubai', key: 'dubai' },
+  { name: 'Hamburg Center', key: 'hamburg' },
 ] as const
 
 type TrackedArchiveMarketKey = (typeof TRACKED_ARCHIVE_MARKETS)[number]['key']

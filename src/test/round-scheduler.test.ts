@@ -143,7 +143,8 @@ describe('Round scheduler', () => {
 
     const result = await processRoundTransitions()
 
-    expect(result).toEqual({ opened: 1, closed: 1 })
+    expect(result).toMatchObject({ opened: 1, closed: 1 })
+    expect(result.closedRoundIds).toContain(closingRound.id)
 
     const [updatedOpeningRound, updatedClosingRound] = await Promise.all([
       prisma.round.findUnique({ where: { id: openingRound.id } }),
@@ -273,15 +274,21 @@ describe('Round scheduler', () => {
     expect(data.message).toBe('Unauthorized')
   })
 
-  it('lets a full admin switch a season to manual mode with an audit record', async () => {
+  it('lets a full admin start emergency round control with an audit record', async () => {
     const admin = await createUser({ email: 'admin-mode@test.com', role: 'ADMIN' })
     const { season } = await createSeasonWithRounds({ status: 'ACTIVE' })
     await loginAs(admin.id)
 
+    const expectedEndAt = new Date(Date.now() + 60 * 60 * 1000).toISOString()
     const response = await updateRoundAutomationRoute(
       makeRequest(`http://localhost/api/admin/seasons/${season.id}/round-automation`, {
         method: 'PATCH',
-        body: { mode: 'MANUAL', reason: 'Emergency operations test' },
+        body: {
+          mode: 'MANUAL',
+          reason: 'Need emergency control while verifying a round boundary.',
+          expectedEndAt,
+          acknowledgeConsequences: true,
+        },
       }),
       { params: Promise.resolve({ seasonId: season.id }) }
     )
@@ -291,12 +298,15 @@ describe('Round scheduler', () => {
       roundAutomationMode: 'MANUAL',
       roundAutomationGeneration: 2,
     })
+    expect(await prisma.roundAutomationOverride.count({
+      where: { seasonId: season.id, status: 'ACTIVE' },
+    })).toBe(1)
     expect(await prisma.auditLog.count({
-      where: { action: 'ROUND_AUTOMATION_MODE_CHANGED', entityId: season.id },
+      where: { action: 'ROUND_AUTOMATION_EMERGENCY_STARTED', entityId: season.id },
     })).toBe(1)
   })
 
-  it('switches automatic mode to manual when an admin directly edits a round', async () => {
+  it('rejects direct manual round changes outside emergency control', async () => {
     const admin = await createUser({ email: 'admin-direct-round-edit@test.com', role: 'ADMIN' })
     const { season, rounds } = await createSeasonWithRounds({ status: 'ACTIVE' })
     await loginAs(admin.id)
@@ -308,12 +318,46 @@ describe('Round scheduler', () => {
       }),
       { params: Promise.resolve({ id: rounds[0].id }) }
     )
+    const data = await response.json()
+
+    expect(response.status).toBe(409)
+    expect(data.code).toBe('ROUND_EMERGENCY_CONTROL_REQUIRED')
+    expect(await prisma.season.findUnique({ where: { id: season.id } })).toMatchObject({
+      roundAutomationMode: 'AUTOMATIC',
+      roundAutomationGeneration: 1,
+    })
+    expect(await prisma.round.findUnique({ where: { id: rounds[0].id } })).toMatchObject({
+      status: 'OPEN',
+    })
+  })
+
+  it('allows direct manual round changes during emergency control', async () => {
+    const admin = await createUser({ email: 'admin-emergency-round-edit@test.com', role: 'ADMIN' })
+    const { season, rounds } = await createSeasonWithRounds({ status: 'ACTIVE' })
+    await loginAs(admin.id)
+
+    await updateRoundAutomationRoute(
+      makeRequest(`http://localhost/api/admin/seasons/${season.id}/round-automation`, {
+        method: 'PATCH',
+        body: {
+          mode: 'MANUAL',
+          reason: 'Need emergency control while verifying round pause behavior.',
+          expectedEndAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+          acknowledgeConsequences: true,
+        },
+      }),
+      { params: Promise.resolve({ seasonId: season.id }) }
+    )
+
+    const response = await updateRoundStatusRoute(
+      makeRequest(`http://localhost/api/admin/rounds/${rounds[0].id}/status`, {
+        method: 'PATCH',
+        body: { status: 'PAUSED' },
+      }),
+      { params: Promise.resolve({ id: rounds[0].id }) }
+    )
 
     expect(response.status).toBe(200)
-    expect(await prisma.season.findUnique({ where: { id: season.id } })).toMatchObject({
-      roundAutomationMode: 'MANUAL',
-      roundAutomationGeneration: 2,
-    })
     expect(await prisma.round.findUnique({ where: { id: rounds[0].id } })).toMatchObject({
       status: 'PAUSED',
     })

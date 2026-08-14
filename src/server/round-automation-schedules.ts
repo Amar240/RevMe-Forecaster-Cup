@@ -27,6 +27,11 @@ export interface RoundSchedulerConfigurationStatus {
   missing: string[]
 }
 
+export type RoundAutomationScheduleEventType =
+  | 'ROUND_BOUNDARY'
+  | 'EMERGENCY_OVERRIDE_DUE'
+  | 'EMERGENCY_OVERRIDE_ESCALATION'
+
 function getConfiguration(): SchedulerConfiguration | null {
   const region = process.env.AWS_REGION ?? 'us-east-2'
   const groupName = process.env.ROUND_AUTOMATION_SCHEDULE_GROUP ?? DEFAULT_GROUP
@@ -75,7 +80,7 @@ function atExpression(date: Date) {
   return `at(${date.toISOString().replace(/\.\d{3}Z$/, '')})`
 }
 
-function safeScheduleError(error: unknown) {
+export function safeScheduleError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error)
   return message.replace(/arn:aws:[^\s]+/g, '[aws-resource]').slice(0, 500)
 }
@@ -93,7 +98,10 @@ async function deleteScheduleIfPresent(
   }
 }
 
-export async function syncSeasonRoundSchedules(seasonId: string) {
+export async function syncSeasonRoundSchedules(
+  seasonId: string,
+  options?: { generationOverride?: number; forceAutomatic?: boolean }
+) {
   const config = getConfiguration()
   if (!config) {
     const message = `Round scheduler is not configured: ${getRoundSchedulerConfigurationStatus().missing.join(', ')}`
@@ -109,14 +117,19 @@ export async function syncSeasonRoundSchedules(seasonId: string) {
     include: { rounds: { orderBy: { number: 'asc' } } },
   })
   if (!season) throw new Error(`Season ${seasonId} was not found`)
-  if (season.roundAutomationMode !== 'AUTOMATIC') {
-    return { scheduled: 0, skipped: season.rounds.length * 2, generation: season.roundAutomationGeneration }
+  if (!options?.forceAutomatic && season.roundAutomationMode !== 'AUTOMATIC') {
+    return {
+      scheduled: 0,
+      skipped: season.rounds.length * 2,
+      generation: season.roundAutomationGeneration,
+    }
   }
 
   const client = new SchedulerClient({ region: config.region })
   const now = new Date()
   let scheduled = 0
   let skipped = 0
+  const generation = options?.generationOverride ?? season.roundAutomationGeneration
 
   try {
     for (const round of season.rounds) {
@@ -133,7 +146,7 @@ export async function syncSeasonRoundSchedules(seasonId: string) {
 
         const name = scheduleName(
           season.id,
-          season.roundAutomationGeneration,
+          generation,
           round.number,
           boundary.kind
         )
@@ -141,7 +154,7 @@ export async function syncSeasonRoundSchedules(seasonId: string) {
         const idempotencyKey = [
           'scheduled',
           season.id,
-          season.roundAutomationGeneration,
+          generation,
           round.id,
           boundary.kind,
           boundary.at.toISOString(),
@@ -160,8 +173,9 @@ export async function syncSeasonRoundSchedules(seasonId: string) {
             Arn: config.lambdaArn,
             RoleArn: config.schedulerRoleArn,
             Input: JSON.stringify({
+              eventType: 'ROUND_BOUNDARY' satisfies RoundAutomationScheduleEventType,
               seasonId: season.id,
-              generation: season.roundAutomationGeneration,
+              generation,
               idempotencyKey,
               scheduledFor: boundary.at.toISOString(),
             }),
@@ -185,11 +199,11 @@ export async function syncSeasonRoundSchedules(seasonId: string) {
     })
     logger.info('Round transition schedules synchronized', {
       seasonId: season.id,
-      generation: season.roundAutomationGeneration,
+      generation,
       scheduled,
       skipped,
     })
-    return { scheduled, skipped, generation: season.roundAutomationGeneration }
+    return { scheduled, skipped, generation }
   } catch (error) {
     const message = safeScheduleError(error)
     await prisma.season.update({
@@ -198,10 +212,127 @@ export async function syncSeasonRoundSchedules(seasonId: string) {
     })
     logger.error('Failed to synchronize round transition schedules', {
       seasonId: season.id,
-      generation: season.roundAutomationGeneration,
+      generation,
       error: message,
     })
     throw error
+  } finally {
+    client.destroy()
+  }
+}
+
+function overrideScheduleName(
+  seasonId: string,
+  overrideId: string,
+  kind: 'due' | 'escalation'
+) {
+  return `revme-${safeSchedulePart(seasonId)}-ov-${safeSchedulePart(overrideId)}-${kind}`.slice(0, 64)
+}
+
+async function createOneTimeSchedule(input: {
+  client: SchedulerClient
+  config: SchedulerConfiguration
+  name: string
+  description: string
+  scheduledAt: Date
+  payload: Record<string, unknown>
+}) {
+  await deleteScheduleIfPresent(input.client, input.config.groupName, input.name)
+  await input.client.send(new CreateScheduleCommand({
+    Name: input.name,
+    GroupName: input.config.groupName,
+    Description: input.description,
+    ScheduleExpression: atExpression(input.scheduledAt),
+    ScheduleExpressionTimezone: 'UTC',
+    FlexibleTimeWindow: { Mode: 'OFF' },
+    ActionAfterCompletion: 'DELETE',
+    State: 'ENABLED',
+    Target: {
+      Arn: input.config.lambdaArn,
+      RoleArn: input.config.schedulerRoleArn,
+      Input: JSON.stringify(input.payload),
+      RetryPolicy: {
+        MaximumEventAgeInSeconds: DEFAULT_RETRY_AGE_SECONDS,
+        MaximumRetryAttempts: DEFAULT_RETRY_ATTEMPTS,
+      },
+      ...(input.config.deadLetterArn ? { DeadLetterConfig: { Arn: input.config.deadLetterArn } } : {}),
+    },
+  }))
+}
+
+export async function syncEmergencyOverrideReminderSchedules(overrideId: string) {
+  const config = getConfiguration()
+  if (!config) {
+    throw new Error(`Round scheduler is not configured: ${getRoundSchedulerConfigurationStatus().missing.join(', ')}`)
+  }
+
+  const override = await prisma.roundAutomationOverride.findUnique({
+    where: { id: overrideId },
+    include: { season: { select: { id: true, name: true } } },
+  })
+  if (!override) throw new Error(`Round automation override ${overrideId} was not found`)
+  if (override.status !== 'ACTIVE' || !override.expectedEndAt) {
+    return { scheduled: 0, skipped: 2 }
+  }
+
+  const now = new Date()
+  const dueAt = override.expectedEndAt
+  const escalationAt = new Date(dueAt.getTime() + 60 * 60 * 1000)
+  const client = new SchedulerClient({ region: config.region })
+  let scheduled = 0
+  let skipped = 0
+
+  try {
+    const reminders = [
+      {
+        kind: 'due' as const,
+        at: dueAt,
+        eventType: 'EMERGENCY_OVERRIDE_DUE' as const,
+        description: `RevME ${override.season.name} emergency round-control review reminder`,
+      },
+      {
+        kind: 'escalation' as const,
+        at: escalationAt,
+        eventType: 'EMERGENCY_OVERRIDE_ESCALATION' as const,
+        description: `RevME ${override.season.name} emergency round-control overdue escalation`,
+      },
+    ]
+
+    for (const reminder of reminders) {
+      if (reminder.at <= now) {
+        skipped += 1
+        continue
+      }
+      await createOneTimeSchedule({
+        client,
+        config,
+        name: overrideScheduleName(override.seasonId, override.id, reminder.kind),
+        description: reminder.description,
+        scheduledAt: reminder.at,
+        payload: {
+          eventType: reminder.eventType satisfies RoundAutomationScheduleEventType,
+          seasonId: override.seasonId,
+          overrideId: override.id,
+          idempotencyKey: [
+            'round-automation-override',
+            override.seasonId,
+            override.id,
+            reminder.kind,
+            reminder.at.toISOString(),
+          ].join(':'),
+          scheduledFor: reminder.at.toISOString(),
+        },
+      })
+      scheduled += 1
+    }
+
+    logger.info('Round automation emergency reminder schedules synchronized', {
+      seasonId: override.seasonId,
+      overrideId: override.id,
+      scheduled,
+      skipped,
+    })
+    return { scheduled, skipped }
   } finally {
     client.destroy()
   }
