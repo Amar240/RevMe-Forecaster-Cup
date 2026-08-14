@@ -9,6 +9,7 @@ import { usePermissions } from '@/hooks/usePermissions'
 import { AccessDenied } from '@/components/ui/access-denied'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { PageHeader } from '@/components/ui/page-header'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { AlertBanner } from '@/components/ui/alert-banner'
@@ -148,10 +149,7 @@ export default function AdminMarketsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Markets</h1>
-        <p className="text-text-secondary">Manage the global market catalog used when creating seasons.</p>
-      </div>
+      <PageHeader title="Markets" description="Manage the global market catalog used when creating seasons." />
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,360px)_minmax(0,1fr)]">
         <Card>

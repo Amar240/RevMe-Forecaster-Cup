@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { useEffect, useState, useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { PageHeader } from '@/components/ui/page-header'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { DataTable } from '@/components/ui/data-table'
@@ -440,24 +441,24 @@ export default function AdminSupervisorsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Supervisors</h1>
-          <p className="text-text-secondary">{supervisors.length} supervisor{supervisors.length !== 1 ? 's' : ''}</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <Button onClick={openCreateForm}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add Supervisor
-          </Button>
-          <Button variant="outline" asChild>
-            <Link href="/admin/users">
-              <ArrowUpRight className="mr-2 h-4 w-4" />
-              View All Users
-            </Link>
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title="Supervisors"
+        description={`${supervisors.length} supervisor${supervisors.length !== 1 ? 's' : ''}`}
+        actions={
+          <>
+            <Button onClick={openCreateForm}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Supervisor
+            </Button>
+            <Button variant="outline" asChild>
+              <Link href="/admin/users">
+                <ArrowUpRight className="mr-2 h-4 w-4" />
+                View All Users
+              </Link>
+            </Button>
+          </>
+        }
+      />
 
       <div className="grid gap-6 md:grid-cols-3">
         <Card variant="metric" className="bg-gradient-to-br from-surface-secondary to-card">

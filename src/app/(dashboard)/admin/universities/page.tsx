@@ -9,6 +9,7 @@ import { useEffect, useState } from 'react'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { PageHeader } from '@/components/ui/page-header'
 import { AlertBanner } from '@/components/ui/alert-banner'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -197,16 +198,16 @@ export default function AdminUniversitiesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Universities</h1>
-          <p className="text-text-secondary">Manage participating universities</p>
-        </div>
-        <Button onClick={() => { if (showForm) resetForm(); else setShowForm(true) }}>
-          <Plus className="h-4 w-4 mr-2" />
-          {showForm ? 'Close' : 'Add University'}
-        </Button>
-      </div>
+      <PageHeader
+        title="Universities"
+        description="Manage participating universities"
+        actions={
+          <Button onClick={() => { if (showForm) resetForm(); else setShowForm(true) }}>
+            <Plus className="h-4 w-4 mr-2" />
+            {showForm ? 'Close' : 'Add University'}
+          </Button>
+        }
+      />
 
       {showForm && (
         <Card>

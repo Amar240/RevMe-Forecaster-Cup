@@ -7,6 +7,7 @@ import { clientLogger } from '@/lib/client-logger'
 import { csrfFetch } from '@/lib/csrf'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { PageHeader } from '@/components/ui/page-header'
 import { Badge } from '@/components/ui/badge'
 import { DataTable } from '@/components/ui/data-table'
 import { CardSkeleton, TableSkeleton } from '@/components/ui/skeleton'
@@ -268,18 +269,16 @@ export default function SupervisorStudentsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Students</h1>
-          <p className="text-text-secondary">
-            {universityName ? `Manage students at ${universityName}` : 'Manage students in your university'}
-          </p>
-        </div>
-        <Button onClick={openCreateDialog} disabled={!canManage}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Student
-        </Button>
-      </div>
+      <PageHeader
+        title="Students"
+        description={universityName ? `Manage students at ${universityName}` : 'Manage students in your university'}
+        actions={
+          <Button onClick={openCreateDialog} disabled={!canManage}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Student
+          </Button>
+        }
+      />
 
       {!canManage && blockedMessage && (
         <Card>

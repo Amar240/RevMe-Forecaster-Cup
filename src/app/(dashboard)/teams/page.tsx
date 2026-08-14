@@ -3,6 +3,7 @@ import { getSession } from '@/server/auth'
 import { getTeamsForUser } from '@/features/teams/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { PageHeader } from '@/components/ui/page-header'
 import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 import { Users, AlertTriangle, Check } from 'lucide-react'
@@ -22,21 +23,17 @@ export default async function TeamsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">
-            {user.role === 'ADMIN' ? 'All Teams' : 'My Teams'}
-          </h1>
-          <p className="text-text-secondary">
-            {user.role === 'SUPERVISOR' && `${teams.length} of 10 teams created`}
-          </p>
-        </div>
-        {user.role === 'SUPERVISOR' && hasOperationalSeason && teams.length < 10 && (
-          <Link href="/teams/new">
-            <Button>Create Team</Button>
-          </Link>
-        )}
-      </div>
+      <PageHeader
+        title={user.role === 'ADMIN' ? 'All Teams' : 'My Teams'}
+        description={user.role === 'SUPERVISOR' ? `${teams.length} of 10 teams created` : undefined}
+        actions={
+          user.role === 'SUPERVISOR' && hasOperationalSeason && teams.length < 10 ? (
+            <Link href="/teams/new">
+              <Button>Create Team</Button>
+            </Link>
+          ) : undefined
+        }
+      />
 
       {teams.length === 0 ? (
         <Card variant="default">

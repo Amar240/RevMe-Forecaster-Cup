@@ -6,6 +6,7 @@ import { clientLogger } from '@/lib/client-logger'
 import { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { PageHeader } from '@/components/ui/page-header'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -135,10 +136,7 @@ export default function SupervisorRequestsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Student Join Requests</h1>
-        <p className="text-text-secondary">Review and accept students into your teams</p>
-      </div>
+      <PageHeader title="Student Join Requests" description="Review and accept students into your teams" />
 
       {requests.length === 0 ? (
         <Card>
