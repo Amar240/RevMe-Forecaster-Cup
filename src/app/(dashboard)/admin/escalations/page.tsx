@@ -6,6 +6,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { PageHeader } from '@/components/ui/page-header'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -464,10 +465,7 @@ export default function AdminEscalationsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Escalations</h1>
-        <p className="text-text-secondary">Manage escalated support tickets requiring admin attention</p>
-      </div>
+      <PageHeader title="Escalations" description="Manage escalated support tickets requiring admin attention" />
 
       <div className="flex flex-wrap gap-4">
         <div className="space-y-1">

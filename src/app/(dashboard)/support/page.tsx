@@ -14,6 +14,7 @@ import { useState, useEffect } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { PageHeader } from '@/components/ui/page-header'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -226,15 +227,15 @@ export default function SupportPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Contact Supervisor</h1>
-          <p className="text-text-secondary">Get help from your supervisor with any questions or issues</p>
-        </div>
-        <Button onClick={() => setShowNewTicket(true)} disabled={!canOpenTicket}>
-          <MessageSquare className="h-4 w-4 mr-2" /> New Ticket
-        </Button>
-      </div>
+      <PageHeader
+        title="Contact Supervisor"
+        description="Get help from your supervisor with any questions or issues"
+        actions={
+          <Button onClick={() => setShowNewTicket(true)} disabled={!canOpenTicket}>
+            <MessageSquare className="h-4 w-4 mr-2" /> New Ticket
+          </Button>
+        }
+      />
 
       {supervisorInfo && (
         <Card className="bg-info-background border-info/30">

@@ -7,6 +7,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { PageHeader } from '@/components/ui/page-header'
 import { Badge } from '@/components/ui/badge'
 import { Users, AlertTriangle, Check, Ban, RefreshCw, MoreVertical, Loader2, Settings, FileSpreadsheet, Upload, Plus } from 'lucide-react'
 import { toast } from 'sonner'
@@ -479,41 +480,41 @@ export default function AdminTeamsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Teams</h1>
-          <p className="text-text-secondary">
-            {resolvedSeason
-              ? `${resolvedSeason.name} (${resolvedSeason.status}) · ${summary.activeTeams} active, ${summary.pendingTeams} pending, ${summary.disqualifiedTeams} disqualified`
-              : 'No operational season available'}
-          </p>
-        </div>
-        <div className="flex flex-col gap-3 sm:flex-row">
-          <Button asChild variant="outline">
-            <Link href="/admin/teams/import?template=select-context">
-              <FileSpreadsheet className="mr-2 h-4 w-4" />
-              Download Template
-            </Link>
-          </Button>
-          {resolvedSeason ? (
+      <PageHeader
+        title="Teams"
+        description={
+          resolvedSeason
+            ? `${resolvedSeason.name} (${resolvedSeason.status}) · ${summary.activeTeams} active, ${summary.pendingTeams} pending, ${summary.disqualifiedTeams} disqualified`
+            : 'No operational season available'
+        }
+        actions={
+          <>
             <Button asChild variant="outline">
-              <Link href="/admin/teams/import">
-                <Upload className="mr-2 h-4 w-4" />
-                Bulk Import
+              <Link href="/admin/teams/import?template=select-context">
+                <FileSpreadsheet className="mr-2 h-4 w-4" />
+                Download Template
               </Link>
             </Button>
-          ) : (
-            <Button variant="outline" disabled>
-              <Upload className="mr-2 h-4 w-4" />
-              Bulk Import
+            {resolvedSeason ? (
+              <Button asChild variant="outline">
+                <Link href="/admin/teams/import">
+                  <Upload className="mr-2 h-4 w-4" />
+                  Bulk Import
+                </Link>
+              </Button>
+            ) : (
+              <Button variant="outline" disabled>
+                <Upload className="mr-2 h-4 w-4" />
+                Bulk Import
+              </Button>
+            )}
+            <Button onClick={() => void openCreateDialog()} disabled={!resolvedSeason}>
+              <Plus className="mr-2 h-4 w-4" />
+              Add Team
             </Button>
-          )}
-          <Button onClick={() => void openCreateDialog()} disabled={!resolvedSeason}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Team
-          </Button>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {!resolvedSeason && (
         <Card className="border-dashed border-border">

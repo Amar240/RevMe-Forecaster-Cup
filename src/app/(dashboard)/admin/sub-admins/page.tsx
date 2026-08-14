@@ -8,6 +8,7 @@ import { clientLogger } from '@/lib/client-logger'
 import { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { PageHeader } from '@/components/ui/page-header'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Loader2, UserCog, Shield, Trash2, Edit, Plus, Eye, EyeOff } from 'lucide-react'
@@ -200,15 +201,15 @@ export default function SubAdminsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Sub-Admin Management</h1>
-          <p className="text-text-secondary">Create and manage sub-admin accounts with delegated permissions</p>
-        </div>
-        <Button onClick={() => setShowForm(true)}>
-          <Plus className="h-4 w-4 mr-2" /> Add Sub-Admin
-        </Button>
-      </div>
+      <PageHeader
+        title="Sub-Admin Management"
+        description="Create and manage sub-admin accounts with delegated permissions"
+        actions={
+          <Button onClick={() => setShowForm(true)}>
+            <Plus className="h-4 w-4 mr-2" /> Add Sub-Admin
+          </Button>
+        }
+      />
 
       {showForm && (
         <Card>

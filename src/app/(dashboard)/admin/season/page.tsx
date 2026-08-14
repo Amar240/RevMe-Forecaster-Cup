@@ -7,6 +7,7 @@ import type { SeasonSummary } from '@/features/season/types'
 import { useEffect, useState, useCallback } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { PageHeader } from '@/components/ui/page-header'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -386,10 +387,7 @@ export default function AdminSeasonPage() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Season Management</h1>
-        <p className="text-text-secondary">Configure competition seasons and rounds</p>
-      </div>
+      <PageHeader title="Season Management" description="Configure competition seasons and rounds" />
 
       {error && (
         <AlertBanner variant="error" dismissible className="[&_button]:!p-1" icon={<AlertTriangle className="h-5 w-5 flex-shrink-0 mt-0.5" />}>

@@ -7,6 +7,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { PageHeader } from '@/components/ui/page-header'
 import { DataTable } from '@/components/ui/data-table'
 import { Skeleton, TableSkeleton } from '@/components/ui/skeleton'
 import { Download, FileText, Send, LayoutGrid, List, ArrowUpDown } from 'lucide-react'
@@ -355,19 +356,17 @@ export default function AdminSubmissionsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="flex items-center text-2xl font-bold text-foreground">
-            <FileText className="mr-2 h-6 w-6 text-primary" />
-            Submissions Explorer
-          </h1>
-          <p className="text-text-secondary">{totalSubmissions} total submissions</p>
-        </div>
-        <Button onClick={handleExport} disabled={exporting}>
-          <Download className="h-4 w-4 mr-2" />
-          {exporting ? 'Exporting...' : 'Export CSV'}
-        </Button>
-      </div>
+      <PageHeader
+        icon={<FileText className="h-6 w-6" />}
+        title="Submissions Explorer"
+        description={`${totalSubmissions} total submissions`}
+        actions={
+          <Button onClick={handleExport} disabled={exporting}>
+            <Download className="h-4 w-4 mr-2" />
+            {exporting ? 'Exporting...' : 'Export CSV'}
+          </Button>
+        }
+      />
 
       <div className="flex items-center justify-between">
         <div className="flex flex-wrap gap-2">

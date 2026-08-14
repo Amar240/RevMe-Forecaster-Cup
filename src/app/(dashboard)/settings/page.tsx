@@ -6,6 +6,7 @@ import { useState, useEffect } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { PageHeader } from '@/components/ui/page-header'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { PasswordInput } from '@/components/ui/password-input'
@@ -217,10 +218,7 @@ export default function SettingsPage() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Settings</h1>
-        <p className="mt-1 text-sm text-text-secondary">Manage your profile, account security, and competition access.</p>
-      </div>
+      <PageHeader title="Settings" description="Manage your profile, account security, and competition access." />
 
       <div className="flex gap-1 rounded-lg border border-border bg-surface-secondary p-1">
         {tabs.map((tab) => (

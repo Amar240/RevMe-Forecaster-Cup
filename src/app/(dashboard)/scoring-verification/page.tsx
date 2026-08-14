@@ -7,6 +7,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { PageHeader } from '@/components/ui/page-header'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
@@ -318,12 +319,11 @@ export default function ScoringVerificationPage() {
 
   return (
     <div className="max-w-[90rem] mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground dark:text-text-muted">Scoring Verification</h1>
-          <p className="text-text-secondary dark:text-text-muted">{seasonName || 'Review predictions vs actual values'}</p>
-        </div>
-        <div className="flex items-center space-x-2">
+      <PageHeader
+        title="Scoring Verification"
+        description={seasonName || 'Review predictions vs actual values'}
+        actions={
+          <>
           <Button variant="outline" size="sm" onClick={exportCSV}>
             <Download className="h-4 w-4 mr-2" />
             Export CSV
@@ -332,8 +332,9 @@ export default function ScoringVerificationPage() {
             <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {/* Filters */}
       <Card>

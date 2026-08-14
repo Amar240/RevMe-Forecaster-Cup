@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { csrfFetch } from '@/lib/csrf'
 import { Button } from '@/components/ui/button'
+import { PageHeader } from '@/components/ui/page-header'
 import { DataTable } from '@/components/ui/data-table'
 import { AlertBanner } from '@/components/ui/alert-banner'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -61,15 +62,15 @@ export default function DemoRequestsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Demo Requests</h1>
-          <p className="text-sm text-text-muted">Track inbound demo inquiries from universities.</p>
-        </div>
-        <Button variant="outline" onClick={loadRequests}>
-          Refresh
-        </Button>
-      </div>
+      <PageHeader
+        title="Demo Requests"
+        description="Track inbound demo inquiries from universities."
+        actions={
+          <Button variant="outline" onClick={loadRequests}>
+            Refresh
+          </Button>
+        }
+      />
 
       {error && (
         <AlertBanner variant="error">{error}</AlertBanner>

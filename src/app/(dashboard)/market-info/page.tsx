@@ -6,6 +6,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { PageHeader } from '@/components/ui/page-header'
 import {
   Loader2,
   MapPin,
@@ -172,10 +173,7 @@ export default function MarketInfoPage() {
   if (markets.length === 0) {
     return (
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Market Information</h1>
-          <p className="text-text-secondary">Context and insights about the markets you are forecasting</p>
-        </div>
+        <PageHeader title="Market Information" description="Context and insights about the markets you are forecasting" />
         <Card>
           <CardContent className="py-12 text-center">
             <MapPin className="mx-auto mb-4 h-12 w-12 text-text-muted" />
@@ -189,15 +187,15 @@ export default function MarketInfoPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Market Information</h1>
-          <p className="text-text-secondary">
+      <PageHeader
+        title="Market Information"
+        description={
+          <>
             Context and insights for {season?.name || 'current season'}
             {currentRound && <span className="ml-2 text-primary">(Round {currentRound.number})</span>}
-          </p>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       <div className="flex flex-wrap gap-2">
         {markets.map((market) => {

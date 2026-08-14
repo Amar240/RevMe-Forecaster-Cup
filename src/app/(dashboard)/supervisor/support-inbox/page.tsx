@@ -9,6 +9,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { PageHeader } from '@/components/ui/page-header'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
@@ -456,10 +457,7 @@ export default function SupervisorSupportInboxPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Support Inbox</h1>
-        <p className="text-text-secondary">Manage support tickets from your students</p>
-      </div>
+      <PageHeader title="Support Inbox" description="Manage support tickets from your students" />
 
       <div className="flex flex-wrap gap-4">
         <div className="space-y-1">
